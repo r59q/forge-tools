@@ -254,18 +254,21 @@ func TestTransports(t *testing.T) {
 				if code != 401 {
 					t.Fatalf("metadata header spoof: %d", code)
 				}
-				code, body := w.raw("/v1/connections/"+conn.Id+"/credential", `{"credential": "`+forgeToken+`", "unknown": "`+forgeToken+`"}`, http.Header{"Authorization": []string{"Bearer " + adminToken}})
+				code, body := w.raw("/v1/connections/"+conn.Id+"/credential", `{"credential": "`+forgeToken+`", "unknown-`+forgeToken+`": "`+forgeToken+`"}`, http.Header{"Authorization": []string{"Bearer " + adminToken}})
 				if code != 400 || strings.Contains(body, forgeToken) {
 					t.Fatal("parse error leaked input or accepted unknown field")
 				}
 			}
+			otherConnection := &pb.Connection{}
+			invoke("CreateConnection", &pb.CreateConnectionRequest{ForgeId: f.Id, Credential: forgeToken}, otherConnection, adminToken, codes.OK)
 			for _, method := range []string{"IssueToken", "VerifyClient"} {
-				var input, output proto.Message = &pb.IssueTokenRequest{ConnectionId: "out-of-scope"}, &pb.IssueTokenResponse{}
+				var input, output proto.Message = &pb.IssueTokenRequest{ConnectionId: otherConnection.Id}, &pb.IssueTokenResponse{}
 				if method == "VerifyClient" {
-					input, output = &pb.VerifyClientRequest{ConnectionId: "out-of-scope"}, &pb.Client{}
+					input, output = &pb.VerifyClientRequest{ConnectionId: otherConnection.Id}, &pb.Client{}
 				}
 				invoke(method, input, output, issued.Token, codes.PermissionDenied)
 			}
+			invoke("DeleteConnection", &pb.ConnectionRequest{Id: otherConnection.Id}, &emptypb.Empty{}, adminToken, codes.OK)
 			verifyOnly := &pb.CreateClientResponse{}
 			invoke("CreateClient", &pb.CreateClientRequest{ConnectionIds: []string{conn.Id}}, verifyOnly, adminToken, codes.OK)
 			invoke("VerifyClient", &pb.VerifyClientRequest{ConnectionId: conn.Id}, &pb.Client{}, verifyOnly.Token, codes.OK)

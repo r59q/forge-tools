@@ -8,9 +8,10 @@ useful on its own.
 
 ## Tools
 
-| Tool                          | Description                         |
-| ----------------------------- | ----------------------------------- |
-| [forge-issues](forge-issues/) | Federated issue tracker for forges. |
+| Tool                                | Description                                  |
+| ----------------------------------- | -------------------------------------------- |
+| [forge-issues](forge-issues/)         | Federated issue tracker for forges.           |
+| [forge-connector](forge-connector/)   | Stored forge connections and scoped tokens.   |
 
 ## Structure
 
@@ -22,6 +23,7 @@ forge-core/   shared libraries
 ```
 
 Each project builds, tests and deploys on its own.
+Tools may have named services such as `broker/` and `proxy/` sharing one library.
 
 ## Contributing
 

@@ -1,8 +1,9 @@
 # forge-connector library
 
 Go module: `github.com/r59q/forge-tools/forge-connector/library`.
-Its only dependency outside the standard library is the local
-`forge-core/forgeapi` module, through the relative `replace` in `go.mod`.
+The broker core uses the local `forge-core/forgeapi` module through a relative
+`replace`. The generated `brokerpb` package adds protobuf, gRPC and grpc-gateway
+runtimes. The [API definition](proto/README.md) documents regeneration.
 There is no standalone executable.
 
 ## broker
@@ -11,6 +12,8 @@ Register the `forgeauth` providers you need, add forge API endpoints to a
 `Store`, and construct a `Manager` with that store, a `Sealer` and the registry.
 See the [setup example](broker/example_test.go).
 
+- `CreateForge`, `ListForges` and `DeleteForge` manage registered endpoints.
+  Metadata reads use `ListConnections`, `GetConnection` and `ListClients`.
 - `CreateConnection` calls `Whoami` before storing a sealed forge token and
   identity. `TestConnection` refreshes identity, status and check time.
 - `RotateCredential` validates the replacement before writing it. Failure

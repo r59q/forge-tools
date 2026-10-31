@@ -41,6 +41,9 @@ public.
   Make it public if it is useful on its own.
 - The service (`<tool>/service/`) is a microservice that exposes the library
   over APIs. Keep business logic in the library.
+- A tool may have several named services, e.g. `<tool>/broker/` and
+  `<tool>/proxy/`, that share one `<tool>/library/`. All library and service
+  rules still apply to each named service.
 - Services support both REST and gRPC with protobuf. Keep them in sync; prefer
   one protobuf definition as the source of truth.
 - Services may use WebSockets for real-time updates and subscriptions.

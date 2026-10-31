@@ -1,0 +1,28 @@
+# Runs the published forge-connector images.
+# See README.md for the two-step setup.
+services:
+  broker:
+    image: ghcr.io/r59q/forge-connector-broker:latest
+    restart: unless-stopped
+    environment:
+      FORGE_BROKER_KEY: ${FORGE_BROKER_KEY:?set in .env}
+      FORGE_BROKER_ADMIN_TOKEN: ${FORGE_BROKER_ADMIN_TOKEN:?set in .env}
+    volumes:
+      - broker-data:/data
+    ports:
+      - "127.0.0.1:8080:8080" # REST
+      - "127.0.0.1:9090:9090" # gRPC
+
+  proxy:
+    image: ghcr.io/r59q/forge-connector-proxy:latest
+    profiles: [proxy] # needs a client token from the running broker
+    restart: unless-stopped
+    depends_on: [broker]
+    environment:
+      FORGE_PROXY_BROKER_ADDR: broker:9090
+      FORGE_PROXY_TOKEN: ${FORGE_PROXY_TOKEN:-}
+    ports:
+      - "127.0.0.1:8081:8081"
+
+volumes:
+  broker-data:

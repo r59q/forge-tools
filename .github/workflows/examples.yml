@@ -1,0 +1,28 @@
+name: examples
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - examples/go/**
+      - forge-connector/library/**
+      - forge-core/forgeapi/**
+      - .github/workflows/examples.yml
+      - .github/workflows/reusable-go.yml
+  pull_request:
+    paths:
+      - examples/go/**
+      - forge-connector/library/**
+      - forge-core/forgeapi/**
+      - .github/workflows/examples.yml
+      - .github/workflows/reusable-go.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: ./.github/workflows/reusable-go.yml
+    with:
+      dir: examples/go

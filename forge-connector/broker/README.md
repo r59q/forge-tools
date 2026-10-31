@@ -7,7 +7,7 @@ No proxy or code generation tools are needed to run it.
 
 ## Build and test
 
-Requires Go 1.24 or newer. From this directory:
+Requires Go 1.27 or newer. From this directory:
 
 ```sh
 go build -o /tmp/forge-connector-broker ./cmd/forge-connector-broker

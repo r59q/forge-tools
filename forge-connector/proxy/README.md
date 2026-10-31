@@ -12,7 +12,8 @@ caller --Bearer client token--> proxy --gRPC--> broker
                                   +--Bearer forge token--> forge
 ```
 
-Requests go to `/c/{connectionID}/<forge API path>`. Query strings, methods,
+Requests go to `/c/{connectionID}/<forge API path>`. Send the client token as
+`Authorization: Bearer <token>` for any forge. Query strings, methods,
 bodies and responses pass through unchanged, and pagination links are rewritten
 to point back at the proxy.
 
@@ -21,7 +22,7 @@ plain HTTP by design, so the proxy forwards plain HTTP.
 
 ## Build and test
 
-Requires Go 1.24 or newer. From this directory:
+Requires Go 1.27 or newer. From this directory:
 
 ```sh
 go build -o /tmp/forge-connector-proxy ./cmd/forge-connector-proxy

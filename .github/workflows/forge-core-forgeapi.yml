@@ -1,0 +1,25 @@
+name: forge-core-forgeapi
+
+# Libraries are published as Go modules through git, so there is no deploy job.
+on:
+  push:
+    branches: [master]
+    paths:
+      - forge-core/forgeapi/**
+      - .github/workflows/forge-core-forgeapi.yml
+      - .github/workflows/reusable-go.yml
+  pull_request:
+    paths:
+      - forge-core/forgeapi/**
+      - .github/workflows/forge-core-forgeapi.yml
+      - .github/workflows/reusable-go.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: ./.github/workflows/reusable-go.yml
+    with:
+      dir: forge-core/forgeapi

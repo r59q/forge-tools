@@ -77,6 +77,20 @@ responses or upstream errors. SIGINT and SIGTERM allow five seconds to drain
 requests before forcing shutdown. Requests have a configurable operation
 deadline and a 1 MiB message/body limit.
 
+### Docker
+
+Build from the repository root, or pull `ghcr.io/r59q/forge-connector-broker`:
+
+```sh
+docker build -f forge-connector/broker/Dockerfile -t forge-connector-broker .
+docker run -v broker-data:/data -p 127.0.0.1:8080:8080 -p 127.0.0.1:9090:9090 \
+  -e FORGE_BROKER_KEY -e FORGE_BROKER_ADMIN_TOKEN forge-connector-broker
+```
+
+The image listens on all interfaces, stores the database in the `/data`
+volume and runs as a non-root user. Mount secrets as files or pass them as
+environment variables; never bake them into the image.
+
 ## API
 
 The [documented proto](../library/proto/broker.proto) is the source of truth.

@@ -49,6 +49,8 @@ public.
 - Services may use WebSockets for real-time updates and subscriptions.
 - A service provides at least what the library does. It may provide more, but
   put as much as possible in the library.
+- Each service has a `Dockerfile` in its folder that builds its image. Build
+  from the repository root so `forge-core/` and the library are in context.
 
 ## Languages
 
@@ -74,6 +76,11 @@ public.
 - Keep all docs short, simple and easy to read.
 
 ## Workflows
+
+Each tool has its own pipelines that build, test and deploy its projects:
+one workflow per project, `.github/workflows/<tool>-<project>.yml`, that runs
+only when that project or its dependencies change. Put shared steps in
+`reusable-*.yml` workflows. Services deploy their image on pushes to `master`.
 
 Workflows must not run on unauthorized requests.
 

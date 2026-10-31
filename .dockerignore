@@ -1,0 +1,13 @@
+# Images are built from the repository root; keep the context small and
+# free of secrets and local data.
+.git
+.github
+**/.env
+**/.env.*
+**/bin
+**/dist
+**/node_modules
+**/*.db
+**/*.db-*
+**/broker-data
+**/proxy-token

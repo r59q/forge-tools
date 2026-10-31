@@ -12,7 +12,8 @@ caller --Bearer client token--> proxy --gRPC--> broker
                                   +--Bearer forge token--> forge
 ```
 
-Requests go to `/c/{connectionID}/<forge API path>`. Query strings, methods,
+Requests go to `/c/{connectionID}/<forge API path>`. Send the client token as
+`Authorization: Bearer <token>` for any forge. Query strings, methods,
 bodies and responses pass through unchanged, and pagination links are rewritten
 to point back at the proxy.
 

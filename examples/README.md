@@ -58,7 +58,7 @@ images. Ports are bound to localhost. The steps below need `curl`, `jq`,
      -d "{\"name\":\"proxy\",\"connectionIds\":[\"$CONN\"],\"canIssueTokens\":true}" | jq -r .token)
    sed -i "s|^FORGE_PROXY_TOKEN=.*|FORGE_PROXY_TOKEN=$PROXY_TOKEN|" .env
    docker compose --profile proxy up -d
-   curl localhost:8081/healthz
+   curl --retry 5 --retry-all-errors --retry-delay 1 localhost:8081/healthz
    ```
 
 4. Create a client for your app. It may use the connection through the proxy
@@ -72,15 +72,15 @@ images. Ports are bound to localhost. The steps below need `curl`, `jq`,
 ## Call a forge through the proxy
 
 Send normal forge API requests to `/c/{connectionID}/` with the client token
-in the forge's usual auth header. The proxy swaps in the real forge token:
+as `Authorization: Bearer <token>`. This works for every forge; the proxy
+swaps in the real forge token and the forge's own auth header:
 
 ```sh
 curl -H "Authorization: Bearer $CLIENT_TOKEN" localhost:8081/c/$CONN/user
 curl -i -H "Authorization: Bearer $CLIENT_TOKEN" "localhost:8081/c/$CONN/user/repos?per_page=5"
 ```
 
-Use `PRIVATE-TOKEN: <token>` for GitLab and `Authorization: token <token>`
-for Forgejo. `Link` headers in responses point back at the proxy.
+`Link` headers in responses point back at the proxy.
 
 ## Manage the broker
 

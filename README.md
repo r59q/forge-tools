@@ -25,6 +25,11 @@ forge-core/   shared libraries
 Each project builds, tests and deploys on its own.
 Tools may have named services such as `broker/` and `proxy/` sharing one library.
 
+## Examples
+
+[examples/](examples/) runs the published images with Docker Compose and shows
+how to use them with `curl` and Go.
+
 ## Contributing
 
 Read [AGENTS.md](AGENTS.md). Its rules apply to agents and people alike.

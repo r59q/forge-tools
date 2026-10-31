@@ -1,6 +1,6 @@
 module github.com/r59q/forge-tools/forge-connector/broker
 
-go 1.24.0
+go 1.27
 
 require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.3

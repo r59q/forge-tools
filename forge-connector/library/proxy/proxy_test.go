@@ -18,6 +18,7 @@ import (
 	"github.com/r59q/forge-tools/forge-core/forgeapi/forgeauth/forgejo"
 	"github.com/r59q/forge-tools/forge-core/forgeapi/forgeauth/github"
 	"github.com/r59q/forge-tools/forge-core/forgeapi/forgeauth/gitlab"
+	"github.com/r59q/forge-tools/forge-core/forgeapi/forgehttp"
 )
 
 const (
@@ -111,7 +112,7 @@ func TestReplacesCredentials(t *testing.T) {
 				if r.Method != http.MethodPost || r.URL.EscapedPath() != "/api/v1/projects/group%2Frepo/issues" || r.URL.RawQuery != "page=2&name=a%2Bb" {
 					t.Errorf("unexpected method or URL: %s %s", r.Method, r.URL)
 				}
-				if r.Host != r.URL.Host && r.Host == "proxy.example" {
+				if r.Host == "proxy.example" {
 					t.Error("caller Host reached forge")
 				}
 				if token, ok := p.TokenFromHeader(r.Header); !ok || token != forgeToken {
@@ -280,5 +281,98 @@ func TestTransportErrorIsSanitized(t *testing.T) {
 		if got := fmt.Sprintf(verb, h); got != "proxy.Handler" {
 			t.Error("handler formatting exposed internals")
 		}
+	}
+}
+
+func TestAcceptedCallerHeaderFormats(t *testing.T) {
+	for _, tc := range []struct {
+		kind          forgeauth.Kind
+		header, value string
+	}{
+		{forgeauth.GitHub, "Authorization", "token " + clientToken},
+		{forgeauth.GitHub, "Authorization", "bEaReR " + clientToken},
+		{forgeauth.GitLab, "Authorization", "Bearer " + clientToken},
+		{forgeauth.GitLab, "Private-Token", clientToken},
+		{forgeauth.Forgejo, "Authorization", "Bearer " + clientToken},
+		{forgeauth.Forgejo, "Authorization", "token " + clientToken},
+	} {
+		t.Run(string(tc.kind)+tc.header+strings.Fields(tc.value)[0], func(t *testing.T) {
+			forge := serve(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(204) }))
+			b := &fakeBroker{conn: forgeauth.Connection{Kind: tc.kind, BaseURL: forge.URL}}
+			r := httptest.NewRequest(http.MethodGet, "/c/conn/user", nil)
+			r.Header.Set(tc.header, tc.value)
+			w := httptest.NewRecorder()
+			handler(t, config(t, b)).ServeHTTP(w, r)
+			if w.Code != 204 || b.verifications.Load() != 1 {
+				t.Errorf("accepted header: status = %d", w.Code)
+			}
+		})
+	}
+}
+
+func TestForgeErrorsPassThrough(t *testing.T) {
+	for _, code := range []int{400, 401, 403, 404, 429, 500, 503} {
+		t.Run(fmt.Sprint(code), func(t *testing.T) {
+			const body = `{"message":"forge failure"}`
+			forge := serve(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set("Retry-After", "60")
+				w.WriteHeader(code)
+				_, _ = io.WriteString(w, body)
+			}))
+			b := &fakeBroker{conn: forgeauth.Connection{Kind: forgeauth.GitHub, BaseURL: forge.URL}}
+			r := httptest.NewRequest(http.MethodGet, "/c/conn/user", nil)
+			r.Header.Set("Authorization", "Bearer "+clientToken)
+			w := httptest.NewRecorder()
+			handler(t, config(t, b)).ServeHTTP(w, r)
+			if w.Code != code || w.Body.String() != body || w.Header().Get("Content-Type") != "application/json" || w.Header().Get("Retry-After") != "60" {
+				t.Error("forge error response changed")
+			}
+		})
+	}
+}
+
+func TestPublicURLAndOriginMatching(t *testing.T) {
+	b := &fakeBroker{conn: forgeauth.Connection{Kind: forgeauth.GitHub, BaseURL: "https://Forge.EXAMPLE/api"}}
+	c := config(t, b)
+	c.PublicURL = "https://proxy.example/"
+	c.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if r.URL.String() != "https://Forge.EXAMPLE/api/user" || r.Host != "Forge.EXAMPLE" {
+			t.Error("transport did not use the connection endpoint")
+		}
+		return &http.Response{StatusCode: 302, Body: io.NopCloser(strings.NewReader("")), Header: http.Header{
+			"Location": {"https://forge.example:443/api/next?x=1#part"},
+			"Link":     {`<//FORGE.EXAMPLE:443/api/projects/a%2Fb?page=2>; rel="next"`},
+		}}, nil
+	})
+	r := httptest.NewRequest(http.MethodGet, "/c/conn/user", nil)
+	r.Host = "internal.example"
+	r.Header.Set("Authorization", "Bearer "+clientToken)
+	r.Header.Set("X-Forwarded-Host", "attacker.example")
+	r.Header.Set("X-Forwarded-Proto", "http")
+	w := httptest.NewRecorder()
+	handler(t, c).ServeHTTP(w, r)
+	if got := w.Header().Get("Location"); got != "https://proxy.example/c/conn/next?x=1#part" {
+		t.Errorf("Location = %q", got)
+	}
+	if next, _ := forgehttp.NextPage(w.Header()); next != "https://proxy.example/c/conn/projects/a%2Fb?page=2" {
+		t.Errorf("next Link = %q", next)
+	}
+}
+
+func TestRepeatedLocationIsDropped(t *testing.T) {
+	b := &fakeBroker{conn: forgeauth.Connection{Kind: forgeauth.GitHub, BaseURL: "https://forge.example/api"}}
+	c := config(t, b)
+	c.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 302, Body: io.NopCloser(strings.NewReader("")), Header: http.Header{
+			"Location": {"/api/a", "https://other.example/steal"},
+		}}, nil
+	})
+	r := httptest.NewRequest(http.MethodGet, "/c/conn/user", nil)
+	r.Header.Set("Authorization", "Bearer "+clientToken)
+	w := httptest.NewRecorder()
+	handler(t, c).ServeHTTP(w, r)
+	if w.Code != 302 || len(w.Header().Values("Location")) != 0 {
+		t.Error("ambiguous Location headers were not dropped")
 	}
 }

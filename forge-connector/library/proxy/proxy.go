@@ -160,9 +160,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		},
 		ModifyResponse: func(resp *http.Response) error {
 			rewriteHeaders(resp.Header, base, target, proxyBase)
-			resp.Body = &responseBody{ReadCloser: resp.Body, rewrite: func() {
-				rewriteHeaders(resp.Trailer, base, target, proxyBase)
-			}}
+			if resp.StatusCode != http.StatusSwitchingProtocols {
+				resp.Body = &responseBody{ReadCloser: resp.Body, rewrite: func() {
+					rewriteHeaders(resp.Trailer, base, target, proxyBase)
+				}}
+			}
 			return nil
 		},
 	}

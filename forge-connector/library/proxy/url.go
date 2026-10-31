@@ -29,7 +29,8 @@ func route(r *http.Request) (broker.ID, string, int) {
 			return "", "", http.StatusBadRequest
 		}
 	}
-	if strings.HasPrefix(apiPath, "/") || strings.Contains(apiPath, ":") {
+	apiURL, err := url.Parse(apiPath)
+	if err != nil || strings.HasPrefix(apiPath, "/") || apiURL.IsAbs() || apiURL.Host != "" {
 		return "", "", http.StatusBadRequest
 	}
 	return broker.ID(id), apiPath, 0
@@ -40,8 +41,13 @@ func route(r *http.Request) (broker.ID, string, int) {
 // for GitLab project names. Ambiguous or malformed nested escapes fail closed.
 func safePath(path string) bool {
 	for {
-		if strings.ContainsAny(path, "\\\x00\r\n") || strings.HasPrefix(path, "//") {
+		if strings.Contains(path, "\\") || strings.HasPrefix(path, "//") {
 			return false
+		}
+		for i := range path {
+			if path[i] < ' ' || path[i] == 0x7f {
+				return false
+			}
 		}
 		for _, part := range strings.Split(path, "/") {
 			if part == "." || part == ".." {
@@ -61,7 +67,7 @@ func safePath(path string) bool {
 
 func baseURL(raw string) (*url.URL, bool) {
 	u, err := url.Parse(raw)
-	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") ||
+	if err != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") ||
 		u.User != nil || u.Opaque != "" || u.RawQuery != "" || u.ForceQuery ||
 		u.Fragment != "" || !safePath(u.EscapedPath()) {
 		return nil, false
@@ -112,7 +118,11 @@ func rewriteURL(raw string, base, target *url.URL, proxyBase string) (string, bo
 	// Use absolute proxy URLs so forgeauth.Session.NewRequest can consume them
 	// directly without appending its own /c/{id} prefix again.
 	proxy, _ := url.Parse(proxyBase)
-	proxy.RawPath = proxy.EscapedPath() + strings.TrimPrefix(path, basePath)
+	suffix := strings.TrimPrefix(path, basePath)
+	if suffix == "" {
+		suffix = "/"
+	}
+	proxy.RawPath = proxy.EscapedPath() + suffix
 	proxy.Path, _ = url.PathUnescape(proxy.RawPath)
 	proxy.RawQuery, proxy.ForceQuery = u.RawQuery, u.ForceQuery
 	proxy.Fragment, proxy.RawFragment = u.Fragment, u.RawFragment

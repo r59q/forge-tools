@@ -52,6 +52,39 @@ to the credentials. Use one Manager per Store and route mutations through it
 while it is active. Manager operations are serialized, including forge calls.
 Set context deadlines to bound those calls; client lookup scans all clients.
 
+## proxy
+
+`proxy.New(proxy.Config{...})` builds an `http.Handler` for
+`/c/{connectionID}/<forge API path>`. Point a normal `forgeauth` session at
+`https://proxy.example/c/{connectionID}`, using its client token. The handler
+uses that forge's provider to read the caller header and set the real token.
+It removes incoming Authorization, PRIVATE-TOKEN, cookies and proxy credentials.
+
+Supply small, trusted `Verifier` and `TokenIssuer` adapters. `Verifier.Connection`
+returns the connection's forge kind and API base URL from broker metadata;
+`VerifyClient` checks the caller token and scope. `TokenIssuer` uses the proxy's
+own broker client with `CanIssueTokens`, only after verification. Callers do not
+need that permission. Adapters map broker RPC errors to `broker` error classes.
+They are service wiring, not provider plugins. Register forgeauth providers
+explicitly. Connection transport settings are ignored; `Config.Transport` is
+the handler's trusted transport.
+
+Mount the handler without a path-cleaning router. It rejects absolute request
+targets, dot segments, backslashes and malformed or repeatedly encoded traversal.
+Encoded slashes, such as GitLab project names, are preserved. Requests only go
+to the connection's scheme, host and base path, without following redirects.
+`Link` and `Location` URLs within that endpoint become absolute proxy URLs;
+external, out-of-base and unsafe URLs are dropped. Bodies stream unchanged,
+including forge error bodies. Request trailers are not forwarded.
+
+Set `Config.PublicURL` to the public origin behind a TLS-terminating reverse
+proxy. Otherwise rewritten URLs use the request's Host and TLS state; forwarded
+headers are ignored. Use service context deadlines to bound broker and forge
+calls. Proxy errors start with `proxy:`: 400 invalid request, 401 missing or
+invalid credentials, 403 denied scope, 404 unknown connection, 503 broker or
+connection unavailable, 504 broker deadline, and 502 invalid endpoint/token or
+forge transport failure. Dependency error messages are never logged or echoed.
+
 ## Develop
 
 From this directory:

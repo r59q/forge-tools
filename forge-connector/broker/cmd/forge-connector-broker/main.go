@@ -49,13 +49,8 @@ func parse(args []string, getenv func(string) string, help io.Writer) (settings,
 	fs.StringVar(&s.keyEnv, "key-env", env("KEY_ENV", ""), "key variable name (default FORGE_BROKER_KEY)")
 	fs.StringVar(&s.adminFile, "admin-token-file", env("ADMIN_TOKEN_FILE", ""), "file containing the admin bearer token")
 	fs.StringVar(&s.adminEnv, "admin-token-env", env("ADMIN_TOKEN_ENV", ""), "admin variable name (default FORGE_BROKER_ADMIN_TOKEN)")
-	// Parse environment duration through the flag parser so invalid values fail.
-	fs.DurationVar(&s.timeout, "request-timeout", 30*time.Second, "maximum operation duration")
-	if value := getenv("FORGE_BROKER_REQUEST_TIMEOUT"); value != "" {
-		if err := fs.Set("request-timeout", value); err != nil {
-			return settings{}, errors.New("invalid request timeout")
-		}
-	}
+	var timeout string
+	fs.StringVar(&timeout, "request-timeout", env("REQUEST_TIMEOUT", "30s"), "maximum operation duration")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			fs.SetOutput(help)
@@ -63,6 +58,11 @@ func parse(args []string, getenv func(string) string, help io.Writer) (settings,
 			return settings{}, flag.ErrHelp
 		}
 		return settings{}, errors.New("invalid startup flags; use --help")
+	}
+	var err error
+	s.timeout, err = time.ParseDuration(timeout)
+	if err != nil {
+		return settings{}, errors.New("invalid request timeout")
 	}
 	if fs.NArg() != 0 || s.dbPath == "" || s.grpcAddress == "" || s.httpAddress == "" || s.timeout <= 0 {
 		return settings{}, errors.New("invalid startup settings")

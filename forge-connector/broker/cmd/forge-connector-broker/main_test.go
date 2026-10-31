@@ -39,6 +39,9 @@ func TestSettings(t *testing.T) {
 	if _, err := parse(nil, getenv, io.Discard); err == nil || strings.Contains(err.Error(), "sentinel") {
 		t.Fatal("invalid environment timeout")
 	}
+	if overridden, err := parse([]string{"--request-timeout=4s"}, getenv, io.Discard); err != nil || overridden.timeout != 4*time.Second {
+		t.Fatal("flag must override invalid environment duration")
+	}
 	delete(values, "FORGE_BROKER_REQUEST_TIMEOUT")
 	var help bytes.Buffer
 	if _, err := parse([]string{"--help"}, getenv, &help); !errors.Is(err, flag.ErrHelp) || !strings.Contains(help.String(), "-key-file") {

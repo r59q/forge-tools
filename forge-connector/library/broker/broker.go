@@ -1,0 +1,78 @@
+// Package broker manages forge connections, sealed credentials and scoped clients
+// for a single owner. Store and Sealer are trusted persistence primitives;
+// applications should expose Manager operations rather than these primitives.
+package broker
+
+import (
+	"errors"
+	"time"
+
+	"github.com/r59q/forge-tools/forge-core/forgeapi/forgeauth"
+)
+
+// ID identifies a forge, connection or client.
+type ID string
+
+// Forge describes a forge API endpoint. BaseURL must not contain credentials.
+type Forge struct {
+	ID      ID
+	Kind    forgeauth.Kind
+	BaseURL string
+	Name    string
+}
+
+// Status is the result of checking a connection's credential.
+type Status string
+
+const (
+	// StatusOK means the last Whoami succeeded.
+	StatusOK Status = "ok"
+	// StatusInvalid means the credential could not be checked successfully.
+	StatusInvalid Status = "invalid"
+	// StatusRevoked means the forge rejected the credential with 401 or 403.
+	StatusRevoked Status = "revoked"
+)
+
+// Connection contains metadata only, never a credential.
+type Connection struct {
+	ID        ID
+	ForgeID   ID
+	Name      string
+	Identity  forgeauth.Identity
+	Status    Status
+	CheckedAt time.Time
+	CreatedAt time.Time
+}
+
+// Client is a service allowed to use specific connections. An empty Connections
+// list grants no access. TokenHash is SHA-256 of a random client token, never the
+// token itself. Manager results omit TokenHash.
+type Client struct {
+	ID             ID
+	Name           string
+	TokenHash      [32]byte `json:"-"`
+	Connections    []ID
+	CanIssueTokens bool
+}
+
+// Errors returned by broker operations. Use errors.Is to check them.
+var (
+	// ErrNotFound means a stored record does not exist.
+	ErrNotFound = errors.New("broker: not found")
+	// ErrConflict means a record exists or a referenced record is still in use.
+	ErrConflict = errors.New("broker: conflict")
+	// ErrInvalid means the input is invalid.
+	ErrInvalid = errors.New("broker: invalid input")
+	// ErrUnauthorized means the client token is unknown.
+	ErrUnauthorized = errors.New("broker: unauthorized client")
+	// ErrForbidden means the client lacks the requested permission.
+	ErrForbidden = errors.New("broker: forbidden")
+	// ErrInvalidCredential means Whoami failed. It contains no forge response.
+	ErrInvalidCredential = errors.New("broker: credential validation failed")
+	// ErrUnavailable means a connection is not in StatusOK.
+	ErrUnavailable = errors.New("broker: connection unavailable")
+	// ErrStorage means a persistence operation failed.
+	ErrStorage = errors.New("broker: storage failed")
+	// ErrSealing means a credential could not be sealed or opened.
+	ErrSealing = errors.New("broker: sealing failed")
+)

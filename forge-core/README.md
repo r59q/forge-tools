@@ -7,4 +7,8 @@ project, e.g. `forge-core/<name>/`, and builds and tests on its own.
 
 forge-core must not depend on any forge-tool.
 
-There are no libraries yet.
+## Libraries
+
+| Library               | Description                                                 |
+| --------------------- | ----------------------------------------------------------- |
+| [forgeapi](forgeapi/) | Go: authenticated sessions and HTTP helpers for forge APIs. |

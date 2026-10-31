@@ -28,10 +28,21 @@ images. Ports are bound to localhost. The steps below need `curl`, `jq`,
    broker() { curl -fsS -H "Authorization: Bearer $FORGE_BROKER_ADMIN_TOKEN" "$@"; }
    ```
 
-2. Register a forge and store a connection. The broker checks the token with
-   the forge before saving it, and never returns it to the admin:
+2. Set `GITHUB_TOKEN` to a GitHub personal access token. Create one under
+   *Settings → Developer settings → Personal access tokens*; read access to
+   your repositories is enough. Enter it at the prompt to keep it out of your
+   shell history:
 
    ```sh
+   read -rs GITHUB_TOKEN && export GITHUB_TOKEN
+   ```
+
+   Register the forge and store the connection. The broker checks the token
+   with GitHub before saving it, and never returns it to the admin. A `400`
+   means the token is empty or GitHub rejected it:
+
+   ```sh
+   : "${GITHUB_TOKEN:?set GITHUB_TOKEN first}"
    FORGE=$(broker localhost:8080/v1/forges \
      -d '{"kind":"github","baseUrl":"https://api.github.com","name":"GitHub"}' | jq -r .id)
    CONN=$(broker localhost:8080/v1/connections \
@@ -76,6 +87,7 @@ for Forgejo. `Link` headers in responses point back at the proxy.
 ```sh
 broker localhost:8080/v1/connections                        # list
 broker -X POST localhost:8080/v1/connections/$CONN/test -d '{}'  # recheck with the forge
+read -rs NEW_GITHUB_TOKEN                                   # enter the new token
 broker localhost:8080/v1/connections/$CONN/credential \
   -d "{\"credential\":\"$NEW_GITHUB_TOKEN\"}"               # rotate the forge token
 broker localhost:8080/v1/clients                            # list clients

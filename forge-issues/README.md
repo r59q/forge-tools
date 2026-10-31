@@ -23,10 +23,10 @@ same no matter which forge an issue lives on.
 
 ## Projects
 
-| Project    | Description                                                         |
-| ---------- | ------------------------------------------------------------------- |
-| `library/` | Go library with the issue model, business rules and forge adapters. |
-| `service/` | Microservice exposing the library over REST, gRPC and WebSockets.   |
+| Project    | Description                                                  |
+| ---------- | ------------------------------------------------------------ |
+| `library/` | Go library: issue model, business rules and forge adapters.  |
+| `service/` | Service exposing the library over REST, gRPC and WebSockets. |
 
 Both projects are planned.
 

@@ -8,9 +8,9 @@ useful on its own.
 
 ## Tools
 
-| Tool                          | Description                                                |
-| ----------------------------- | ---------------------------------------------------------- |
-| [forge-issues](forge-issues/) | Federated issue tracker: one API for issues across forges. |
+| Tool                          | Description                         |
+| ----------------------------- | ----------------------------------- |
+| [forge-issues](forge-issues/) | Federated issue tracker for forges. |
 
 ## Structure
 

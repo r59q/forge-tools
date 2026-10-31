@@ -1,0 +1,25 @@
+# OS and editors
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Build output
+bin/
+dist/
+
+# Go
+*.test
+*.out
+go.work
+go.work.sum
+
+# Node
+node_modules/
+coverage/
+*.tsbuildinfo

@@ -74,6 +74,18 @@ settings are never configured here: they live in the broker.
 Set `--public-url` when a TLS-terminating proxy sits in front, so rewritten
 pagination links use the public origin.
 
+### Docker
+
+Build from the repository root, or pull `ghcr.io/r59q/forge-connector-proxy`:
+
+```sh
+docker build -f forge-connector/proxy/Dockerfile -t forge-connector-proxy .
+docker run -p 127.0.0.1:8081:8081 -e FORGE_PROXY_TOKEN \
+  -e FORGE_PROXY_BROKER_ADDR=broker:9090 forge-connector-proxy
+```
+
+The image listens on all interfaces and runs as a non-root user.
+
 ## Caching
 
 - Forge tokens are cached per connection for `--token-ttl`. A forge 401

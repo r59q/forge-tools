@@ -1,0 +1,27 @@
+name: forge-connector-library
+
+# Libraries are published as Go modules through git, so there is no deploy job.
+on:
+  push:
+    branches: [master]
+    paths:
+      - forge-connector/library/**
+      - forge-core/forgeapi/**
+      - .github/workflows/forge-connector-library.yml
+      - .github/workflows/reusable-go.yml
+  pull_request:
+    paths:
+      - forge-connector/library/**
+      - forge-core/forgeapi/**
+      - .github/workflows/forge-connector-library.yml
+      - .github/workflows/reusable-go.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: ./.github/workflows/reusable-go.yml
+    with:
+      dir: forge-connector/library

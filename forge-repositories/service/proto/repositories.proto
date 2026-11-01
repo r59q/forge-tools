@@ -1,0 +1,139 @@
+syntax = "proto3";
+
+package forge.repositories.v1;
+option go_package = "github.com/r59q/forge-tools/forge-repositories/service/repositoriespb";
+
+import "google/api/annotations.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+// Repositories reads repositories, branches and tags from every configured
+// source (a forge account, directly or through a forge-connector proxy
+// connection) through one forge-agnostic API. Every RPC requires the service
+// token in the Authorization: Bearer header (gRPC metadata). Use TLS when it
+// crosses a network boundary. No response contains a forge token.
+service Repositories {
+  // ListSources lists the configured sources. GET /v1/sources.
+  rpc ListSources(google.protobuf.Empty) returns (ListSourcesResponse) {
+    option (google.api.http) = { get: "/v1/sources" };
+  }
+  // ListRepositories lists the repositories visible to every source, or to
+  // one. GET /v1/repositories?owner=&source=.
+  rpc ListRepositories(ListRepositoriesRequest) returns (ListRepositoriesResponse) {
+    option (google.api.http) = { get: "/v1/repositories" };
+  }
+  // GetRepository reads one repository by path. Without a source the path
+  // must exist on exactly one source.
+  // GET /v1/repositories/{path}?source=, where path may be nested.
+  rpc GetRepository(RepositoryRequest) returns (Repository) {
+    option (google.api.http) = { get: "/v1/repositories/{path=*/**}" };
+  }
+  // UpdateRepository changes the description or default branch. Unset fields
+  // are left unchanged. PATCH /v1/repositories/{path}.
+  rpc UpdateRepository(UpdateRepositoryRequest) returns (Repository) {
+    option (google.api.http) = { patch: "/v1/repositories/{path=*/**}" body: "*" };
+  }
+  // ListBranches lists branches with the default branch marked.
+  // GET /v1/branches/{path}?source=.
+  rpc ListBranches(RepositoryRequest) returns (ListBranchesResponse) {
+    option (google.api.http) = { get: "/v1/branches/{path=*/**}" };
+  }
+  // ListTags lists tags. GET /v1/tags/{path}?source=.
+  rpc ListTags(RepositoryRequest) returns (ListTagsResponse) {
+    option (google.api.http) = { get: "/v1/tags/{path=*/**}" };
+  }
+}
+
+// Source is a configured source, without its URL or credentials.
+message Source {
+  // id names the source in requests and results.
+  string id = 1;
+  // kind is the forge type: github, gitlab or forgejo.
+  string kind = 2;
+}
+
+message ListSourcesResponse {
+  repeated Source sources = 1;
+}
+
+message ListRepositoriesRequest {
+  // owner keeps only this user, organization or group, ignoring case. A
+  // GitLab group also matches its subgroups. Empty keeps all.
+  string owner = 1;
+  // source reads only this source. Empty reads every source.
+  string source = 2;
+}
+
+message ListRepositoriesResponse {
+  repeated Repository repositories = 1;
+}
+
+message RepositoryRequest {
+  // path is the full repository path, such as owner/name or
+  // group/sub/project. It is not URL-encoded.
+  string path = 1;
+  // source is a source ID. Empty searches every source.
+  string source = 2;
+}
+
+message UpdateRepositoryRequest {
+  string path = 1;
+  string source = 2;
+  // description sets the description; an empty string clears it.
+  optional string description = 3;
+  // default_branch must name an existing branch.
+  optional string default_branch = 4;
+}
+
+// SourceInfo says where a repository was read from.
+message SourceInfo {
+  string id = 1;
+  string kind = 2;
+  // host is the forge's web host, such as gitlab.com.
+  string host = 3;
+}
+
+// Repository is the shared model of a repository on any forge.
+message Repository {
+  SourceInfo source = 1;
+  // id is the forge's own repository ID.
+  string id = 2;
+  string path = 3;
+  // owner is the path without its last segment.
+  string owner = 4;
+  string name = 5;
+  string description = 6;
+  // default_branch may be empty for an empty repository.
+  string default_branch = 7;
+  // visibility is public, internal or private.
+  string visibility = 8;
+  bool archived = 9;
+  bool fork = 10;
+  string web_url = 11;
+  string clone_url = 12;
+  string ssh_url = 13;
+  google.protobuf.Timestamp created_at = 14;
+  google.protobuf.Timestamp updated_at = 15;
+}
+
+message Branch {
+  string name = 1;
+  // sha is the commit the branch points at.
+  string sha = 2;
+  bool default = 3;
+  bool protected = 4;
+}
+
+message ListBranchesResponse {
+  repeated Branch branches = 1;
+}
+
+message Tag {
+  string name = 1;
+  // sha is the tagged commit.
+  string sha = 2;
+}
+
+message ListTagsResponse {
+  repeated Tag tags = 1;
+}

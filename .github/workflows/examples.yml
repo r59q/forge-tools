@@ -6,6 +6,7 @@ on:
     paths:
       - examples/go/**
       - forge-connector/library/**
+      - forge-repositories/library/**
       - forge-core/forgeapi/**
       - .github/workflows/examples.yml
       - .github/workflows/reusable-go.yml
@@ -13,6 +14,7 @@ on:
     paths:
       - examples/go/**
       - forge-connector/library/**
+      - forge-repositories/library/**
       - forge-core/forgeapi/**
       - .github/workflows/examples.yml
       - .github/workflows/reusable-go.yml

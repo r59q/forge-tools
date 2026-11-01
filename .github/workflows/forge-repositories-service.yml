@@ -1,0 +1,51 @@
+name: forge-repositories-service
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - forge-repositories/service/**
+      - forge-repositories/library/**
+      - forge-core/forgeapi/**
+      - .dockerignore
+      - .github/workflows/forge-repositories-service.yml
+      - .github/workflows/reusable-*.yml
+  pull_request:
+    paths:
+      - forge-repositories/service/**
+      - forge-repositories/library/**
+      - forge-core/forgeapi/**
+      - .dockerignore
+      - .github/workflows/forge-repositories-service.yml
+      - .github/workflows/reusable-*.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: ./.github/workflows/reusable-go.yml
+    with:
+      dir: forge-repositories/service
+
+  # Pull requests build the image without pushing or registry access.
+  image:
+    if: github.event_name == 'pull_request'
+    needs: test
+    uses: ./.github/workflows/reusable-docker.yml
+    with:
+      image: forge-repositories-service
+      dockerfile: forge-repositories/service/Dockerfile
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+    needs: test
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/reusable-docker.yml
+    with:
+      image: forge-repositories-service
+      dockerfile: forge-repositories/service/Dockerfile
+      push: true

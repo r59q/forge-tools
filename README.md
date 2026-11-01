@@ -12,6 +12,7 @@ useful on its own.
 | ----------------------------------- | -------------------------------------------- |
 | [forge-issues](forge-issues/)         | Federated issue tracker for forges.           |
 | [forge-connector](forge-connector/)   | Stored forge connections and scoped tokens.   |
+| [forge-repositories](forge-repositories/) | Repositories, branches and tags across forges. |
 
 ## Structure
 

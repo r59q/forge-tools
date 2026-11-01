@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Repositories · Forge Tools Management</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header><span>Forge Tools</span><span class="badge">Management · Read only</span></header>
+  <main>
+    <div class="heading"><h1>Repositories</h1><a href="/">Refresh listing</a></div>
+    <p>Repositories visible to the configured upstream credentials. Access and visibility are controlled by each source.</p>
+    {{if .Failed}}
+    <section role="alert"><h2>Repository listing failed</h2><p>No complete results are available. Check the repository service and its credentials, then refresh.</p></section>
+    {{else if not .Listing.Configured}}
+    <section><h2>No repository capability configured</h2><p>Connect a forge-repositories service in the management startup settings to list repositories.</p></section>
+    {{else if not .Listing.Repositories}}
+    <section><h2>No repositories found</h2><p>The listing succeeded. No repositories are visible to the configured upstream credentials.</p></section>
+    {{else}}
+    <p>{{len .Listing.Repositories}} repositories</p>
+    <div class="table"><table>
+      <caption>Complete repository listing</caption>
+      <thead><tr><th scope="col">Full path</th><th scope="col">Source</th><th scope="col">Forge / host</th><th scope="col">Visibility</th></tr></thead>
+      <tbody>{{range .Listing.Repositories}}<tr>
+        <td><strong>{{.Path}}</strong>{{if .Description}}<p>{{.Description}}</p>{{end}}</td>
+        <td>{{.SourceId}}</td><td>{{.Forge}}{{if .Host}}<br>{{.Host}}{{end}}</td><td>{{.Visibility}}</td>
+      </tr>{{end}}</tbody>
+    </table></div>
+    {{end}}
+  </main>
+</body>
+</html>

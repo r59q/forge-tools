@@ -38,6 +38,8 @@ type Config struct {
 	Verifier Verifier
 	// TokenIssuer retrieves credentials only after caller authorization.
 	TokenIssuer TokenIssuer
+	// Connections serves GET /connections when set. Nil disables it.
+	Connections ConnectionLister
 	// Registry contains the explicitly registered forgeauth providers.
 	Registry *forgeauth.Registry
 	// Transport sends forge requests without redirects. Nil uses http.DefaultTransport.
@@ -48,12 +50,14 @@ type Config struct {
 	PublicURL string
 }
 
-// Handler serves /c/{connectionID}/<API path>. Use New to construct it. Mount
+// Handler serves /c/{connectionID}/<API path>, and GET /connections when
+// Config.Connections is set. Use New to construct it. Mount
 // it without path cleaning so encoded traversal is rejected, not redirected.
 // Requests inherit the caller's context; the service should set deadlines.
 type Handler struct {
 	verifier  Verifier
 	issuer    TokenIssuer
+	lister    ConnectionLister
 	registry  *forgeauth.Registry
 	transport http.RoundTripper
 	publicURL string
@@ -79,7 +83,7 @@ func New(config Config) (*Handler, error) {
 	if rt == nil {
 		rt = http.DefaultTransport
 	}
-	return &Handler{verifier: config.Verifier, issuer: config.TokenIssuer,
+	return &Handler{verifier: config.Verifier, issuer: config.TokenIssuer, lister: config.Connections,
 		registry: config.Registry, transport: rt, publicURL: publicURL}, nil
 }
 
@@ -90,6 +94,10 @@ func (*Handler) Format(f fmt.State, _ rune) { _, _ = f.Write([]byte("proxy.Handl
 // Proxy errors have fixed messages prefixed with "proxy:"; upstream statuses and
 // bodies pass through, with Link and Location headers restricted to this route.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.URL != nil && r.URL.EscapedPath() == ConnectionsPath {
+		h.connections(w, r)
+		return
+	}
 	id, apiPath, code := route(r)
 	if code != 0 {
 		proxyError(w, code)

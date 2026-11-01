@@ -214,7 +214,65 @@ func (m *Manager) IssueToken(ctx context.Context, clientToken forgeauth.StaticTo
 	return IssuedToken{Kind: forge.Kind, BaseURL: forge.BaseURL, Token: token}, nil
 }
 
+// ClientConnection is a connection as its client sees it: no credential,
+// identity or endpoint.
+type ClientConnection struct {
+	// ID identifies the connection.
+	ID ID
+	// Name is an owner-defined label.
+	Name string
+	// Kind is the forge kind, such as github.
+	Kind forgeauth.Kind
+	// Status is the last credential check's result. Only StatusOK is usable.
+	Status Status
+}
+
+// ClientConnections returns the connections in token's scope, ordered by ID,
+// with their forge kind and status. It does not require CanIssueTokens.
+// Unknown tokens fail with ErrUnauthorized.
+func (m *Manager) ClientConnections(ctx context.Context, token forgeauth.StaticToken) ([]ClientConnection, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	client, err := m.authenticate(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	ids := slices.Clone(client.Connections)
+	slices.Sort(ids)
+	result := []ClientConnection{}
+	for _, id := range slices.Compact(ids) {
+		conn, forge, err := m.connection(ctx, id)
+		if errors.Is(err, ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, ClientConnection{ID: conn.ID, Name: conn.Name, Kind: forge.Kind, Status: conn.Status})
+	}
+	return result, nil
+}
+
 func (m *Manager) verifyClient(ctx context.Context, token forgeauth.StaticToken, connectionID ID) (Client, error) {
+	matched, err := m.authenticate(ctx, token)
+	if err != nil {
+		return Client{}, err
+	}
+	if !slices.Contains(matched.Connections, connectionID) {
+		return Client{}, ErrForbidden
+	}
+	conn, err := m.store.GetConnection(ctx, connectionID)
+	if err != nil {
+		return Client{}, safeError(err, ErrStorage)
+	}
+	if conn.Status != StatusOK {
+		return Client{}, ErrUnavailable
+	}
+	return matched, nil
+}
+
+// authenticate returns the client whose token hash matches token.
+func (m *Manager) authenticate(ctx context.Context, token forgeauth.StaticToken) (Client, error) {
 	clients, err := m.store.ListClients(ctx)
 	if err != nil {
 		return Client{}, safeError(err, ErrStorage)
@@ -232,16 +290,6 @@ func (m *Manager) verifyClient(ctx context.Context, token forgeauth.StaticToken,
 	}
 	if found != 1 || token == "" {
 		return Client{}, ErrUnauthorized
-	}
-	if !slices.Contains(matched.Connections, connectionID) {
-		return Client{}, ErrForbidden
-	}
-	conn, err := m.store.GetConnection(ctx, connectionID)
-	if err != nil {
-		return Client{}, safeError(err, ErrStorage)
-	}
-	if conn.Status != StatusOK {
-		return Client{}, ErrUnavailable
 	}
 	return matched, nil
 }

@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 // Default cache lifetimes.
@@ -54,7 +55,8 @@ type BrokerConfig struct {
 	Now func() time.Time
 }
 
-// Broker implements proxy.Verifier and proxy.TokenIssuer with a broker gRPC
+// Broker implements proxy.Verifier, proxy.TokenIssuer and
+// proxy.ConnectionLister with a broker gRPC
 // client and in-memory caches. It is safe for concurrent use.
 type Broker struct {
 	client    pb.BrokerClient
@@ -69,8 +71,9 @@ type Broker struct {
 }
 
 var (
-	_ proxy.Verifier    = (*Broker)(nil)
-	_ proxy.TokenIssuer = (*Broker)(nil)
+	_ proxy.Verifier         = (*Broker)(nil)
+	_ proxy.TokenIssuer      = (*Broker)(nil)
+	_ proxy.ConnectionLister = (*Broker)(nil)
 )
 
 // verdict is a cached VerifyClient result: nil err means approved.
@@ -174,6 +177,28 @@ func (b *Broker) VerifyClient(ctx context.Context, token forgeauth.StaticToken, 
 	}
 	b.verified.set(key, verdict{client: client}, b.verifyTTL)
 	return client, nil
+}
+
+// ClientConnections asks the broker for the connections in token's scope,
+// using the caller's token as the bearer credential. Results are not cached.
+func (b *Broker) ClientConnections(ctx context.Context, token forgeauth.StaticToken) ([]broker.ClientConnection, error) {
+	if !metadataSafe(string(token)) {
+		return nil, broker.ErrUnauthorized
+	}
+	ctx, cancel := b.withTimeout(ctx)
+	defer cancel()
+	resp, err := b.client.ListClientConnections(bearer(ctx, string(token)), &emptypb.Empty{})
+	if err != nil {
+		return nil, brokerError(err)
+	}
+	result := make([]broker.ClientConnection, len(resp.GetConnections()))
+	for i, c := range resp.GetConnections() {
+		result[i] = broker.ClientConnection{
+			ID: broker.ID(c.GetId()), Name: c.GetName(),
+			Kind: forgeauth.Kind(c.GetKind()), Status: broker.Status(c.GetStatus()),
+		}
+	}
+	return result, nil
 }
 
 func (b *Broker) withTimeout(ctx context.Context) (context.Context, context.CancelFunc) {

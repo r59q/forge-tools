@@ -6,8 +6,8 @@ field names and RFC 3339 timestamps. REST errors use gRPC status codes mapped to
 HTTP (401 unauthenticated, 403 forbidden, 400 invalid input or failed
 precondition, 404 missing record, 500 internal failure).
 
-`VerifyClient` verifies the token in `Authorization: Bearer`, so a proxy forwards
-its caller's token. No token is accepted in the URL, query, or request body.
+`VerifyClient` and `ListClientConnections` verify the token in
+`Authorization: Bearer`, so a proxy forwards its caller's token. No token is accepted in the URL, query, or request body.
 `CreateClient` and `IssueToken` explicitly return secrets to authorized callers;
 all other responses contain metadata only. Never log secret-bearing messages.
 

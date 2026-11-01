@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -102,7 +103,7 @@ func setup(t *testing.T) (*Server, http.Handler, *forge, *forge) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, err := New(client, forgeauth.StaticToken(serviceToken), 5*time.Second)
+	s, err := New(Fixed(client), forgeauth.StaticToken(serviceToken), 5*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,13 +139,33 @@ func rest(t *testing.T, h http.Handler, method, target, body, token string) (int
 func TestNew(t *testing.T) {
 	client, _ := repositories.New()
 	for _, tc := range []struct {
-		client  *repositories.Client
+		sources Sources
 		token   forgeauth.Credentials
 		timeout time.Duration
-	}{{nil, forgeauth.StaticToken("x"), time.Second}, {client, nil, time.Second}, {client, forgeauth.StaticToken("x"), 0}} {
-		if _, err := New(tc.client, tc.token, tc.timeout); err != ErrInvalid {
-			t.Errorf("New(%v, %v, %v) = %v, want ErrInvalid", tc.client, tc.token, tc.timeout, err)
+	}{{nil, forgeauth.StaticToken("x"), time.Second}, {Fixed(client), nil, time.Second}, {Fixed(client), forgeauth.StaticToken("x"), 0}} {
+		if _, err := New(tc.sources, tc.token, tc.timeout); err != ErrInvalid {
+			t.Errorf("New(%v, %v) = %v, want ErrInvalid", tc.token, tc.timeout, err)
 		}
+	}
+}
+
+func TestSourcesUnavailable(t *testing.T) {
+	failing := func(context.Context) (*repositories.Client, error) {
+		return nil, errors.New("connector " + forgeToken)
+	}
+	s, err := New(failing, forgeauth.StaticToken(serviceToken), time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, err := s.REST(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code, body := rest(t, h, "GET", "/v1/repositories", "", serviceToken); code != http.StatusServiceUnavailable {
+		t.Fatalf("got %d %s", code, body)
+	}
+	if code, _ := rest(t, h, "GET", "/v1/repositories", "", "wrong"); code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated call reached sources: %d", code)
 	}
 }
 

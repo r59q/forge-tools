@@ -20,6 +20,7 @@ import (
 
 	"github.com/r59q/forge-tools/forge-connector/library/broker"
 	pb "github.com/r59q/forge-tools/forge-connector/library/brokerpb"
+	"github.com/r59q/forge-tools/forge-connector/library/connector"
 	"github.com/r59q/forge-tools/forge-connector/proxy/service"
 	"github.com/r59q/forge-tools/forge-core/forgeapi/forgeauth"
 	"github.com/r59q/forge-tools/forge-core/forgeapi/forgeauth/forgejo"
@@ -31,6 +32,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 const (
@@ -83,6 +85,13 @@ func (b *fakeBroker) VerifyClient(ctx context.Context, r *pb.VerifyClientRequest
 		return nil, status.Error(codes.PermissionDenied, "no")
 	}
 	return &pb.Client{Id: "client", ConnectionIds: []string{connID}}, nil
+}
+
+func (b *fakeBroker) ListClientConnections(ctx context.Context, _ *emptypb.Empty) (*pb.ListClientConnectionsResponse, error) {
+	if bearerOf(ctx) != callerToken {
+		return nil, status.Error(codes.Unauthenticated, "no")
+	}
+	return &pb.ListClientConnectionsResponse{Connections: []*pb.ClientConnection{{Id: connID, Name: "me", Kind: "github", Status: "ok"}}}, nil
 }
 
 func (b *fakeBroker) set(f func()) { b.mu.Lock(); f(); b.mu.Unlock() }
@@ -241,6 +250,26 @@ func TestFullRequest(t *testing.T) {
 	}
 	if issues, verifies := e.broker.counts(); issues != 1 || verifies != 1 {
 		t.Errorf("broker calls: issue=%d verify=%d", issues, verifies)
+	}
+}
+
+func TestConnectorClient(t *testing.T) {
+	e := newEnv(t, options{tokenTTL: time.Minute, verifyTTL: time.Minute})
+	c, err := connector.New(connector.Config{URL: e.proxy.URL, Credentials: forgeauth.StaticToken(callerToken)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	conns, err := c.Connections(context.Background())
+	if err != nil || len(conns) != 1 || conns[0].ID != connID || conns[0].Name != "me" || conns[0].Kind != forgeauth.GitHub {
+		t.Fatalf("Connections = %+v, %v", conns, err)
+	}
+	var got struct{ Login string }
+	if err := conns[0].Session.GetJSON(context.Background(), "/user", &got); err != nil || got.Login != "octo" {
+		t.Fatalf("session request: %v %q", err, got.Login)
+	}
+	c, _ = connector.New(connector.Config{URL: e.proxy.URL, Credentials: forgeauth.StaticToken(proxyToken)})
+	if _, err := c.Connections(context.Background()); !errors.Is(err, forgehttp.ErrUnauthorized) {
+		t.Fatalf("proxy token listed connections: %v", err)
 	}
 }
 

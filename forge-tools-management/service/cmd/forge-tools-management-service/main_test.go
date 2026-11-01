@@ -220,7 +220,7 @@ func TestRunWithNativeRepositories(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	backend, err := repoapi.New(client, forgeauth.StaticToken("backend-synthetic"), time.Second)
+	backend, err := repoapi.New(repoapi.Fixed(client), forgeauth.StaticToken("backend-synthetic"), time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}

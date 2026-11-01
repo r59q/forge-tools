@@ -1077,6 +1077,126 @@ func (x *VerifyClientRequest) GetConnectionId() string {
 	return ""
 }
 
+// ClientConnection is a connection as its client sees it: no credential,
+// identity or endpoint.
+type ClientConnection struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// id is the connection ID.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// name is an owner-defined label.
+	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// kind is github, gitlab or forgejo.
+	Kind string `protobuf:"bytes,3,opt,name=kind,proto3" json:"kind,omitempty"`
+	// status is ok, invalid or revoked. Only ok permits client use.
+	Status        string `protobuf:"bytes,4,opt,name=status,proto3" json:"status,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClientConnection) Reset() {
+	*x = ClientConnection{}
+	mi := &file_broker_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClientConnection) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClientConnection) ProtoMessage() {}
+
+func (x *ClientConnection) ProtoReflect() protoreflect.Message {
+	mi := &file_broker_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClientConnection.ProtoReflect.Descriptor instead.
+func (*ClientConnection) Descriptor() ([]byte, []int) {
+	return file_broker_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *ClientConnection) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ClientConnection) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ClientConnection) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *ClientConnection) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+// ListClientConnectionsResponse contains the client's connections in ID order.
+type ListClientConnectionsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// connections never contains credentials.
+	Connections   []*ClientConnection `protobuf:"bytes,1,rep,name=connections,proto3" json:"connections,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListClientConnectionsResponse) Reset() {
+	*x = ListClientConnectionsResponse{}
+	mi := &file_broker_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListClientConnectionsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListClientConnectionsResponse) ProtoMessage() {}
+
+func (x *ListClientConnectionsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_broker_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListClientConnectionsResponse.ProtoReflect.Descriptor instead.
+func (*ListClientConnectionsResponse) Descriptor() ([]byte, []int) {
+	return file_broker_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *ListClientConnectionsResponse) GetConnections() []*ClientConnection {
+	if x != nil {
+		return x.Connections
+	}
+	return nil
+}
+
 var File_broker_proto protoreflect.FileDescriptor
 
 const file_broker_proto_rawDesc = "" +
@@ -1149,7 +1269,14 @@ const file_broker_proto_rawDesc = "" +
 	"\bbase_url\x18\x02 \x01(\tR\abaseUrl\x12\x14\n" +
 	"\x05token\x18\x03 \x01(\tR\x05token\":\n" +
 	"\x13VerifyClientRequest\x12#\n" +
-	"\rconnection_id\x18\x01 \x01(\tR\fconnectionId2\xf5\f\n" +
+	"\rconnection_id\x18\x01 \x01(\tR\fconnectionId\"b\n" +
+	"\x10ClientConnection\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
+	"\x04kind\x18\x03 \x01(\tR\x04kind\x12\x16\n" +
+	"\x06status\x18\x04 \x01(\tR\x06status\"g\n" +
+	"\x1dListClientConnectionsResponse\x12F\n" +
+	"\vconnections\x18\x01 \x03(\v2$.forge.connector.v1.ClientConnectionR\vconnections2\xfa\r\n" +
 	"\x06Broker\x12g\n" +
 	"\vCreateForge\x12&.forge.connector.v1.CreateForgeRequest\x1a\x19.forge.connector.v1.Forge\"\x15\x82\xd3\xe4\x93\x02\x0f:\x01*\"\n" +
 	"/v1/forges\x12`\n" +
@@ -1168,7 +1295,8 @@ const file_broker_proto_rawDesc = "" +
 	"\fDeleteClient\x12!.forge.connector.v1.ClientRequest\x1a\x16.google.protobuf.Empty\"\x18\x82\xd3\xe4\x93\x02\x12*\x10/v1/clients/{id}\x12\x8d\x01\n" +
 	"\n" +
 	"IssueToken\x12%.forge.connector.v1.IssueTokenRequest\x1a&.forge.connector.v1.IssueTokenResponse\"0\x82\xd3\xe4\x93\x02*:\x01*\"%/v1/connections/{connection_id}/token\x12\x86\x01\n" +
-	"\fVerifyClient\x12'.forge.connector.v1.VerifyClientRequest\x1a\x1a.forge.connector.v1.Client\"1\x82\xd3\xe4\x93\x02+:\x01*\"&/v1/connections/{connection_id}/verifyB>Z<github.com/r59q/forge-tools/forge-connector/library/brokerpbb\x06proto3"
+	"\fVerifyClient\x12'.forge.connector.v1.VerifyClientRequest\x1a\x1a.forge.connector.v1.Client\"1\x82\xd3\xe4\x93\x02+:\x01*\"&/v1/connections/{connection_id}/verify\x12\x82\x01\n" +
+	"\x15ListClientConnections\x12\x16.google.protobuf.Empty\x1a1.forge.connector.v1.ListClientConnectionsResponse\"\x1e\x82\xd3\xe4\x93\x02\x18\x12\x16/v1/client/connectionsB>Z<github.com/r59q/forge-tools/forge-connector/library/brokerpbb\x06proto3"
 
 var (
 	file_broker_proto_rawDescOnce sync.Once
@@ -1182,70 +1310,75 @@ func file_broker_proto_rawDescGZIP() []byte {
 	return file_broker_proto_rawDescData
 }
 
-var file_broker_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
+var file_broker_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_broker_proto_goTypes = []any{
-	(*Forge)(nil),                   // 0: forge.connector.v1.Forge
-	(*Identity)(nil),                // 1: forge.connector.v1.Identity
-	(*Connection)(nil),              // 2: forge.connector.v1.Connection
-	(*Client)(nil),                  // 3: forge.connector.v1.Client
-	(*CreateForgeRequest)(nil),      // 4: forge.connector.v1.CreateForgeRequest
-	(*ForgeRequest)(nil),            // 5: forge.connector.v1.ForgeRequest
-	(*ListForgesResponse)(nil),      // 6: forge.connector.v1.ListForgesResponse
-	(*CreateConnectionRequest)(nil), // 7: forge.connector.v1.CreateConnectionRequest
-	(*ConnectionRequest)(nil),       // 8: forge.connector.v1.ConnectionRequest
-	(*ListConnectionsResponse)(nil), // 9: forge.connector.v1.ListConnectionsResponse
-	(*RotateCredentialRequest)(nil), // 10: forge.connector.v1.RotateCredentialRequest
-	(*CreateClientRequest)(nil),     // 11: forge.connector.v1.CreateClientRequest
-	(*CreateClientResponse)(nil),    // 12: forge.connector.v1.CreateClientResponse
-	(*ClientRequest)(nil),           // 13: forge.connector.v1.ClientRequest
-	(*ListClientsResponse)(nil),     // 14: forge.connector.v1.ListClientsResponse
-	(*IssueTokenRequest)(nil),       // 15: forge.connector.v1.IssueTokenRequest
-	(*IssueTokenResponse)(nil),      // 16: forge.connector.v1.IssueTokenResponse
-	(*VerifyClientRequest)(nil),     // 17: forge.connector.v1.VerifyClientRequest
-	(*timestamppb.Timestamp)(nil),   // 18: google.protobuf.Timestamp
-	(*emptypb.Empty)(nil),           // 19: google.protobuf.Empty
+	(*Forge)(nil),                         // 0: forge.connector.v1.Forge
+	(*Identity)(nil),                      // 1: forge.connector.v1.Identity
+	(*Connection)(nil),                    // 2: forge.connector.v1.Connection
+	(*Client)(nil),                        // 3: forge.connector.v1.Client
+	(*CreateForgeRequest)(nil),            // 4: forge.connector.v1.CreateForgeRequest
+	(*ForgeRequest)(nil),                  // 5: forge.connector.v1.ForgeRequest
+	(*ListForgesResponse)(nil),            // 6: forge.connector.v1.ListForgesResponse
+	(*CreateConnectionRequest)(nil),       // 7: forge.connector.v1.CreateConnectionRequest
+	(*ConnectionRequest)(nil),             // 8: forge.connector.v1.ConnectionRequest
+	(*ListConnectionsResponse)(nil),       // 9: forge.connector.v1.ListConnectionsResponse
+	(*RotateCredentialRequest)(nil),       // 10: forge.connector.v1.RotateCredentialRequest
+	(*CreateClientRequest)(nil),           // 11: forge.connector.v1.CreateClientRequest
+	(*CreateClientResponse)(nil),          // 12: forge.connector.v1.CreateClientResponse
+	(*ClientRequest)(nil),                 // 13: forge.connector.v1.ClientRequest
+	(*ListClientsResponse)(nil),           // 14: forge.connector.v1.ListClientsResponse
+	(*IssueTokenRequest)(nil),             // 15: forge.connector.v1.IssueTokenRequest
+	(*IssueTokenResponse)(nil),            // 16: forge.connector.v1.IssueTokenResponse
+	(*VerifyClientRequest)(nil),           // 17: forge.connector.v1.VerifyClientRequest
+	(*ClientConnection)(nil),              // 18: forge.connector.v1.ClientConnection
+	(*ListClientConnectionsResponse)(nil), // 19: forge.connector.v1.ListClientConnectionsResponse
+	(*timestamppb.Timestamp)(nil),         // 20: google.protobuf.Timestamp
+	(*emptypb.Empty)(nil),                 // 21: google.protobuf.Empty
 }
 var file_broker_proto_depIdxs = []int32{
 	1,  // 0: forge.connector.v1.Connection.identity:type_name -> forge.connector.v1.Identity
-	18, // 1: forge.connector.v1.Connection.checked_at:type_name -> google.protobuf.Timestamp
-	18, // 2: forge.connector.v1.Connection.created_at:type_name -> google.protobuf.Timestamp
+	20, // 1: forge.connector.v1.Connection.checked_at:type_name -> google.protobuf.Timestamp
+	20, // 2: forge.connector.v1.Connection.created_at:type_name -> google.protobuf.Timestamp
 	0,  // 3: forge.connector.v1.ListForgesResponse.forges:type_name -> forge.connector.v1.Forge
 	2,  // 4: forge.connector.v1.ListConnectionsResponse.connections:type_name -> forge.connector.v1.Connection
 	3,  // 5: forge.connector.v1.CreateClientResponse.client:type_name -> forge.connector.v1.Client
 	3,  // 6: forge.connector.v1.ListClientsResponse.clients:type_name -> forge.connector.v1.Client
-	4,  // 7: forge.connector.v1.Broker.CreateForge:input_type -> forge.connector.v1.CreateForgeRequest
-	19, // 8: forge.connector.v1.Broker.ListForges:input_type -> google.protobuf.Empty
-	5,  // 9: forge.connector.v1.Broker.DeleteForge:input_type -> forge.connector.v1.ForgeRequest
-	7,  // 10: forge.connector.v1.Broker.CreateConnection:input_type -> forge.connector.v1.CreateConnectionRequest
-	19, // 11: forge.connector.v1.Broker.ListConnections:input_type -> google.protobuf.Empty
-	8,  // 12: forge.connector.v1.Broker.GetConnection:input_type -> forge.connector.v1.ConnectionRequest
-	8,  // 13: forge.connector.v1.Broker.TestConnection:input_type -> forge.connector.v1.ConnectionRequest
-	10, // 14: forge.connector.v1.Broker.RotateCredential:input_type -> forge.connector.v1.RotateCredentialRequest
-	8,  // 15: forge.connector.v1.Broker.DeleteConnection:input_type -> forge.connector.v1.ConnectionRequest
-	11, // 16: forge.connector.v1.Broker.CreateClient:input_type -> forge.connector.v1.CreateClientRequest
-	19, // 17: forge.connector.v1.Broker.ListClients:input_type -> google.protobuf.Empty
-	13, // 18: forge.connector.v1.Broker.DeleteClient:input_type -> forge.connector.v1.ClientRequest
-	15, // 19: forge.connector.v1.Broker.IssueToken:input_type -> forge.connector.v1.IssueTokenRequest
-	17, // 20: forge.connector.v1.Broker.VerifyClient:input_type -> forge.connector.v1.VerifyClientRequest
-	0,  // 21: forge.connector.v1.Broker.CreateForge:output_type -> forge.connector.v1.Forge
-	6,  // 22: forge.connector.v1.Broker.ListForges:output_type -> forge.connector.v1.ListForgesResponse
-	19, // 23: forge.connector.v1.Broker.DeleteForge:output_type -> google.protobuf.Empty
-	2,  // 24: forge.connector.v1.Broker.CreateConnection:output_type -> forge.connector.v1.Connection
-	9,  // 25: forge.connector.v1.Broker.ListConnections:output_type -> forge.connector.v1.ListConnectionsResponse
-	2,  // 26: forge.connector.v1.Broker.GetConnection:output_type -> forge.connector.v1.Connection
-	2,  // 27: forge.connector.v1.Broker.TestConnection:output_type -> forge.connector.v1.Connection
-	2,  // 28: forge.connector.v1.Broker.RotateCredential:output_type -> forge.connector.v1.Connection
-	19, // 29: forge.connector.v1.Broker.DeleteConnection:output_type -> google.protobuf.Empty
-	12, // 30: forge.connector.v1.Broker.CreateClient:output_type -> forge.connector.v1.CreateClientResponse
-	14, // 31: forge.connector.v1.Broker.ListClients:output_type -> forge.connector.v1.ListClientsResponse
-	19, // 32: forge.connector.v1.Broker.DeleteClient:output_type -> google.protobuf.Empty
-	16, // 33: forge.connector.v1.Broker.IssueToken:output_type -> forge.connector.v1.IssueTokenResponse
-	3,  // 34: forge.connector.v1.Broker.VerifyClient:output_type -> forge.connector.v1.Client
-	21, // [21:35] is the sub-list for method output_type
-	7,  // [7:21] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	18, // 7: forge.connector.v1.ListClientConnectionsResponse.connections:type_name -> forge.connector.v1.ClientConnection
+	4,  // 8: forge.connector.v1.Broker.CreateForge:input_type -> forge.connector.v1.CreateForgeRequest
+	21, // 9: forge.connector.v1.Broker.ListForges:input_type -> google.protobuf.Empty
+	5,  // 10: forge.connector.v1.Broker.DeleteForge:input_type -> forge.connector.v1.ForgeRequest
+	7,  // 11: forge.connector.v1.Broker.CreateConnection:input_type -> forge.connector.v1.CreateConnectionRequest
+	21, // 12: forge.connector.v1.Broker.ListConnections:input_type -> google.protobuf.Empty
+	8,  // 13: forge.connector.v1.Broker.GetConnection:input_type -> forge.connector.v1.ConnectionRequest
+	8,  // 14: forge.connector.v1.Broker.TestConnection:input_type -> forge.connector.v1.ConnectionRequest
+	10, // 15: forge.connector.v1.Broker.RotateCredential:input_type -> forge.connector.v1.RotateCredentialRequest
+	8,  // 16: forge.connector.v1.Broker.DeleteConnection:input_type -> forge.connector.v1.ConnectionRequest
+	11, // 17: forge.connector.v1.Broker.CreateClient:input_type -> forge.connector.v1.CreateClientRequest
+	21, // 18: forge.connector.v1.Broker.ListClients:input_type -> google.protobuf.Empty
+	13, // 19: forge.connector.v1.Broker.DeleteClient:input_type -> forge.connector.v1.ClientRequest
+	15, // 20: forge.connector.v1.Broker.IssueToken:input_type -> forge.connector.v1.IssueTokenRequest
+	17, // 21: forge.connector.v1.Broker.VerifyClient:input_type -> forge.connector.v1.VerifyClientRequest
+	21, // 22: forge.connector.v1.Broker.ListClientConnections:input_type -> google.protobuf.Empty
+	0,  // 23: forge.connector.v1.Broker.CreateForge:output_type -> forge.connector.v1.Forge
+	6,  // 24: forge.connector.v1.Broker.ListForges:output_type -> forge.connector.v1.ListForgesResponse
+	21, // 25: forge.connector.v1.Broker.DeleteForge:output_type -> google.protobuf.Empty
+	2,  // 26: forge.connector.v1.Broker.CreateConnection:output_type -> forge.connector.v1.Connection
+	9,  // 27: forge.connector.v1.Broker.ListConnections:output_type -> forge.connector.v1.ListConnectionsResponse
+	2,  // 28: forge.connector.v1.Broker.GetConnection:output_type -> forge.connector.v1.Connection
+	2,  // 29: forge.connector.v1.Broker.TestConnection:output_type -> forge.connector.v1.Connection
+	2,  // 30: forge.connector.v1.Broker.RotateCredential:output_type -> forge.connector.v1.Connection
+	21, // 31: forge.connector.v1.Broker.DeleteConnection:output_type -> google.protobuf.Empty
+	12, // 32: forge.connector.v1.Broker.CreateClient:output_type -> forge.connector.v1.CreateClientResponse
+	14, // 33: forge.connector.v1.Broker.ListClients:output_type -> forge.connector.v1.ListClientsResponse
+	21, // 34: forge.connector.v1.Broker.DeleteClient:output_type -> google.protobuf.Empty
+	16, // 35: forge.connector.v1.Broker.IssueToken:output_type -> forge.connector.v1.IssueTokenResponse
+	3,  // 36: forge.connector.v1.Broker.VerifyClient:output_type -> forge.connector.v1.Client
+	19, // 37: forge.connector.v1.Broker.ListClientConnections:output_type -> forge.connector.v1.ListClientConnectionsResponse
+	23, // [23:38] is the sub-list for method output_type
+	8,  // [8:23] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_broker_proto_init() }
@@ -1259,7 +1392,7 @@ func file_broker_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_broker_proto_rawDesc), len(file_broker_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   18,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

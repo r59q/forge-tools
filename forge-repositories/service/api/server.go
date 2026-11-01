@@ -1,5 +1,4 @@
-// Package api exposes a repositories.Client over gRPC and generated REST
-// routes.
+// Package api exposes repositories over gRPC and generated REST routes.
 package api
 
 import (
@@ -23,7 +22,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// ErrInvalid means New was given a nil client or credential source, or a
+// ErrInvalid means New was given nil sources or credential source, or a
 // nonpositive timeout.
 var ErrInvalid = errors.New("api: invalid configuration")
 
@@ -32,19 +31,29 @@ var ErrInvalid = errors.New("api: invalid configuration")
 // returns only a status code to callers.
 type Server struct {
 	pb.UnimplementedRepositoriesServer
-	client  *repositories.Client
+	sources Sources
 	token   forgeauth.Credentials
 	timeout time.Duration
 }
 
-// New constructs a service for client. Callers must present the token from
+// Sources returns a client for the current sources. The server calls it once
+// per RPC, so sources may change while it runs. Errors map to Unavailable
+// unless they wrap a context error.
+type Sources func(ctx context.Context) (*repositories.Client, error)
+
+// Fixed returns Sources that always use client.
+func Fixed(client *repositories.Client) Sources {
+	return func(context.Context) (*repositories.Client, error) { return client, nil }
+}
+
+// New constructs a service over sources. Callers must present the token from
 // token as Authorization: Bearer. Each RPC runs for at most timeout.
 // Runtime configuration should use forgeauth.FileToken or forgeauth.EnvToken.
-func New(client *repositories.Client, token forgeauth.Credentials, timeout time.Duration) (*Server, error) {
-	if client == nil || token == nil || timeout <= 0 {
+func New(sources Sources, token forgeauth.Credentials, timeout time.Duration) (*Server, error) {
+	if sources == nil || token == nil || timeout <= 0 {
 		return nil, ErrInvalid
 	}
-	return &Server{client: client, token: token, timeout: timeout}, nil
+	return &Server{sources: sources, token: token, timeout: timeout}, nil
 }
 
 // REST registers generated routes. Authorization is the sole forwarded header;
@@ -94,14 +103,21 @@ func (s *Server) authorize(ctx context.Context) error {
 	return nil
 }
 
-func call[T any](s *Server, ctx context.Context, fn func(context.Context) (T, error)) (T, error) {
+func call[T any](s *Server, ctx context.Context, fn func(context.Context, *repositories.Client) (T, error)) (T, error) {
 	var zero T
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 	if err := s.authorize(ctx); err != nil {
 		return zero, err
 	}
-	result, err := fn(ctx)
+	client, err := s.sources(ctx)
+	if err != nil {
+		if ctx.Err() != nil {
+			return zero, rpcError(ctx.Err())
+		}
+		return zero, status.Error(codes.Unavailable, codes.Unavailable.String())
+	}
+	result, err := fn(ctx, client)
 	if err != nil {
 		return zero, rpcError(err)
 	}
@@ -172,9 +188,9 @@ func ref(r interface {
 
 // ListSources lists source IDs and kinds, without URLs or credentials.
 func (s *Server) ListSources(ctx context.Context, _ *emptypb.Empty) (*pb.ListSourcesResponse, error) {
-	return call(s, ctx, func(context.Context) (*pb.ListSourcesResponse, error) {
+	return call(s, ctx, func(_ context.Context, client *repositories.Client) (*pb.ListSourcesResponse, error) {
 		result := &pb.ListSourcesResponse{}
-		for _, src := range s.client.Sources() {
+		for _, src := range client.Sources() {
 			result.Sources = append(result.Sources, &pb.Source{Id: src.ID, Kind: string(src.Session.Kind)})
 		}
 		return result, nil
@@ -183,8 +199,8 @@ func (s *Server) ListSources(ctx context.Context, _ *emptypb.Empty) (*pb.ListSou
 
 // ListRepositories lists repositories across sources.
 func (s *Server) ListRepositories(ctx context.Context, r *pb.ListRepositoriesRequest) (*pb.ListRepositoriesResponse, error) {
-	return call(s, ctx, func(ctx context.Context) (*pb.ListRepositoriesResponse, error) {
-		values, err := s.client.List(ctx, repositories.ListOptions{Owner: r.GetOwner(), Source: r.GetSource()})
+	return call(s, ctx, func(ctx context.Context, client *repositories.Client) (*pb.ListRepositoriesResponse, error) {
+		values, err := client.List(ctx, repositories.ListOptions{Owner: r.GetOwner(), Source: r.GetSource()})
 		result := &pb.ListRepositoriesResponse{}
 		for _, v := range values {
 			result.Repositories = append(result.Repositories, repository(v))
@@ -195,24 +211,24 @@ func (s *Server) ListRepositories(ctx context.Context, r *pb.ListRepositoriesReq
 
 // GetRepository reads one repository by path.
 func (s *Server) GetRepository(ctx context.Context, r *pb.RepositoryRequest) (*pb.Repository, error) {
-	return call(s, ctx, func(ctx context.Context) (*pb.Repository, error) {
-		v, err := s.client.Get(ctx, ref(r))
+	return call(s, ctx, func(ctx context.Context, client *repositories.Client) (*pb.Repository, error) {
+		v, err := client.Get(ctx, ref(r))
 		return repository(v), err
 	})
 }
 
 // UpdateRepository changes the description or default branch.
 func (s *Server) UpdateRepository(ctx context.Context, r *pb.UpdateRepositoryRequest) (*pb.Repository, error) {
-	return call(s, ctx, func(ctx context.Context) (*pb.Repository, error) {
-		v, err := s.client.Update(ctx, ref(r), repositories.Update{Description: r.Description, DefaultBranch: r.DefaultBranch})
+	return call(s, ctx, func(ctx context.Context, client *repositories.Client) (*pb.Repository, error) {
+		v, err := client.Update(ctx, ref(r), repositories.Update{Description: r.Description, DefaultBranch: r.DefaultBranch})
 		return repository(v), err
 	})
 }
 
 // ListBranches lists branches with the default branch marked.
 func (s *Server) ListBranches(ctx context.Context, r *pb.RepositoryRequest) (*pb.ListBranchesResponse, error) {
-	return call(s, ctx, func(ctx context.Context) (*pb.ListBranchesResponse, error) {
-		values, err := s.client.Branches(ctx, ref(r))
+	return call(s, ctx, func(ctx context.Context, client *repositories.Client) (*pb.ListBranchesResponse, error) {
+		values, err := client.Branches(ctx, ref(r))
 		result := &pb.ListBranchesResponse{}
 		for _, b := range values {
 			result.Branches = append(result.Branches, &pb.Branch{Name: b.Name, Sha: b.SHA, Default: b.Default, Protected: b.Protected})
@@ -223,8 +239,8 @@ func (s *Server) ListBranches(ctx context.Context, r *pb.RepositoryRequest) (*pb
 
 // ListTags lists tags.
 func (s *Server) ListTags(ctx context.Context, r *pb.RepositoryRequest) (*pb.ListTagsResponse, error) {
-	return call(s, ctx, func(ctx context.Context) (*pb.ListTagsResponse, error) {
-		values, err := s.client.Tags(ctx, ref(r))
+	return call(s, ctx, func(ctx context.Context, client *repositories.Client) (*pb.ListTagsResponse, error) {
+		values, err := client.Tags(ctx, ref(r))
 		result := &pb.ListTagsResponse{}
 		for _, t := range values {
 			result.Tags = append(result.Tags, &pb.Tag{Name: t.Name, Sha: t.SHA})

@@ -4,6 +4,7 @@ go 1.27
 
 require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.3
+	github.com/r59q/forge-tools/forge-connector/library v0.0.0
 	github.com/r59q/forge-tools/forge-core/forgeapi v0.0.0
 	github.com/r59q/forge-tools/forge-repositories/library v0.0.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20250929231259-57b25ae835d4
@@ -21,3 +22,5 @@ require (
 replace github.com/r59q/forge-tools/forge-core/forgeapi => ../../forge-core/forgeapi
 
 replace github.com/r59q/forge-tools/forge-repositories/library => ../library
+
+replace github.com/r59q/forge-tools/forge-connector/library => ../../forge-connector/library

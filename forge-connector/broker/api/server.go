@@ -263,3 +263,15 @@ func (s *Server) VerifyClient(ctx context.Context, r *pb.VerifyClientRequest) (*
 		return client(c), err
 	})
 }
+
+// ListClientConnections lists the bearer token's connections, with kind and status.
+func (s *Server) ListClientConnections(ctx context.Context, _ *emptypb.Empty) (*pb.ListClientConnectionsResponse, error) {
+	return call(s, ctx, false, func(ctx context.Context, token forgeauth.StaticToken) (*pb.ListClientConnectionsResponse, error) {
+		values, err := s.manager.ClientConnections(ctx, token)
+		result := &pb.ListClientConnectionsResponse{}
+		for _, c := range values {
+			result.Connections = append(result.Connections, &pb.ClientConnection{Id: string(c.ID), Name: c.Name, Kind: string(c.Kind), Status: string(c.Status)})
+		}
+		return result, err
+	})
+}

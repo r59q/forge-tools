@@ -238,6 +238,7 @@ func TestTransports(t *testing.T) {
 			for _, token := range []string{"", "wrong", adminToken} {
 				invoke("IssueToken", &pb.IssueTokenRequest{ConnectionId: conn.Id}, &pb.IssueTokenResponse{}, token, codes.Unauthenticated)
 				invoke("VerifyClient", &pb.VerifyClientRequest{ConnectionId: conn.Id}, &pb.Client{}, token, codes.Unauthenticated)
+				invoke("ListClientConnections", &emptypb.Empty{}, &pb.ListClientConnectionsResponse{}, token, codes.Unauthenticated)
 			}
 			for _, auth := range [][]string{{"Basic " + adminToken}, {"Bearer "}, {"Bearer " + adminToken, "Bearer " + adminToken}, {"Bearer bad token"}} {
 				if err := w.invoke("ListForges", &emptypb.Empty{}, &pb.ListForgesResponse{}, auth); status.Code(err) != codes.Unauthenticated {
@@ -273,6 +274,11 @@ func TestTransports(t *testing.T) {
 			invoke("CreateClient", &pb.CreateClientRequest{ConnectionIds: []string{conn.Id}}, verifyOnly, adminToken, codes.OK)
 			invoke("VerifyClient", &pb.VerifyClientRequest{ConnectionId: conn.Id}, &pb.Client{}, verifyOnly.Token, codes.OK)
 			invoke("IssueToken", &pb.IssueTokenRequest{ConnectionId: conn.Id}, &pb.IssueTokenResponse{}, verifyOnly.Token, codes.PermissionDenied)
+			listed := &pb.ListClientConnectionsResponse{}
+			invoke("ListClientConnections", &emptypb.Empty{}, listed, verifyOnly.Token, codes.OK)
+			if len(listed.Connections) != 1 || listed.Connections[0].Id != conn.Id || listed.Connections[0].Kind != "github" || listed.Connections[0].Status != "ok" {
+				t.Fatalf("ListClientConnections = %v", listed)
+			}
 			emptyScope := &pb.CreateClientResponse{}
 			invoke("CreateClient", &pb.CreateClientRequest{CanIssueTokens: true}, emptyScope, adminToken, codes.OK)
 			invoke("VerifyClient", &pb.VerifyClientRequest{ConnectionId: conn.Id}, &pb.Client{}, emptyScope.Token, codes.PermissionDenied)

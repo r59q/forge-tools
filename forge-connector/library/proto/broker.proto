@@ -75,6 +75,12 @@ service Broker {
   rpc VerifyClient(VerifyClientRequest) returns (Client) {
     option (google.api.http) = { post: "/v1/connections/{connection_id}/verify" body: "*" };
   }
+  // ListClientConnections lists the connections in the bearer client token's
+  // scope, with their forge kind and status. It does not require
+  // can_issue_tokens. Client: GET /v1/client/connections.
+  rpc ListClientConnections(google.protobuf.Empty) returns (ListClientConnectionsResponse) {
+    option (google.api.http) = { get: "/v1/client/connections" };
+  }
 }
 
 // Forge is registered endpoint metadata, without credentials.
@@ -216,4 +222,21 @@ message IssueTokenResponse {
 message VerifyClientRequest {
   // connection_id is the requested connection.
   string connection_id = 1;
+}
+// ClientConnection is a connection as its client sees it: no credential,
+// identity or endpoint.
+message ClientConnection {
+  // id is the connection ID.
+  string id = 1;
+  // name is an owner-defined label.
+  string name = 2;
+  // kind is github, gitlab or forgejo.
+  string kind = 3;
+  // status is ok, invalid or revoked. Only ok permits client use.
+  string status = 4;
+}
+// ListClientConnectionsResponse contains the client's connections in ID order.
+message ListClientConnectionsResponse {
+  // connections never contains credentials.
+  repeated ClientConnection connections = 1;
 }

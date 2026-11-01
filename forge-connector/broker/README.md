@@ -114,6 +114,7 @@ credentials fail authentication. REST does not trust `Grpc-Metadata-*` headers.
 | --- | --- |
 | `IssueToken` | `POST /v1/connections/{connection_id}/token` |
 | `VerifyClient` | `POST /v1/connections/{connection_id}/verify` |
+| `ListClientConnections` | `GET /v1/client/connections` |
 
 Start by creating a forge with `kind`, `baseUrl` (including its API path) and
 optional `name`. Create a connection with `forgeId`, `credential` and optional
@@ -122,6 +123,10 @@ optional `name`. Create a connection with `forgeId`, `credential` and optional
 token securely. Use that token as the bearer credential for client operations.
 `CreateClient` returns its token once; `IssueToken` deliberately returns the
 forge credential to an authorized client. All other results are metadata only.
+
+`ListClientConnections` returns the ID, name, forge kind and status of each
+connection in the bearer token's scope, never credentials or URLs. It does not
+require `canIssueTokens`.
 
 `VerifyClient` verifies the bearer token itself; a proxy forwards its caller's
 token and supplies the connection ID. No token is accepted in its body or query.

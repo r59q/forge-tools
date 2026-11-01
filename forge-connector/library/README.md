@@ -24,6 +24,8 @@ See the [setup example](broker/example_test.go).
   no access. Client hashes are compared in constant time, scanning all clients.
 - `VerifyClient` checks the client token, connection scope and last known
   connection status without decrypting credentials or contacting the forge.
+- `ClientConnections` lists the ID, name, forge kind and status of each
+  connection in a client token's scope, without credentials or endpoints.
 - `IssueToken` also requires `CanIssueTokens`, then returns the forge kind,
   API base URL and decrypted token. It uses the last check's status; call
   `TestConnection` to refresh it.
@@ -52,6 +54,22 @@ to the credentials. Use one Manager per Store and route mutations through it
 while it is active. Manager operations are serialized, including forge calls.
 Set context deadlines to bound those calls; client lookup scans all clients.
 
+## connector
+
+Tools use `connector.New(connector.Config{URL, Credentials})` with the proxy
+URL and their broker client token. `Connections` returns each usable
+connection (status `ok`, supported kind) with its ID, name, kind and an open
+`forgeauth` session for `<proxy>/c/{id}`. Make forge API calls with the
+session; the proxy swaps in the forge credential. `Connections` asks the proxy
+each time, so new, deleted and revoked connections apply at once.
+
+```go
+c, err := connector.New(connector.Config{URL: proxyURL, Credentials: forgeauth.EnvToken("FORGE_TOKEN")})
+conns, err := c.Connections(ctx)
+var me struct{ Login string }
+err = conns[0].Session.GetJSON(ctx, "/user", &me)
+```
+
 ## proxy
 
 `proxy.New(proxy.Config{...})` builds an `http.Handler` for
@@ -68,6 +86,10 @@ need that permission. Adapters map broker RPC errors to `broker` error classes.
 They are service wiring, not provider plugins. Register forgeauth providers
 explicitly. Connection transport settings are ignored; `Config.Transport` is
 the handler's trusted transport.
+
+Set `Config.Connections` to serve `GET /connections`, which lists the caller's
+connections as JSON. The `ConnectionLister` adapter must call the broker with
+the caller's token. The `connector` package is the matching Go client.
 
 Mount the handler without a path-cleaning router. It rejects absolute request
 targets, dot segments, backslashes and malformed or repeatedly encoded traversal.

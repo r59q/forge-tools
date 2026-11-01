@@ -293,6 +293,47 @@ func TestClientAuthorization(t *testing.T) {
 	}
 }
 
+func TestClientConnections(t *testing.T) {
+	f := setup(t, gitlab.Provider{})
+	a := f.connection(t)
+	b := f.connection(t)
+	f.connection(t) // out of scope
+	_, token := f.client(t, []broker.ID{b.ID, a.ID}, false)
+	f.status.Store(http.StatusUnauthorized)
+	if _, err := f.manager.TestConnection(f.ctx, b.ID); err == nil {
+		t.Fatal("revocation not detected")
+	}
+	got, err := f.manager.ClientConnections(f.ctx, token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []broker.ClientConnection{
+		{ID: a.ID, Name: "Connection", Kind: forgeauth.GitLab, Status: broker.StatusOK},
+		{ID: b.ID, Name: "Connection", Kind: forgeauth.GitLab, Status: broker.StatusRevoked},
+	}
+	if a.ID > b.ID {
+		want[0], want[1] = want[1], want[0]
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("ClientConnections = %+v, want %+v", got, want)
+	}
+	_, emptyToken := f.client(t, nil, false)
+	if got, err := f.manager.ClientConnections(f.ctx, emptyToken); err != nil || got == nil || len(got) != 0 {
+		t.Fatalf("empty scope = %+v, %v", got, err)
+	}
+	for _, token := range []forgeauth.StaticToken{"", "unknown", oldToken} {
+		if _, err := f.manager.ClientConnections(f.ctx, token); !errors.Is(err, broker.ErrUnauthorized) {
+			t.Fatalf("token %q: %v", token, err)
+		}
+	}
+	if err := f.manager.DeleteConnection(f.ctx, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := f.manager.ClientConnections(f.ctx, token); err != nil || len(got) != 1 || got[0].ID != b.ID {
+		t.Fatalf("after delete = %+v, %v", got, err)
+	}
+}
+
 func TestSecretsAreWriteOnly(t *testing.T) {
 	f := setup(t, github.Provider{})
 	f.echo.Store(true)

@@ -13,14 +13,43 @@ services:
       - "127.0.0.1:8083:8080"
       - "127.0.0.1:9093:9090"
 
+  # The connector holds forge credentials. Its admin REST port is used once
+  # during setup.
+  broker:
+    profiles: [repositories]
+    build:
+      context: ../..
+      dockerfile: forge-connector/broker/Dockerfile
+    environment:
+      FORGE_BROKER_KEY: ${FORGE_BROKER_KEY:-}
+      FORGE_BROKER_ADMIN_TOKEN: ${FORGE_BROKER_ADMIN_TOKEN:-}
+    volumes:
+      - broker-data:/data
+    ports:
+      - "127.0.0.1:8080:8080"
+
+  proxy:
+    profiles: [repositories]
+    build:
+      context: ../..
+      dockerfile: forge-connector/proxy/Dockerfile
+    depends_on: [broker]
+    environment:
+      FORGE_PROXY_BROKER_ADDR: broker:9090
+      FORGE_PROXY_TOKEN: ${FORGE_PROXY_TOKEN:-}
+
+  # Reads every connection its connector client may use. It holds no forge
+  # credentials. Only management connects; no host port is needed.
   repositories:
     profiles: [repositories]
     build:
       context: ../..
       dockerfile: forge-repositories/service/Dockerfile
+    depends_on: [proxy]
     environment:
       FORGE_REPOSITORIES_TOKEN: ${FORGE_REPOSITORIES_TOKEN:-}
-      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
-    volumes:
-      - ./repositories.json:/config/repositories.json:ro
-    # Only management connects; no host port or unrelated service is needed.
+      FORGE_REPOSITORIES_CONNECTOR_URL: http://proxy:8081
+      FORGE_REPOSITORIES_CONNECTOR_TOKEN: ${FORGE_REPOSITORIES_CONNECTOR_TOKEN:-}
+
+volumes:
+  broker-data:

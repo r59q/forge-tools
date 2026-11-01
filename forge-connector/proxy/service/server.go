@@ -47,7 +47,7 @@ func New(c Config) (*Server, error) {
 		transport = http.DefaultTransport
 	}
 	h, err := proxy.New(proxy.Config{
-		Verifier: c.Broker, TokenIssuer: c.Broker, Registry: c.Registry,
+		Verifier: c.Broker, TokenIssuer: c.Broker, Connections: c.Broker, Registry: c.Registry,
 		Transport: &dropOn401{base: transport, drop: c.Broker.DropToken},
 		PublicURL: c.PublicURL,
 	})
@@ -67,8 +67,8 @@ func (s *Server) Healthy() bool { return !s.stopped.Load() }
 // SetStopping marks the server unhealthy so /healthz fails during shutdown.
 func (s *Server) SetStopping() { s.stopped.Store(true) }
 
-// ServeHTTP serves GET /healthz and forwards everything else to the proxy
-// handler. It does not clean paths, as the handler rejects unsafe ones.
+// ServeHTTP serves GET /healthz and forwards everything else, including
+// GET /connections, to the proxy handler. It does not clean paths, as the handler rejects unsafe ones.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/healthz" {
 		s.healthz(w, r)

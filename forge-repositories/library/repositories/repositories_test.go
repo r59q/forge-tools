@@ -501,7 +501,6 @@ func TestNew(t *testing.T) {
 	f := newFake(t, "")
 	ok := f.session(forgeauth.GitHub)
 	cases := map[string][]Source{
-		"none":        nil,
 		"empty ID":    {{ID: " ", Session: ok}},
 		"duplicate":   {{ID: "a", Session: ok}, {ID: "a", Session: ok}},
 		"no session":  {{ID: "a"}},
@@ -513,6 +512,13 @@ func TestNew(t *testing.T) {
 		if _, err := New(sources...); !errors.Is(err, ErrInvalid) {
 			t.Errorf("%s: err = %v, want ErrInvalid", name, err)
 		}
+	}
+	none := newClient(t)
+	if repos, err := none.List(context.Background(), ListOptions{}); err != nil || len(repos) != 0 {
+		t.Errorf("List without sources = %v, %v", repos, err)
+	}
+	if _, err := none.Get(context.Background(), Ref{Path: "a/b"}); !errors.Is(err, forgehttp.ErrNotFound) {
+		t.Errorf("Get without sources = %v", err)
 	}
 	c := newClient(t, Source{ID: "a", Session: ok}, Source{ID: "b", Session: ok})
 	if s := c.Sources(); len(s) != 2 || s[0].ID != "a" || s[1].ID != "b" {

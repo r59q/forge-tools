@@ -45,7 +45,10 @@ jobs:
         env:
           FORGE_MANAGEMENT_TOKEN: example-operator-token
           FORGE_REPOSITORIES_TOKEN: example-repository-token
-          GITHUB_TOKEN: example-forge-token
+          FORGE_BROKER_KEY: example-broker-key
+          FORGE_BROKER_ADMIN_TOKEN: example-admin-token
+          FORGE_PROXY_TOKEN: example-proxy-token
+          FORGE_REPOSITORIES_CONNECTOR_TOKEN: example-connector-token
           MANAGEMENT_REPOSITORIES_ADDRESS: repositories:9090
           MANAGEMENT_REPOSITORIES_INSECURE: "true"
         run: docker compose -f examples/management/compose.yaml --profile repositories config --quiet

@@ -20,20 +20,21 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Broker_CreateForge_FullMethodName      = "/forge.connector.v1.Broker/CreateForge"
-	Broker_ListForges_FullMethodName       = "/forge.connector.v1.Broker/ListForges"
-	Broker_DeleteForge_FullMethodName      = "/forge.connector.v1.Broker/DeleteForge"
-	Broker_CreateConnection_FullMethodName = "/forge.connector.v1.Broker/CreateConnection"
-	Broker_ListConnections_FullMethodName  = "/forge.connector.v1.Broker/ListConnections"
-	Broker_GetConnection_FullMethodName    = "/forge.connector.v1.Broker/GetConnection"
-	Broker_TestConnection_FullMethodName   = "/forge.connector.v1.Broker/TestConnection"
-	Broker_RotateCredential_FullMethodName = "/forge.connector.v1.Broker/RotateCredential"
-	Broker_DeleteConnection_FullMethodName = "/forge.connector.v1.Broker/DeleteConnection"
-	Broker_CreateClient_FullMethodName     = "/forge.connector.v1.Broker/CreateClient"
-	Broker_ListClients_FullMethodName      = "/forge.connector.v1.Broker/ListClients"
-	Broker_DeleteClient_FullMethodName     = "/forge.connector.v1.Broker/DeleteClient"
-	Broker_IssueToken_FullMethodName       = "/forge.connector.v1.Broker/IssueToken"
-	Broker_VerifyClient_FullMethodName     = "/forge.connector.v1.Broker/VerifyClient"
+	Broker_CreateForge_FullMethodName           = "/forge.connector.v1.Broker/CreateForge"
+	Broker_ListForges_FullMethodName            = "/forge.connector.v1.Broker/ListForges"
+	Broker_DeleteForge_FullMethodName           = "/forge.connector.v1.Broker/DeleteForge"
+	Broker_CreateConnection_FullMethodName      = "/forge.connector.v1.Broker/CreateConnection"
+	Broker_ListConnections_FullMethodName       = "/forge.connector.v1.Broker/ListConnections"
+	Broker_GetConnection_FullMethodName         = "/forge.connector.v1.Broker/GetConnection"
+	Broker_TestConnection_FullMethodName        = "/forge.connector.v1.Broker/TestConnection"
+	Broker_RotateCredential_FullMethodName      = "/forge.connector.v1.Broker/RotateCredential"
+	Broker_DeleteConnection_FullMethodName      = "/forge.connector.v1.Broker/DeleteConnection"
+	Broker_CreateClient_FullMethodName          = "/forge.connector.v1.Broker/CreateClient"
+	Broker_ListClients_FullMethodName           = "/forge.connector.v1.Broker/ListClients"
+	Broker_DeleteClient_FullMethodName          = "/forge.connector.v1.Broker/DeleteClient"
+	Broker_IssueToken_FullMethodName            = "/forge.connector.v1.Broker/IssueToken"
+	Broker_VerifyClient_FullMethodName          = "/forge.connector.v1.Broker/VerifyClient"
+	Broker_ListClientConnections_FullMethodName = "/forge.connector.v1.Broker/ListClientConnections"
 )
 
 // BrokerClient is the client API for Broker service.
@@ -80,6 +81,10 @@ type BrokerClient interface {
 	// header; there is no token in the body. It does not require can_issue_tokens.
 	// Client: POST /v1/connections/{connection_id}/verify.
 	VerifyClient(ctx context.Context, in *VerifyClientRequest, opts ...grpc.CallOption) (*Client, error)
+	// ListClientConnections lists the connections in the bearer client token's
+	// scope, with their forge kind and status. It does not require
+	// can_issue_tokens. Client: GET /v1/client/connections.
+	ListClientConnections(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListClientConnectionsResponse, error)
 }
 
 type brokerClient struct {
@@ -230,6 +235,16 @@ func (c *brokerClient) VerifyClient(ctx context.Context, in *VerifyClientRequest
 	return out, nil
 }
 
+func (c *brokerClient) ListClientConnections(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListClientConnectionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListClientConnectionsResponse)
+	err := c.cc.Invoke(ctx, Broker_ListClientConnections_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // BrokerServer is the server API for Broker service.
 // All implementations must embed UnimplementedBrokerServer
 // for forward compatibility.
@@ -274,6 +289,10 @@ type BrokerServer interface {
 	// header; there is no token in the body. It does not require can_issue_tokens.
 	// Client: POST /v1/connections/{connection_id}/verify.
 	VerifyClient(context.Context, *VerifyClientRequest) (*Client, error)
+	// ListClientConnections lists the connections in the bearer client token's
+	// scope, with their forge kind and status. It does not require
+	// can_issue_tokens. Client: GET /v1/client/connections.
+	ListClientConnections(context.Context, *emptypb.Empty) (*ListClientConnectionsResponse, error)
 	mustEmbedUnimplementedBrokerServer()
 }
 
@@ -325,6 +344,9 @@ func (UnimplementedBrokerServer) IssueToken(context.Context, *IssueTokenRequest)
 }
 func (UnimplementedBrokerServer) VerifyClient(context.Context, *VerifyClientRequest) (*Client, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method VerifyClient not implemented")
+}
+func (UnimplementedBrokerServer) ListClientConnections(context.Context, *emptypb.Empty) (*ListClientConnectionsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListClientConnections not implemented")
 }
 func (UnimplementedBrokerServer) mustEmbedUnimplementedBrokerServer() {}
 func (UnimplementedBrokerServer) testEmbeddedByValue()                {}
@@ -599,6 +621,24 @@ func _Broker_VerifyClient_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Broker_ListClientConnections_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BrokerServer).ListClientConnections(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Broker_ListClientConnections_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BrokerServer).ListClientConnections(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Broker_ServiceDesc is the grpc.ServiceDesc for Broker service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -661,6 +701,10 @@ var Broker_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "VerifyClient",
 			Handler:    _Broker_VerifyClient_Handler,
+		},
+		{
+			MethodName: "ListClientConnections",
+			Handler:    _Broker_ListClientConnections_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

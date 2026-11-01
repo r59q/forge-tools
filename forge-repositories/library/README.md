@@ -2,34 +2,28 @@
 
 Go module: `github.com/r59q/forge-tools/forge-repositories/library`.
 It uses the local `forge-core/forgeapi` module through a relative `replace` and
-has no other dependencies. It does not depend on forge-connector.
+has no other dependencies. Sessions come from forge-connector; the library
+never handles tokens or connection details.
 
 Package `repositories` gives one model for repositories, branches and tags on
 GitHub, GitLab and Forgejo. There are no per-forge entry points: a `Client`
-combines one or more sources and picks the forge API from each session's kind.
+combines any number of sources and picks the forge API from each session's
+kind. A client without sources lists and finds nothing.
 
 ## Sources
 
-A `Source` is an ID and an open `forgeauth` session. The caller states the
-session's kind. Open the session directly against a forge, or against a
-forge-connector proxy connection by setting `BaseURL` to
-`<proxy>/c/{connectionID}` and using the proxy client token:
+A `Source` is an ID and an open `forgeauth` session, which supplies the base
+URL, kind and authenticated HTTP client. The library only adds API paths.
+Get sessions from the
+[forge-connector `connector` package](../../forge-connector/library/README.md#connector):
 
 ```go
-var reg forgeauth.Registry
-reg.Register(github.Provider{})
-reg.Register(gitlab.Provider{})
-
-gh, err := reg.Open(ctx, forgeauth.Connection{
-	Kind:    forgeauth.GitHub,
-	BaseURL: proxyURL + "/c/" + githubConnectionID,
-}, forgeauth.EnvToken("FORGE_TOKEN"))
-// ... open gl the same way for a GitLab connection.
-
-c, err := repositories.New(
-	repositories.Source{ID: githubConnectionID, Session: gh},
-	repositories.Source{ID: gitlabConnectionID, Session: gl},
-)
+conns, err := connectorClient.Connections(ctx)
+sources := make([]repositories.Source, len(conns))
+for i, conn := range conns {
+	sources[i] = repositories.Source{ID: string(conn.ID), Session: conn.Session}
+}
+c, err := repositories.New(sources...)
 ```
 
 Every `Repository` carries a `SourceInfo`: the source ID, the forge kind and

@@ -99,13 +99,18 @@ All admin calls are also available over gRPC on port 9090; see the
 
 ## Go
 
-[go/](go/) is a Go module with two small programs. From `go/`:
+[go/](go/) is a Go module with three small programs. From `go/`:
 
 ```sh
 # List your repositories directly from GitHub...
 FORGE_TOKEN=$GITHUB_TOKEN go run ./repos
 # ...or through the proxy. Only the URL and token change.
 FORGE_TOKEN=$CLIENT_TOKEN go run ./repos -url http://127.0.0.1:8081/c/$CONN
+
+# List repositories with the forge-repositories library through the proxy,
+# then show one repository's branches and tags.
+FORGE_TOKEN=$CLIENT_TOKEN go run ./repositories -source github:$CONN
+FORGE_TOKEN=$CLIENT_TOKEN go run ./repositories -source github:$CONN -refs <owner>/<name>
 
 # List forges, connections and clients over the broker's gRPC API.
 go run ./broker-admin -addr 127.0.0.1:9090
@@ -114,6 +119,13 @@ go run ./broker-admin -addr 127.0.0.1:9090
 - [repos](go/repos/main.go) opens a `forgeauth` session, calls `Whoami` and
   follows `Link` pagination with `forgehttp`. Use `-kind gitlab` or
   `-kind forgejo` with `-url` for other forges.
+- [repositories](go/repositories/main.go) opens one session per
+  `-source kind:connectionID` against the proxy and reads them all through one
+  [forge-repositories](../forge-repositories/library/) client. Repeat
+  `-source` to combine forges, for example a GitHub and a GitLab connection,
+  and add `-owner <name>` to list one owner's repositories across all of them.
+  The client token must be scoped to every listed connection. Its test runs
+  the real proxy handler in front of fake GitHub and GitLab APIs.
 - [broker-admin](go/broker-admin/main.go) calls the broker with the generated
   `brokerpb` client, sending the admin token as `authorization` metadata.
 

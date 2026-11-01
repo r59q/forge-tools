@@ -7,13 +7,13 @@ Run the forge-connector services with Docker Compose and use them with
 docker-compose.yml   broker and proxy from ghcr.io
 .env.example         secrets for docker-compose.yml
 go/                  Go programs using the libraries and the broker API
-management/          management UI alone or with repositories and the connector
+management/          full stack, with connections set up in the management UI
 ```
 
 ## Run the services
 
-For a read-only repository web interface, see the
-[management setup example](management/). It builds its own broker and proxy.
+The quickest start is the [management setup example](management/): it runs
+the whole stack, and you connect forges in a web interface.
 
 [docker-compose.yml](docker-compose.yml) runs the published
 [broker](../forge-connector/broker/) and [proxy](../forge-connector/proxy/)
@@ -53,13 +53,12 @@ images. Ports are bound to localhost. The steps below need `curl`, `jq`,
      -d "{\"forgeId\":\"$FORGE\",\"name\":\"me\",\"credential\":\"$GITHUB_TOKEN\"}" | jq -r .id)
    ```
 
-3. Create a client for the proxy and start it. Client scopes cannot change
-   later, so list every connection the proxy should serve. The token is
-   returned once:
+3. Create a client for the proxy and start it. `allConnections` grants it
+   every connection, including ones added later. The token is returned once:
 
    ```sh
    PROXY_TOKEN=$(broker localhost:8080/v1/clients \
-     -d "{\"name\":\"proxy\",\"connectionIds\":[\"$CONN\"],\"canIssueTokens\":true}" | jq -r .token)
+     -d '{"name":"proxy","allConnections":true,"canIssueTokens":true}' | jq -r .token)
    sed -i "s|^FORGE_PROXY_TOKEN=.*|FORGE_PROXY_TOKEN=$PROXY_TOKEN|" .env
    docker compose --profile proxy up -d
    curl --retry 5 --retry-all-errors --retry-delay 1 localhost:8081/healthz

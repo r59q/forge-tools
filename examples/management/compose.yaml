@@ -1,55 +1,61 @@
+# The full stack: forge-connector, forge-repositories and management.
 # Build from the repository root through each project's Dockerfile.
+# Only management is reachable from the host; see README.md.
 services:
+  # Stores forge connections and their encrypted tokens.
+  broker:
+    build:
+      context: ../..
+      dockerfile: forge-connector/broker/Dockerfile
+    restart: unless-stopped
+    environment:
+      FORGE_BROKER_KEY: ${FORGE_BROKER_KEY:?set in .env}
+      FORGE_BROKER_ADMIN_TOKEN: ${FORGE_BROKER_ADMIN_TOKEN:?set in .env}
+    volumes:
+      - broker-data:/data
+
+  # Calls forges for the other services, with tokens from the broker.
+  # Management registers its token in the broker at startup.
+  proxy:
+    build:
+      context: ../..
+      dockerfile: forge-connector/proxy/Dockerfile
+    restart: unless-stopped
+    environment:
+      FORGE_PROXY_BROKER_ADDR: broker:9090
+      FORGE_PROXY_TOKEN: ${FORGE_PROXY_TOKEN:?set in .env}
+
+  # Lists repositories of every connection, through the proxy. It never
+  # holds forge tokens.
+  repositories:
+    build:
+      context: ../..
+      dockerfile: forge-repositories/service/Dockerfile
+    restart: unless-stopped
+    environment:
+      FORGE_REPOSITORIES_TOKEN: ${FORGE_REPOSITORIES_TOKEN:?set in .env}
+      FORGE_REPOSITORIES_CONNECTOR_URL: http://proxy:8081
+      FORGE_REPOSITORIES_CONNECTOR_TOKEN: ${FORGE_REPOSITORIES_CONNECTOR_TOKEN:?set in .env}
+
   management:
     build:
       context: ../..
       dockerfile: forge-tools-management/service/Dockerfile
+    restart: unless-stopped
     environment:
       FORGE_MANAGEMENT_TOKEN: ${FORGE_MANAGEMENT_TOKEN:?set in .env}
-      FORGE_MANAGEMENT_REPOSITORIES_ADDRESS: ${MANAGEMENT_REPOSITORIES_ADDRESS:-}
-      FORGE_MANAGEMENT_REPOSITORIES_INSECURE: ${MANAGEMENT_REPOSITORIES_INSECURE:-false}
-      FORGE_MANAGEMENT_REPOSITORIES_TOKEN: ${FORGE_REPOSITORIES_TOKEN:-}
+      FORGE_MANAGEMENT_CONNECTOR_ADDRESS: broker:9090
+      FORGE_MANAGEMENT_CONNECTOR_INSECURE: "true"
+      FORGE_MANAGEMENT_CONNECTOR_ADMIN_TOKEN: ${FORGE_BROKER_ADMIN_TOKEN:?set in .env}
+      # Registered in the broker at startup, for the proxy and repositories.
+      FORGE_MANAGEMENT_PROXY_TOKEN: ${FORGE_PROXY_TOKEN:?set in .env}
+      FORGE_MANAGEMENT_REPOSITORIES_CONNECTOR_TOKEN: ${FORGE_REPOSITORIES_CONNECTOR_TOKEN:?set in .env}
+      FORGE_MANAGEMENT_REPOSITORIES_ADDRESS: repositories:9090
+      FORGE_MANAGEMENT_REPOSITORIES_INSECURE: "true"
+      FORGE_MANAGEMENT_REPOSITORIES_TOKEN: ${FORGE_REPOSITORIES_TOKEN:?set in .env}
     ports:
       - "127.0.0.1:8083:8080"
       - "127.0.0.1:9093:9090"
-
-  # The connector holds forge credentials. Its admin REST port is used once
-  # during setup.
-  broker:
-    profiles: [repositories]
-    build:
-      context: ../..
-      dockerfile: forge-connector/broker/Dockerfile
-    environment:
-      FORGE_BROKER_KEY: ${FORGE_BROKER_KEY:-}
-      FORGE_BROKER_ADMIN_TOKEN: ${FORGE_BROKER_ADMIN_TOKEN:-}
-    volumes:
-      - broker-data:/data
-    ports:
-      - "127.0.0.1:8080:8080"
-
-  proxy:
-    profiles: [repositories]
-    build:
-      context: ../..
-      dockerfile: forge-connector/proxy/Dockerfile
-    depends_on: [broker]
-    environment:
-      FORGE_PROXY_BROKER_ADDR: broker:9090
-      FORGE_PROXY_TOKEN: ${FORGE_PROXY_TOKEN:-}
-
-  # Reads every connection its connector client may use. It holds no forge
-  # credentials. Only management connects; no host port is needed.
-  repositories:
-    profiles: [repositories]
-    build:
-      context: ../..
-      dockerfile: forge-repositories/service/Dockerfile
-    depends_on: [proxy]
-    environment:
-      FORGE_REPOSITORIES_TOKEN: ${FORGE_REPOSITORIES_TOKEN:-}
-      FORGE_REPOSITORIES_CONNECTOR_URL: http://proxy:8081
-      FORGE_REPOSITORIES_CONNECTOR_TOKEN: ${FORGE_REPOSITORIES_CONNECTOR_TOKEN:-}
 
 volumes:
   broker-data:

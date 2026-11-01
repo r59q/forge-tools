@@ -1,114 +1,71 @@
 # Management setup example
 
-This example builds local images for the read-only management interface and,
-optionally, the repositories service with the
-[forge-connector](../../forge-connector/) that it reads through. It needs Docker
-Compose, `curl`, `jq` and `openssl`. Run all commands from this folder.
+Runs the whole stack with Docker Compose: the
+[forge-connector](../../forge-connector/) broker and proxy, the
+[repositories service](../../forge-repositories/service/) and the
+[management interface](../../forge-tools-management/). You connect forges in
+the browser.
 
-## Start with no tools
+It needs Docker Compose and `openssl`. Run all commands from this folder.
 
-Create a private environment file with two distinct random service tokens:
+## Start
 
 ```sh
-umask 077
-cp .env.example .env
-sed -i "s/^FORGE_MANAGEMENT_TOKEN=.*/FORGE_MANAGEMENT_TOKEN=$(openssl rand -hex 32)/" .env
-sed -i "s/^FORGE_REPOSITORIES_TOKEN=.*/FORGE_REPOSITORIES_TOKEN=$(openssl rand -hex 32)/" .env
+./init-env.sh
 docker compose up --build -d
 ```
 
-Open `http://127.0.0.1:8083/`. Sign in at the browser prompt as `operator`,
-using `FORGE_MANAGEMENT_TOKEN` from your local `.env` as the password. The
-page shows **No repository capability configured**. No forge or other tool
-is needed. Do not share the `.env` or use the repository service token in
-the browser.
+`init-env.sh` creates `.env` with a random value for every secret. It does
+not overwrite an existing `.env`.
 
-## Connect repositories
+| Secret | Used for |
+| --- | --- |
+| `FORGE_BROKER_KEY` | Encrypts stored forge tokens. Back it up; losing it loses them. |
+| `FORGE_BROKER_ADMIN_TOKEN` | Lets management administer the broker. |
+| `FORGE_MANAGEMENT_TOKEN` | Your password for the management interface. |
+| `FORGE_PROXY_TOKEN` | Lets the proxy fetch forge tokens from the broker. |
+| `FORGE_REPOSITORIES_CONNECTOR_TOKEN` | Lets the repositories service use connections through the proxy. |
+| `FORGE_REPOSITORIES_TOKEN` | Lets management call the repositories service. |
 
-The connector stores forge credentials. The repositories service only holds a
-connector client token and shows the repositories of every connection that
-token may use.
+At startup, management registers the proxy and repositories tokens in the
+broker. To rotate any secret except `FORGE_BROKER_KEY`, change it in `.env`
+and run `docker compose up -d` again.
 
-1. Create the broker secrets and start the broker:
+## Connect a forge
 
-   ```sh
-   sed -i "s|^FORGE_BROKER_KEY=.*|FORGE_BROKER_KEY=$(openssl rand -base64 32)|" .env
-   sed -i "s|^FORGE_BROKER_ADMIN_TOKEN=.*|FORGE_BROKER_ADMIN_TOKEN=$(openssl rand -hex 32)|" .env
-   docker compose --profile repositories up --build -d broker
+1. Open `http://127.0.0.1:8083/` and sign in as `operator`, with
+   `FORGE_MANAGEMENT_TOKEN` from `.env` as the password.
+2. Go to **Connections** and add a forge account: choose the forge, enter an
+   access token with read access to your repositories, and optionally a host
+   for self-hosted forges, such as `gitlab.example.com`. The token is checked
+   with the forge, stored encrypted and never shown again.
+3. Go to **Repositories**. It lists the repositories of every connection.
 
-   . ./.env
-   broker() { curl -fsS --retry 5 --retry-all-errors --retry-delay 1 \
-     -H "Authorization: Bearer $FORGE_BROKER_ADMIN_TOKEN" "$@"; }
-   ```
+Add more accounts or forges the same way. Use **Test** to recheck a token,
+**Replace token** to rotate it and **Remove** to delete a connection. Changes
+apply right away, without restarts.
 
-2. Connect a forge. Enter a GitHub token with read access to your
-   repositories at the prompt; the broker checks it with GitHub and stores it
-   encrypted. Repeat for more accounts or forges, such as GitLab
-   (`https://gitlab.com/api/v4`) or Forgejo (`https://codeberg.org/api/v1`):
+For a GitHub token, open *Settings → Developer settings → Personal access
+tokens*. GitLab and Forgejo have personal access tokens in user settings.
 
-   ```sh
-   read -rs GITHUB_TOKEN
-   FORGE=$(broker localhost:8080/v1/forges \
-     -d '{"kind":"github","baseUrl":"https://api.github.com","name":"GitHub"}' | jq -r .id)
-   CONN=$(broker localhost:8080/v1/connections \
-     -d "{\"forgeId\":\"$FORGE\",\"name\":\"me\",\"credential\":\"$GITHUB_TOKEN\"}" | jq -r .id)
-   unset GITHUB_TOKEN
-   ```
+## Notes
 
-3. Create two clients for that connection: one for the proxy, which may issue
-   forge tokens, and one for the repositories service, which may not. List
-   every connection in `connectionIds`; scopes cannot change later.
+- Only management is reachable from the host, on `127.0.0.1`. The other
+  services talk over the Compose network in plaintext; use TLS endpoints
+  for remote access.
+- All operators see what the connected accounts can see. Management grants
+  no forge permissions.
+- The same features are available over REST and gRPC, with
+  `Authorization: Bearer <management token>`; see the
+  [service API reference](../../forge-tools-management/service/README.md#api).
 
-   ```sh
-   client() { broker localhost:8080/v1/clients \
-     -d "{\"name\":\"$1\",\"connectionIds\":[\"$CONN\"],\"canIssueTokens\":$2}" | jq -r .token; }
-   sed -i "s|^FORGE_PROXY_TOKEN=.*|FORGE_PROXY_TOKEN=$(client proxy true)|" .env
-   sed -i "s|^FORGE_REPOSITORIES_CONNECTOR_TOKEN=.*|FORGE_REPOSITORIES_CONNECTOR_TOKEN=$(client repositories false)|" .env
-   ```
+## Clean up
 
-4. Point management at the repositories service by setting these two lines in
-   `.env`:
-
-   ```dotenv
-   MANAGEMENT_REPOSITORIES_ADDRESS=repositories:9090
-   MANAGEMENT_REPOSITORIES_INSECURE=true
-   ```
-
-   Plaintext is used only inside this local Compose network. Only the broker
-   admin port and management are exposed, on localhost. Use TLS endpoints for
-   remote access.
-
-5. Start the rest and recreate management with the new settings:
-
-   ```sh
-   docker compose --profile repositories up --build -d
-   ```
-
-Refresh the page. Every row shows a full repository path, source ID (the
-connection ID), forge, host and visibility. Operators share the connected
-account's visibility; management does not grant forge permissions. Repeated
-paths on different connections remain separate rows, and revoked connections
-are skipped. A successful empty listing shows **No repositories found**.
-Stopping the backend demonstrates the failure state:
+`down -v` also deletes the broker volume with the stored forge tokens:
 
 ```sh
-docker compose --profile repositories stop repositories
-```
-
-Refresh to see **Repository listing failed**; no stale or partial listing is
-displayed. Restart with `docker compose --profile repositories up -d`.
-
-## API and cleanup
-
-For REST, use `GET http://127.0.0.1:8083/v1/repositories` with
-`Authorization: Bearer <management operator token>`. gRPC is available at
-`127.0.0.1:9093`; see the [service API reference](../../forge-tools-management/service/README.md#api).
-
-`down -v` also deletes the broker volume with the stored forge credentials:
-
-```sh
-docker compose --profile repositories down -v
+docker compose down -v
 rm .env
 ```
 
-Close the browser session to clear its Basic authentication credentials.
+Close the browser session to clear its sign-in.

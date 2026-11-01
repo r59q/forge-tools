@@ -21,7 +21,9 @@ See the [setup example](broker/example_test.go).
   metadata and ciphertext and removes the connection from client scopes.
 - `CreateClient` returns a random 256-bit client token once and stores only its
   SHA-256 hash. `DeleteClient` invalidates that token. An empty scope grants
-  no access. Client hashes are compared in constant time, scanning all clients.
+  no access. `CreateClientForAll` grants every connection, including later
+  ones, for services such as a proxy. `RegisterClient` creates a client with
+  a token you choose, such as one from a deployment's configuration. Client hashes are compared in constant time, scanning all clients.
 - `VerifyClient` checks the client token, connection scope and last known
   connection status without decrypting credentials or contacting the forge.
 - `ClientConnections` lists the ID, name, forge kind and status of each

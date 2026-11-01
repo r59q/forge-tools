@@ -1,6 +1,6 @@
 :root { font-family: system-ui, sans-serif; color: #17283a; background: #f4f6f8; line-height: 1.5; }
 body { margin: 0; }
-header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 1rem; background: #17283a; color: white; padding: 1.2rem 5%; font-weight: 600; }
+header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem; background: #17283a; color: white; padding: 1.2rem 5%; font-weight: 600; }
 .badge { font-size: .9rem; font-weight: 400; }
 main { max-width: 80rem; margin: 3rem auto; padding: 0 5%; }
 .heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem; }
@@ -17,3 +17,21 @@ caption { text-align: left; padding: 1rem; font-weight: 600; }
 th, td { padding: 1rem; border-top: 1px solid #dce2e8; vertical-align: top; overflow-wrap: anywhere; min-width: 8rem; }
 th { background: #eaf0f5; }
 td p { margin: .5rem 0 0; white-space: pre-wrap; }
+nav { display: flex; gap: 1.5rem; }
+nav a { color: white; text-decoration: none; font-weight: 400; }
+nav a[aria-current="page"] { font-weight: 600; text-decoration: underline; text-underline-offset: .3rem; }
+section.notice { border-color: #2b7a3d; }
+.id { font-family: ui-monospace, monospace; font-size: .85rem; color: #4a5a6a; }
+.status { font-weight: 600; color: #a33224; }
+.status-ok { color: #2b7a3d; }
+.actions { min-width: 14rem; }
+.actions form { display: inline-block; margin: 0 .5rem .5rem 0; }
+.actions details form { display: flex; flex-direction: column; gap: .5rem; margin-top: .5rem; }
+form.add { display: grid; gap: 1rem; max-width: 32rem; margin-bottom: 1rem; }
+label { display: flex; flex-direction: column; gap: .3rem; font-weight: 600; }
+.hint { font-weight: 400; font-size: .9rem; color: #4a5a6a; }
+input, select, button { font: inherit; padding: .5rem .7rem; border: 1px solid #8796a5; border-radius: .3rem; }
+button { background: #164b91; color: white; border-color: #164b91; cursor: pointer; justify-self: start; }
+button.danger { background: white; color: #a33224; border-color: #a33224; }
+button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible, nav a:focus-visible { outline: 3px solid #f0b429; outline-offset: 2px; }
+summary { cursor: pointer; color: #164b91; }

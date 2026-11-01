@@ -4,6 +4,8 @@ go 1.27
 
 require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.3
+	github.com/r59q/forge-tools/forge-connector/broker v0.0.0
+	github.com/r59q/forge-tools/forge-connector/library v0.0.0
 	github.com/r59q/forge-tools/forge-core/forgeapi v0.0.0
 	github.com/r59q/forge-tools/forge-repositories/library v0.0.0
 	github.com/r59q/forge-tools/forge-repositories/service v0.0.0
@@ -15,7 +17,7 @@ require (
 
 require (
 	golang.org/x/net v0.41.0 // indirect
-	golang.org/x/sys v0.33.0 // indirect
+	golang.org/x/sys v0.36.0 // indirect
 	golang.org/x/text v0.29.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250929231259-57b25ae835d4 // indirect
 )
@@ -27,3 +29,7 @@ replace github.com/r59q/forge-tools/forge-repositories/library => ../../forge-re
 replace github.com/r59q/forge-tools/forge-repositories/service => ../../forge-repositories/service
 
 replace github.com/r59q/forge-tools/forge-tools-management/library => ../library
+
+replace github.com/r59q/forge-tools/forge-connector/library => ../../forge-connector/library
+
+replace github.com/r59q/forge-tools/forge-connector/broker => ../../forge-connector/broker

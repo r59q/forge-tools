@@ -120,7 +120,10 @@ Start by creating a forge with `kind`, `baseUrl` (including its API path) and
 optional `name`. Create a connection with `forgeId`, `credential` and optional
 `name`; the broker checks Whoami before saving it. Create a client with
 `connectionIds`, `canIssueTokens` and optional `name`, and save its returned
-token securely. Use that token as the bearer credential for client operations.
+token securely. Set `allConnections` instead of `connectionIds` to grant every
+connection, including ones created later, such as for a proxy. To use a token
+from your own configuration, set `token`; it needs at least 32 printable
+characters, without spaces, and must be unique. Use that token as the bearer credential for client operations.
 `CreateClient` returns its token once; `IssueToken` deliberately returns the
 forge credential to an authorized client. All other results are metadata only.
 

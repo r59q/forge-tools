@@ -113,6 +113,13 @@ func contract(t *testing.T, s broker.Store) {
 	wantErr(err, broker.ErrNotFound)
 	wantErr(s.DeleteConnection(ctx, c.ID), broker.ErrNotFound)
 	wantErr(s.UpdateConnection(ctx, c, nil), broker.ErrNotFound)
+	all := broker.Client{ID: "all", TokenHash: [32]byte{2}, AllConnections: true}
+	wantErr(s.CreateClient(ctx, broker.Client{ID: "both", TokenHash: [32]byte{3}, AllConnections: true, Connections: []broker.ID{"x"}}), broker.ErrInvalid)
+	wantErr(s.CreateClient(ctx, all), nil)
+	if got, err := s.GetClient(ctx, all.ID); err != nil || !got.AllConnections || len(got.Connections) != 0 {
+		t.Fatalf("GetClient(all) = %+v, %v", got, err)
+	}
+	wantErr(s.DeleteClient(ctx, all.ID), nil)
 	wantErr(s.DeleteClient(ctx, client.ID), nil)
 	wantErr(s.DeleteClient(ctx, client.ID), broker.ErrNotFound)
 	wantErr(s.UpdateClient(ctx, client), broker.ErrNotFound)

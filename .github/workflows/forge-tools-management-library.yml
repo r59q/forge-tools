@@ -6,6 +6,7 @@ on:
     branches: [master]
     paths:
       - forge-tools-management/library/**
+      - forge-connector/library/**
       - forge-repositories/library/**
       - forge-core/forgeapi/**
       - .github/workflows/forge-tools-management-library.yml
@@ -13,6 +14,7 @@ on:
   pull_request:
     paths:
       - forge-tools-management/library/**
+      - forge-connector/library/**
       - forge-repositories/library/**
       - forge-core/forgeapi/**
       - .github/workflows/forge-tools-management-library.yml

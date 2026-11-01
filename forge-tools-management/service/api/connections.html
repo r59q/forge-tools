@@ -1,0 +1,59 @@
+{{define "title"}}Connections{{end}}
+{{define "content"}}
+    <div class="heading"><h1>Connections</h1><a href="/connections">Refresh</a></div>
+    <p>Forge accounts that tools use through forge-connector. Tokens are checked with the forge, stored encrypted and never shown again.</p>
+    {{if .Notice}}<section role="status" class="notice"><p>{{.Notice}}</p></section>{{end}}
+    {{if .Problem}}<section role="alert"><h2>Change failed</h2><p>{{.Problem}}</p></section>{{end}}
+    {{if .Failed}}
+    <section role="alert"><h2>Connection listing failed</h2><p>The connector could not be reached. Check that it is running, then refresh.</p></section>
+    {{else if not .Listing.Configured}}
+    <section><h2>No connector configured</h2><p>Set a connector address and admin token in the management startup settings to manage connections.</p></section>
+    {{else}}
+    {{if .Listing.Connections}}
+    <div class="table"><table>
+      <caption>{{len .Listing.Connections}} connections</caption>
+      <thead><tr><th scope="col">Name</th><th scope="col">Forge</th><th scope="col">Account</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead>
+      <tbody>{{range .Listing.Connections}}<tr>
+        <td><strong>{{if .Name}}{{.Name}}{{else}}Unnamed{{end}}</strong><p class="id">{{.Id}}</p></td>
+        <td>{{.Forge}}<br>{{.BaseUrl}}</td>
+        <td>{{.Login}}</td>
+        <td><span class="status status-{{.Status}}">{{if eq .Status "ok"}}Working{{else if eq .Status "revoked"}}Token rejected{{else}}Check failed{{end}}</span></td>
+        <td class="actions">
+          <form method="post" action="/connections/{{.Id}}/test"><button>Test</button></form>
+          <form method="post" action="/connections/{{.Id}}/delete"><button class="danger">Remove</button></form>
+          <details><summary>Replace token</summary>
+            <form method="post" action="/connections/{{.Id}}/credential">
+              <label>New access token <input type="password" name="credential" required autocomplete="off"></label>
+              <button>Replace</button>
+            </form>
+          </details>
+        </td>
+      </tr>{{end}}</tbody>
+    </table></div>
+    {{else}}
+    <section><h2>No connections yet</h2><p>Add a forge account below. Tools see its repositories as soon as it is added.</p></section>
+    {{end}}
+    <section>
+      <h2>Add a connection</h2>
+      <form method="post" action="/connections" class="add">
+        <label>Forge
+          <select name="forge">
+            <option value="github"{{if eq .Form.Forge "github"}} selected{{end}}>GitHub</option>
+            <option value="gitlab"{{if eq .Form.Forge "gitlab"}} selected{{end}}>GitLab</option>
+            <option value="forgejo"{{if eq .Form.Forge "forgejo"}} selected{{end}}>Forgejo</option>
+          </select>
+        </label>
+        <label>Host <span class="hint">Optional. Defaults to github.com, gitlab.com or codeberg.org.</span>
+          <input name="host" value="{{.Form.Host}}" placeholder="gitlab.example.com" autocomplete="off">
+        </label>
+        <label>Name <span class="hint">Optional label, such as "work".</span>
+          <input name="name" value="{{.Form.Name}}" autocomplete="off">
+        </label>
+        <label>Access token <span class="hint">A personal access token with read access to your repositories.</span>
+          <input type="password" name="credential" required autocomplete="off">
+        </label>
+        <button>Add connection</button>
+      </form>
+    </section>
+    {{end}}
+{{end}}

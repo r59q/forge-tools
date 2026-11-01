@@ -304,7 +304,7 @@ func (s *MemoryStore) DeleteClient(ctx context.Context, id ID) error {
 }
 
 func (s *MemoryStore) checkClient(client Client) error {
-	if client.ID == "" || client.TokenHash == [32]byte{} {
+	if client.ID == "" || client.TokenHash == [32]byte{} || client.AllConnections && len(client.Connections) > 0 {
 		return ErrInvalid
 	}
 	for _, id := range client.Connections {

@@ -341,7 +341,7 @@ type storedClient struct {
 
 func (c storedClient) client() broker.Client { c.Client.TokenHash = c.Hash; return c.Client }
 func checkClient(ctx context.Context, tx *sql.Tx, c broker.Client) error {
-	if c.ID == "" || c.TokenHash == [32]byte{} {
+	if c.ID == "" || c.TokenHash == [32]byte{} || c.AllConnections && len(c.Connections) > 0 {
 		return broker.ErrInvalid
 	}
 	for _, id := range c.Connections {

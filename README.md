@@ -13,7 +13,7 @@ useful on its own.
 | [forge-issues](forge-issues/)         | Federated issue tracker for forges.           |
 | [forge-connector](forge-connector/)   | Forge connections and authentication for every tool. |
 | [forge-repositories](forge-repositories/) | Repositories, branches and tags across forges. |
-| [forge-tools-management](forge-tools-management/) | Read-only web inspection of forge-tools. |
+| [forge-tools-management](forge-tools-management/) | Web interface to connect forges and inspect forge-tools. |
 
 ## Structure
 

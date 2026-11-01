@@ -1,6 +1,7 @@
 // Package management sets up and inspects forge-tools. It manages
 // forge-connector connections and lists repositories through
-// forge-repositories, without widening the visibility of their credentials.
+// forge-repositories and issues through forge-issues, without widening the
+// visibility of their credentials.
 package management
 
 import (
@@ -41,6 +42,8 @@ type Listing struct {
 type Config struct {
 	// Repositories lists repositories, such as a forge-repositories client.
 	Repositories RepositoryReader
+	// Issues lists issues, such as a forge-issues client.
+	Issues IssueReader
 	// Connector manages forge connections, such as a broker admin client.
 	Connector ConnectorAdmin
 }
@@ -49,12 +52,13 @@ type Config struct {
 // when its capabilities are.
 type Client struct {
 	repositories RepositoryReader
+	issues       IssueReader
 	connector    ConnectorAdmin
 }
 
 // New constructs a client for the configured capabilities.
 func New(config Config) *Client {
-	return &Client{repositories: config.Repositories, connector: config.Connector}
+	return &Client{repositories: config.Repositories, issues: config.Issues, connector: config.Connector}
 }
 
 // ListRepositories returns every repository visible to the reader, in its

@@ -10,6 +10,8 @@ on:
       - forge-connector/broker/**
       - forge-repositories/service/**
       - forge-repositories/library/**
+      - forge-issues/service/**
+      - forge-issues/library/**
       - forge-core/forgeapi/**
       - examples/management/**
       - .dockerignore
@@ -23,6 +25,8 @@ on:
       - forge-connector/broker/**
       - forge-repositories/service/**
       - forge-repositories/library/**
+      - forge-issues/service/**
+      - forge-issues/library/**
       - forge-core/forgeapi/**
       - examples/management/**
       - .dockerignore
@@ -49,6 +53,8 @@ jobs:
           FORGE_PROXY_TOKEN: example-proxy-token
           FORGE_REPOSITORIES_CONNECTOR_TOKEN: example-connector-token
           FORGE_REPOSITORIES_TOKEN: example-repositories-token
+          FORGE_ISSUES_CONNECTOR_TOKEN: example-issues-connector-token
+          FORGE_ISSUES_TOKEN: example-issues-token
         run: docker compose -f examples/management/compose.yaml config --quiet
 
   test:

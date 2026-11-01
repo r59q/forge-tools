@@ -48,7 +48,8 @@ the forge's web host. The host and `WebURL` come from the forge's response
 Sources are queried in parallel. Any failure other than "not found" fails the
 whole call, with the source ID in the error, rather than returning partial
 results. Each list follows `Link` pagination up to 1000 pages, only within the
-session's scheme, host and base path.
+session's scheme, host and base path. Requests, paging and path checks use
+[`forgerest`](../../forge-core/forgeapi/README.md#forgerest).
 
 ## Updates
 

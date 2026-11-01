@@ -21,6 +21,7 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	Management_ListRepositories_FullMethodName = "/forge.management.v1.Management/ListRepositories"
+	Management_ListIssues_FullMethodName       = "/forge.management.v1.Management/ListIssues"
 	Management_ListConnections_FullMethodName  = "/forge.management.v1.Management/ListConnections"
 	Management_AddConnection_FullMethodName    = "/forge.management.v1.Management/AddConnection"
 	Management_TestConnection_FullMethodName   = "/forge.management.v1.Management/TestConnection"
@@ -41,6 +42,11 @@ type ManagementClient interface {
 	// results. GET /v1/repositories. Backend authentication failures are
 	// UNAVAILABLE, distinct from caller UNAUTHENTICATED errors.
 	ListRepositories(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListRepositoriesResponse, error)
+	// ListIssues returns a complete issue listing or an error, never partial
+	// results. GET /v1/issues?scope=&state=&source=&repository=. Without a
+	// repository it lists the issues assigned to, or created by, each
+	// connected account. Backend authentication failures are UNAVAILABLE.
+	ListIssues(ctx context.Context, in *ListIssuesRequest, opts ...grpc.CallOption) (*ListIssuesResponse, error)
 	// ListConnections lists forge connections, without credentials.
 	// GET /v1/connections.
 	ListConnections(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListConnectionsResponse, error)
@@ -73,6 +79,16 @@ func (c *managementClient) ListRepositories(ctx context.Context, in *emptypb.Emp
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListRepositoriesResponse)
 	err := c.cc.Invoke(ctx, Management_ListRepositories_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *managementClient) ListIssues(ctx context.Context, in *ListIssuesRequest, opts ...grpc.CallOption) (*ListIssuesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListIssuesResponse)
+	err := c.cc.Invoke(ctx, Management_ListIssues_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -142,6 +158,11 @@ type ManagementServer interface {
 	// results. GET /v1/repositories. Backend authentication failures are
 	// UNAVAILABLE, distinct from caller UNAUTHENTICATED errors.
 	ListRepositories(context.Context, *emptypb.Empty) (*ListRepositoriesResponse, error)
+	// ListIssues returns a complete issue listing or an error, never partial
+	// results. GET /v1/issues?scope=&state=&source=&repository=. Without a
+	// repository it lists the issues assigned to, or created by, each
+	// connected account. Backend authentication failures are UNAVAILABLE.
+	ListIssues(context.Context, *ListIssuesRequest) (*ListIssuesResponse, error)
 	// ListConnections lists forge connections, without credentials.
 	// GET /v1/connections.
 	ListConnections(context.Context, *emptypb.Empty) (*ListConnectionsResponse, error)
@@ -172,6 +193,9 @@ type UnimplementedManagementServer struct{}
 
 func (UnimplementedManagementServer) ListRepositories(context.Context, *emptypb.Empty) (*ListRepositoriesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListRepositories not implemented")
+}
+func (UnimplementedManagementServer) ListIssues(context.Context, *ListIssuesRequest) (*ListIssuesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListIssues not implemented")
 }
 func (UnimplementedManagementServer) ListConnections(context.Context, *emptypb.Empty) (*ListConnectionsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListConnections not implemented")
@@ -223,6 +247,24 @@ func _Management_ListRepositories_Handler(srv interface{}, ctx context.Context, 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ManagementServer).ListRepositories(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Management_ListIssues_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListIssuesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagementServer).ListIssues(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Management_ListIssues_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagementServer).ListIssues(ctx, req.(*ListIssuesRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -327,6 +369,10 @@ var Management_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListRepositories",
 			Handler:    _Management_ListRepositories_Handler,
+		},
+		{
+			MethodName: "ListIssues",
+			Handler:    _Management_ListIssues_Handler,
 		},
 		{
 			MethodName: "ListConnections",

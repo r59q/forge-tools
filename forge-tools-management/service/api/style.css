@@ -35,3 +35,8 @@ button { background: #164b91; color: white; border-color: #164b91; cursor: point
 button.danger { background: white; color: #a33224; border-color: #a33224; }
 button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible, nav a:focus-visible { outline: 3px solid #f0b429; outline-offset: 2px; }
 summary { cursor: pointer; color: #164b91; }
+form.filter { display: flex; flex-wrap: wrap; align-items: end; gap: 1rem; margin-top: 1rem; }
+.label { display: inline-block; font-size: .85rem; padding: 0 .5rem; border: 1px solid #8796a5; border-radius: 1rem; }
+.state { font-weight: 600; }
+.state-open { color: #2b7a3d; }
+.state-closed { color: #4a5a6a; }

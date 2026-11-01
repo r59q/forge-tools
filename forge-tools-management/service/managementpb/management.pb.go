@@ -169,6 +169,278 @@ func (x *Repository) GetVisibility() string {
 	return ""
 }
 
+// ListIssuesRequest selects issues. Empty fields list the open issues
+// assigned to each connected account.
+type ListIssuesRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// scope is assigned or created. It must be empty with a repository.
+	Scope string `protobuf:"bytes,1,opt,name=scope,proto3" json:"scope,omitempty"`
+	// state is open, closed or all.
+	State string `protobuf:"bytes,2,opt,name=state,proto3" json:"state,omitempty"`
+	// source limits the listing to one connection ID.
+	Source string `protobuf:"bytes,3,opt,name=source,proto3" json:"source,omitempty"`
+	// repository lists one repository's issues, such as owner/name.
+	Repository    string `protobuf:"bytes,4,opt,name=repository,proto3" json:"repository,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListIssuesRequest) Reset() {
+	*x = ListIssuesRequest{}
+	mi := &file_management_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListIssuesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListIssuesRequest) ProtoMessage() {}
+
+func (x *ListIssuesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_management_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListIssuesRequest.ProtoReflect.Descriptor instead.
+func (*ListIssuesRequest) Descriptor() ([]byte, []int) {
+	return file_management_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ListIssuesRequest) GetScope() string {
+	if x != nil {
+		return x.Scope
+	}
+	return ""
+}
+
+func (x *ListIssuesRequest) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *ListIssuesRequest) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+func (x *ListIssuesRequest) GetRepository() string {
+	if x != nil {
+		return x.Repository
+	}
+	return ""
+}
+
+// ListIssuesResponse distinguishes absent capabilities from empty lists.
+type ListIssuesResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// configured is false when management has no issue capability.
+	Configured bool `protobuf:"varint,1,opt,name=configured,proto3" json:"configured,omitempty"`
+	// issues is complete only when the RPC succeeds.
+	Issues        []*Issue `protobuf:"bytes,2,rep,name=issues,proto3" json:"issues,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListIssuesResponse) Reset() {
+	*x = ListIssuesResponse{}
+	mi := &file_management_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListIssuesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListIssuesResponse) ProtoMessage() {}
+
+func (x *ListIssuesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_management_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListIssuesResponse.ProtoReflect.Descriptor instead.
+func (*ListIssuesResponse) Descriptor() ([]byte, []int) {
+	return file_management_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *ListIssuesResponse) GetConfigured() bool {
+	if x != nil {
+		return x.Configured
+	}
+	return false
+}
+
+func (x *ListIssuesResponse) GetIssues() []*Issue {
+	if x != nil {
+		return x.Issues
+	}
+	return nil
+}
+
+// Issue contains display metadata, without bodies, URLs or credentials.
+type Issue struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// source_id, repository and number together identify this issue.
+	SourceId string `protobuf:"bytes,1,opt,name=source_id,json=sourceId,proto3" json:"source_id,omitempty"`
+	// forge is the kind, such as github, gitlab or forgejo.
+	Forge string `protobuf:"bytes,2,opt,name=forge,proto3" json:"forge,omitempty"`
+	// host is the originating forge's web host.
+	Host string `protobuf:"bytes,3,opt,name=host,proto3" json:"host,omitempty"`
+	// repository is the full repository path.
+	Repository string `protobuf:"bytes,4,opt,name=repository,proto3" json:"repository,omitempty"`
+	// number is the issue number shown on the forge.
+	Number int64  `protobuf:"varint,5,opt,name=number,proto3" json:"number,omitempty"`
+	Title  string `protobuf:"bytes,6,opt,name=title,proto3" json:"title,omitempty"`
+	// state is open or closed.
+	State string `protobuf:"bytes,7,opt,name=state,proto3" json:"state,omitempty"`
+	// author is the author's login.
+	Author string `protobuf:"bytes,8,opt,name=author,proto3" json:"author,omitempty"`
+	// assignees are logins.
+	Assignees []string `protobuf:"bytes,9,rep,name=assignees,proto3" json:"assignees,omitempty"`
+	// labels are label names.
+	Labels []string `protobuf:"bytes,10,rep,name=labels,proto3" json:"labels,omitempty"`
+	// comments is the comment count.
+	Comments      int32                  `protobuf:"varint,11,opt,name=comments,proto3" json:"comments,omitempty"`
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Issue) Reset() {
+	*x = Issue{}
+	mi := &file_management_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Issue) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Issue) ProtoMessage() {}
+
+func (x *Issue) ProtoReflect() protoreflect.Message {
+	mi := &file_management_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Issue.ProtoReflect.Descriptor instead.
+func (*Issue) Descriptor() ([]byte, []int) {
+	return file_management_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *Issue) GetSourceId() string {
+	if x != nil {
+		return x.SourceId
+	}
+	return ""
+}
+
+func (x *Issue) GetForge() string {
+	if x != nil {
+		return x.Forge
+	}
+	return ""
+}
+
+func (x *Issue) GetHost() string {
+	if x != nil {
+		return x.Host
+	}
+	return ""
+}
+
+func (x *Issue) GetRepository() string {
+	if x != nil {
+		return x.Repository
+	}
+	return ""
+}
+
+func (x *Issue) GetNumber() int64 {
+	if x != nil {
+		return x.Number
+	}
+	return 0
+}
+
+func (x *Issue) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *Issue) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *Issue) GetAuthor() string {
+	if x != nil {
+		return x.Author
+	}
+	return ""
+}
+
+func (x *Issue) GetAssignees() []string {
+	if x != nil {
+		return x.Assignees
+	}
+	return nil
+}
+
+func (x *Issue) GetLabels() []string {
+	if x != nil {
+		return x.Labels
+	}
+	return nil
+}
+
+func (x *Issue) GetComments() int32 {
+	if x != nil {
+		return x.Comments
+	}
+	return 0
+}
+
+func (x *Issue) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
 // ListConnectionsResponse distinguishes an absent connector from no connections.
 type ListConnectionsResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -181,7 +453,7 @@ type ListConnectionsResponse struct {
 
 func (x *ListConnectionsResponse) Reset() {
 	*x = ListConnectionsResponse{}
-	mi := &file_management_proto_msgTypes[2]
+	mi := &file_management_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -193,7 +465,7 @@ func (x *ListConnectionsResponse) String() string {
 func (*ListConnectionsResponse) ProtoMessage() {}
 
 func (x *ListConnectionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_management_proto_msgTypes[2]
+	mi := &file_management_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -206,7 +478,7 @@ func (x *ListConnectionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListConnectionsResponse.ProtoReflect.Descriptor instead.
 func (*ListConnectionsResponse) Descriptor() ([]byte, []int) {
-	return file_management_proto_rawDescGZIP(), []int{2}
+	return file_management_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ListConnectionsResponse) GetConfigured() bool {
@@ -245,7 +517,7 @@ type Connection struct {
 
 func (x *Connection) Reset() {
 	*x = Connection{}
-	mi := &file_management_proto_msgTypes[3]
+	mi := &file_management_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -257,7 +529,7 @@ func (x *Connection) String() string {
 func (*Connection) ProtoMessage() {}
 
 func (x *Connection) ProtoReflect() protoreflect.Message {
-	mi := &file_management_proto_msgTypes[3]
+	mi := &file_management_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -270,7 +542,7 @@ func (x *Connection) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Connection.ProtoReflect.Descriptor instead.
 func (*Connection) Descriptor() ([]byte, []int) {
-	return file_management_proto_rawDescGZIP(), []int{3}
+	return file_management_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *Connection) GetId() string {
@@ -340,7 +612,7 @@ type AddConnectionRequest struct {
 
 func (x *AddConnectionRequest) Reset() {
 	*x = AddConnectionRequest{}
-	mi := &file_management_proto_msgTypes[4]
+	mi := &file_management_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -352,7 +624,7 @@ func (x *AddConnectionRequest) String() string {
 func (*AddConnectionRequest) ProtoMessage() {}
 
 func (x *AddConnectionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_management_proto_msgTypes[4]
+	mi := &file_management_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -365,7 +637,7 @@ func (x *AddConnectionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddConnectionRequest.ProtoReflect.Descriptor instead.
 func (*AddConnectionRequest) Descriptor() ([]byte, []int) {
-	return file_management_proto_rawDescGZIP(), []int{4}
+	return file_management_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *AddConnectionRequest) GetForge() string {
@@ -406,7 +678,7 @@ type ConnectionRequest struct {
 
 func (x *ConnectionRequest) Reset() {
 	*x = ConnectionRequest{}
-	mi := &file_management_proto_msgTypes[5]
+	mi := &file_management_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -418,7 +690,7 @@ func (x *ConnectionRequest) String() string {
 func (*ConnectionRequest) ProtoMessage() {}
 
 func (x *ConnectionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_management_proto_msgTypes[5]
+	mi := &file_management_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -431,7 +703,7 @@ func (x *ConnectionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConnectionRequest.ProtoReflect.Descriptor instead.
 func (*ConnectionRequest) Descriptor() ([]byte, []int) {
-	return file_management_proto_rawDescGZIP(), []int{5}
+	return file_management_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ConnectionRequest) GetId() string {
@@ -453,7 +725,7 @@ type RotateCredentialRequest struct {
 
 func (x *RotateCredentialRequest) Reset() {
 	*x = RotateCredentialRequest{}
-	mi := &file_management_proto_msgTypes[6]
+	mi := &file_management_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -465,7 +737,7 @@ func (x *RotateCredentialRequest) String() string {
 func (*RotateCredentialRequest) ProtoMessage() {}
 
 func (x *RotateCredentialRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_management_proto_msgTypes[6]
+	mi := &file_management_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -478,7 +750,7 @@ func (x *RotateCredentialRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RotateCredentialRequest.ProtoReflect.Descriptor instead.
 func (*RotateCredentialRequest) Descriptor() ([]byte, []int) {
-	return file_management_proto_rawDescGZIP(), []int{6}
+	return file_management_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *RotateCredentialRequest) GetId() string {
@@ -514,7 +786,36 @@ const file_management_proto_rawDesc = "" +
 	"\vdescription\x18\x05 \x01(\tR\vdescription\x12\x1e\n" +
 	"\n" +
 	"visibility\x18\x06 \x01(\tR\n" +
-	"visibility\"|\n" +
+	"visibility\"w\n" +
+	"\x11ListIssuesRequest\x12\x14\n" +
+	"\x05scope\x18\x01 \x01(\tR\x05scope\x12\x14\n" +
+	"\x05state\x18\x02 \x01(\tR\x05state\x12\x16\n" +
+	"\x06source\x18\x03 \x01(\tR\x06source\x12\x1e\n" +
+	"\n" +
+	"repository\x18\x04 \x01(\tR\n" +
+	"repository\"h\n" +
+	"\x12ListIssuesResponse\x12\x1e\n" +
+	"\n" +
+	"configured\x18\x01 \x01(\bR\n" +
+	"configured\x122\n" +
+	"\x06issues\x18\x02 \x03(\v2\x1a.forge.management.v1.IssueR\x06issues\"\xd7\x02\n" +
+	"\x05Issue\x12\x1b\n" +
+	"\tsource_id\x18\x01 \x01(\tR\bsourceId\x12\x14\n" +
+	"\x05forge\x18\x02 \x01(\tR\x05forge\x12\x12\n" +
+	"\x04host\x18\x03 \x01(\tR\x04host\x12\x1e\n" +
+	"\n" +
+	"repository\x18\x04 \x01(\tR\n" +
+	"repository\x12\x16\n" +
+	"\x06number\x18\x05 \x01(\x03R\x06number\x12\x14\n" +
+	"\x05title\x18\x06 \x01(\tR\x05title\x12\x14\n" +
+	"\x05state\x18\a \x01(\tR\x05state\x12\x16\n" +
+	"\x06author\x18\b \x01(\tR\x06author\x12\x1c\n" +
+	"\tassignees\x18\t \x03(\tR\tassignees\x12\x16\n" +
+	"\x06labels\x18\n" +
+	" \x03(\tR\x06labels\x12\x1a\n" +
+	"\bcomments\x18\v \x01(\x05R\bcomments\x129\n" +
+	"\n" +
+	"updated_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"|\n" +
 	"\x17ListConnectionsResponse\x12\x1e\n" +
 	"\n" +
 	"configured\x18\x01 \x01(\bR\n" +
@@ -543,10 +844,13 @@ const file_management_proto_rawDesc = "" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1e\n" +
 	"\n" +
 	"credential\x18\x02 \x01(\tR\n" +
-	"credential2\xef\x05\n" +
+	"credential2\xe2\x06\n" +
 	"\n" +
 	"Management\x12s\n" +
-	"\x10ListRepositories\x12\x16.google.protobuf.Empty\x1a-.forge.management.v1.ListRepositoriesResponse\"\x18\x82\xd3\xe4\x93\x02\x12\x12\x10/v1/repositories\x12p\n" +
+	"\x10ListRepositories\x12\x16.google.protobuf.Empty\x1a-.forge.management.v1.ListRepositoriesResponse\"\x18\x82\xd3\xe4\x93\x02\x12\x12\x10/v1/repositories\x12q\n" +
+	"\n" +
+	"ListIssues\x12&.forge.management.v1.ListIssuesRequest\x1a'.forge.management.v1.ListIssuesResponse\"\x12\x82\xd3\xe4\x93\x02\f\x12\n" +
+	"/v1/issues\x12p\n" +
 	"\x0fListConnections\x12\x16.google.protobuf.Empty\x1a,.forge.management.v1.ListConnectionsResponse\"\x17\x82\xd3\xe4\x93\x02\x11\x12\x0f/v1/connections\x12w\n" +
 	"\rAddConnection\x12).forge.management.v1.AddConnectionRequest\x1a\x1f.forge.management.v1.Connection\"\x1a\x82\xd3\xe4\x93\x02\x14:\x01*\"\x0f/v1/connections\x12\x7f\n" +
 	"\x0eTestConnection\x12&.forge.management.v1.ConnectionRequest\x1a\x1f.forge.management.v1.Connection\"$\x82\xd3\xe4\x93\x02\x1e:\x01*\"\x19/v1/connections/{id}/test\x12\x8d\x01\n" +
@@ -565,39 +869,46 @@ func file_management_proto_rawDescGZIP() []byte {
 	return file_management_proto_rawDescData
 }
 
-var file_management_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_management_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_management_proto_goTypes = []any{
 	(*ListRepositoriesResponse)(nil), // 0: forge.management.v1.ListRepositoriesResponse
 	(*Repository)(nil),               // 1: forge.management.v1.Repository
-	(*ListConnectionsResponse)(nil),  // 2: forge.management.v1.ListConnectionsResponse
-	(*Connection)(nil),               // 3: forge.management.v1.Connection
-	(*AddConnectionRequest)(nil),     // 4: forge.management.v1.AddConnectionRequest
-	(*ConnectionRequest)(nil),        // 5: forge.management.v1.ConnectionRequest
-	(*RotateCredentialRequest)(nil),  // 6: forge.management.v1.RotateCredentialRequest
-	(*timestamppb.Timestamp)(nil),    // 7: google.protobuf.Timestamp
-	(*emptypb.Empty)(nil),            // 8: google.protobuf.Empty
+	(*ListIssuesRequest)(nil),        // 2: forge.management.v1.ListIssuesRequest
+	(*ListIssuesResponse)(nil),       // 3: forge.management.v1.ListIssuesResponse
+	(*Issue)(nil),                    // 4: forge.management.v1.Issue
+	(*ListConnectionsResponse)(nil),  // 5: forge.management.v1.ListConnectionsResponse
+	(*Connection)(nil),               // 6: forge.management.v1.Connection
+	(*AddConnectionRequest)(nil),     // 7: forge.management.v1.AddConnectionRequest
+	(*ConnectionRequest)(nil),        // 8: forge.management.v1.ConnectionRequest
+	(*RotateCredentialRequest)(nil),  // 9: forge.management.v1.RotateCredentialRequest
+	(*timestamppb.Timestamp)(nil),    // 10: google.protobuf.Timestamp
+	(*emptypb.Empty)(nil),            // 11: google.protobuf.Empty
 }
 var file_management_proto_depIdxs = []int32{
-	1, // 0: forge.management.v1.ListRepositoriesResponse.repositories:type_name -> forge.management.v1.Repository
-	3, // 1: forge.management.v1.ListConnectionsResponse.connections:type_name -> forge.management.v1.Connection
-	7, // 2: forge.management.v1.Connection.checked_at:type_name -> google.protobuf.Timestamp
-	8, // 3: forge.management.v1.Management.ListRepositories:input_type -> google.protobuf.Empty
-	8, // 4: forge.management.v1.Management.ListConnections:input_type -> google.protobuf.Empty
-	4, // 5: forge.management.v1.Management.AddConnection:input_type -> forge.management.v1.AddConnectionRequest
-	5, // 6: forge.management.v1.Management.TestConnection:input_type -> forge.management.v1.ConnectionRequest
-	6, // 7: forge.management.v1.Management.RotateCredential:input_type -> forge.management.v1.RotateCredentialRequest
-	5, // 8: forge.management.v1.Management.RemoveConnection:input_type -> forge.management.v1.ConnectionRequest
-	0, // 9: forge.management.v1.Management.ListRepositories:output_type -> forge.management.v1.ListRepositoriesResponse
-	2, // 10: forge.management.v1.Management.ListConnections:output_type -> forge.management.v1.ListConnectionsResponse
-	3, // 11: forge.management.v1.Management.AddConnection:output_type -> forge.management.v1.Connection
-	3, // 12: forge.management.v1.Management.TestConnection:output_type -> forge.management.v1.Connection
-	3, // 13: forge.management.v1.Management.RotateCredential:output_type -> forge.management.v1.Connection
-	8, // 14: forge.management.v1.Management.RemoveConnection:output_type -> google.protobuf.Empty
-	9, // [9:15] is the sub-list for method output_type
-	3, // [3:9] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	1,  // 0: forge.management.v1.ListRepositoriesResponse.repositories:type_name -> forge.management.v1.Repository
+	4,  // 1: forge.management.v1.ListIssuesResponse.issues:type_name -> forge.management.v1.Issue
+	10, // 2: forge.management.v1.Issue.updated_at:type_name -> google.protobuf.Timestamp
+	6,  // 3: forge.management.v1.ListConnectionsResponse.connections:type_name -> forge.management.v1.Connection
+	10, // 4: forge.management.v1.Connection.checked_at:type_name -> google.protobuf.Timestamp
+	11, // 5: forge.management.v1.Management.ListRepositories:input_type -> google.protobuf.Empty
+	2,  // 6: forge.management.v1.Management.ListIssues:input_type -> forge.management.v1.ListIssuesRequest
+	11, // 7: forge.management.v1.Management.ListConnections:input_type -> google.protobuf.Empty
+	7,  // 8: forge.management.v1.Management.AddConnection:input_type -> forge.management.v1.AddConnectionRequest
+	8,  // 9: forge.management.v1.Management.TestConnection:input_type -> forge.management.v1.ConnectionRequest
+	9,  // 10: forge.management.v1.Management.RotateCredential:input_type -> forge.management.v1.RotateCredentialRequest
+	8,  // 11: forge.management.v1.Management.RemoveConnection:input_type -> forge.management.v1.ConnectionRequest
+	0,  // 12: forge.management.v1.Management.ListRepositories:output_type -> forge.management.v1.ListRepositoriesResponse
+	3,  // 13: forge.management.v1.Management.ListIssues:output_type -> forge.management.v1.ListIssuesResponse
+	5,  // 14: forge.management.v1.Management.ListConnections:output_type -> forge.management.v1.ListConnectionsResponse
+	6,  // 15: forge.management.v1.Management.AddConnection:output_type -> forge.management.v1.Connection
+	6,  // 16: forge.management.v1.Management.TestConnection:output_type -> forge.management.v1.Connection
+	6,  // 17: forge.management.v1.Management.RotateCredential:output_type -> forge.management.v1.Connection
+	11, // 18: forge.management.v1.Management.RemoveConnection:output_type -> google.protobuf.Empty
+	12, // [12:19] is the sub-list for method output_type
+	5,  // [5:12] is the sub-list for method input_type
+	5,  // [5:5] is the sub-list for extension type_name
+	5,  // [5:5] is the sub-list for extension extendee
+	0,  // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_management_proto_init() }
@@ -611,7 +922,7 @@ func file_management_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_management_proto_rawDesc), len(file_management_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -1,0 +1,52 @@
+{{define "title"}}Issues{{end}}
+{{define "content"}}
+    <div class="heading"><h1>Issues</h1>{{if .Query.Repository}}<a href="/issues">All my issues</a>{{end}}</div>
+    {{if .Query.Repository}}
+    <p>Issues of <strong>{{.Query.Repository}}</strong>{{if .Query.Source}} on source {{.Query.Source}}{{end}}. Access is controlled by each source.</p>
+    {{else}}
+    <p>Issues assigned to, or created by, the connected accounts. Access is controlled by each source.</p>
+    {{end}}
+    <form class="filter" method="get" action="/issues">
+      {{if .Query.Repository}}
+      <input type="hidden" name="repository" value="{{.Query.Repository}}">
+      {{if .Query.Source}}<input type="hidden" name="source" value="{{.Query.Source}}">{{end}}
+      {{else}}
+      <label>Show
+        <select name="scope">
+          <option value="assigned"{{if ne .Query.Scope "created"}} selected{{end}}>Assigned to me</option>
+          <option value="created"{{if eq .Query.Scope "created"}} selected{{end}}>Created by me</option>
+        </select>
+      </label>
+      {{end}}
+      <label>State
+        <select name="state">
+          <option value="open"{{if or (eq .Query.State "") (eq .Query.State "open")}} selected{{end}}>Open</option>
+          <option value="closed"{{if eq .Query.State "closed"}} selected{{end}}>Closed</option>
+          <option value="all"{{if eq .Query.State "all"}} selected{{end}}>All</option>
+        </select>
+      </label>
+      <button type="submit">Filter</button>
+    </form>
+    {{if .Invalid}}
+    <section role="alert"><h2>Invalid filter</h2><p>Choose a scope and state from the form. A repository listing has no scope.</p></section>
+    {{else if .Failed}}
+    <section role="alert"><h2>Issue listing failed</h2><p>No complete results are available. Check the issue service, its credentials and the repository path, then try again.</p></section>
+    {{else if not .Listing.Configured}}
+    <section><h2>No issue capability configured</h2><p>Connect a forge-issues service in the management startup settings to list issues.</p></section>
+    {{else if not .Listing.Issues}}
+    <section><h2>No issues found</h2><p>The listing succeeded. No issues match the filter. <a href="/connections">Add a connection</a> to list its issues.</p></section>
+    {{else}}
+    <p>{{len .Listing.Issues}} issues</p>
+    <div class="table"><table>
+      <caption>Complete issue listing</caption>
+      <thead><tr><th scope="col">Issue</th><th scope="col">Repository</th><th scope="col">Source</th><th scope="col">Forge / host</th><th scope="col">State</th><th scope="col">People</th><th scope="col">Updated</th></tr></thead>
+      <tbody>{{range .Listing.Issues}}<tr>
+        <td><strong>#{{.Number}} {{.Title}}</strong>{{if .Labels}}<p class="labels">{{range .Labels}}<span class="label">{{.}}</span> {{end}}</p>{{end}}{{if .Comments}}<p>{{.Comments}} comments</p>{{end}}</td>
+        <td>{{.Repository}}</td><td>{{.SourceId}}</td><td>{{.Forge}}{{if .Host}}<br>{{.Host}}{{end}}</td>
+        <td><span class="state state-{{.State}}">{{.State}}</span></td>
+        <td>{{if .Author}}by {{.Author}}{{end}}{{if .Assignees}}<br>assigned to {{range $i, $a := .Assignees}}{{if $i}}, {{end}}{{$a}}{{end}}{{end}}</td>
+        <td>{{if .UpdatedAt}}{{.UpdatedAt.AsTime.Format "2006-01-02"}}{{end}}</td>
+      </tr>{{end}}</tbody>
+    </table></div>
+    {{end}}
+{{end}}

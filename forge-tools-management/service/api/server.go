@@ -12,6 +12,7 @@ import (
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/r59q/forge-tools/forge-core/forgeapi/forgeauth"
+	"github.com/r59q/forge-tools/forge-issues/library/issues"
 	"github.com/r59q/forge-tools/forge-tools-management/library/management"
 	pb "github.com/r59q/forge-tools/forge-tools-management/service/managementpb"
 	"google.golang.org/grpc/codes"
@@ -106,6 +107,34 @@ func (s *Server) ListRepositories(ctx context.Context, _ *emptypb.Empty) (*pb.Li
 	})
 }
 
+// ListIssues returns the configured state and complete issue list. A
+// malformed filter is InvalidArgument; backend credential rejection is
+// Unavailable, never Unauthenticated.
+func (s *Server) ListIssues(ctx context.Context, r *pb.ListIssuesRequest) (*pb.ListIssuesResponse, error) {
+	return call(s, ctx, func(ctx context.Context) (*pb.ListIssuesResponse, error) {
+		listing, err := s.client.ListIssues(ctx, management.IssueQuery{
+			Scope: issues.Scope(r.GetScope()), State: issues.StateFilter(r.GetState()),
+			Source: r.GetSource(), Repository: r.GetRepository(),
+		})
+		if err != nil {
+			return nil, err
+		}
+		out := &pb.ListIssuesResponse{Configured: listing.Configured}
+		for _, i := range listing.Issues {
+			v := &pb.Issue{
+				SourceId: i.Source.ID, Forge: string(i.Source.Kind), Host: i.Source.Host, Repository: i.Repository,
+				Number: i.Number, Title: i.Title, State: string(i.State), Author: i.Author,
+				Assignees: i.Assignees, Labels: i.Labels, Comments: int32(i.Comments),
+			}
+			if !i.UpdatedAt.IsZero() {
+				v.UpdatedAt = timestamppb.New(i.UpdatedAt)
+			}
+			out.Issues = append(out.Issues, v)
+		}
+		return out, nil
+	})
+}
+
 // ListConnections returns the configured state and every connection.
 func (s *Server) ListConnections(ctx context.Context, _ *emptypb.Empty) (*pb.ListConnectionsResponse, error) {
 	return call(s, ctx, func(ctx context.Context) (*pb.ListConnectionsResponse, error) {
@@ -189,7 +218,7 @@ func (s *Server) HTTP(ctx context.Context) (http.Handler, error) {
 			s.web(pages, w, r)
 			return
 		}
-		if r.URL.Path == "/v1/repositories" && r.Method != http.MethodGet {
+		if (r.URL.Path == "/v1/repositories" || r.URL.Path == "/v1/issues") && r.Method != http.MethodGet {
 			w.Header().Set("Allow", "GET")
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return

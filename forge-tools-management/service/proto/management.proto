@@ -18,6 +18,13 @@ service Management {
   rpc ListRepositories(google.protobuf.Empty) returns (ListRepositoriesResponse) {
     option (google.api.http) = { get: "/v1/repositories" };
   }
+  // ListIssues returns a complete issue listing or an error, never partial
+  // results. GET /v1/issues?scope=&state=&source=&repository=. Without a
+  // repository it lists the issues assigned to, or created by, each
+  // connected account. Backend authentication failures are UNAVAILABLE.
+  rpc ListIssues(ListIssuesRequest) returns (ListIssuesResponse) {
+    option (google.api.http) = { get: "/v1/issues" };
+  }
   // ListConnections lists forge connections, without credentials.
   // GET /v1/connections.
   rpc ListConnections(google.protobuf.Empty) returns (ListConnectionsResponse) {
@@ -69,6 +76,53 @@ message Repository {
   string description = 5;
   // visibility is public, internal or private, as reported upstream.
   string visibility = 6;
+}
+
+// ListIssuesRequest selects issues. Empty fields list the open issues
+// assigned to each connected account.
+message ListIssuesRequest {
+  // scope is assigned or created. It must be empty with a repository.
+  string scope = 1;
+  // state is open, closed or all.
+  string state = 2;
+  // source limits the listing to one connection ID.
+  string source = 3;
+  // repository lists one repository's issues, such as owner/name.
+  string repository = 4;
+}
+
+// ListIssuesResponse distinguishes absent capabilities from empty lists.
+message ListIssuesResponse {
+  // configured is false when management has no issue capability.
+  bool configured = 1;
+  // issues is complete only when the RPC succeeds.
+  repeated Issue issues = 2;
+}
+
+// Issue contains display metadata, without bodies, URLs or credentials.
+message Issue {
+  // source_id, repository and number together identify this issue.
+  string source_id = 1;
+  // forge is the kind, such as github, gitlab or forgejo.
+  string forge = 2;
+  // host is the originating forge's web host.
+  string host = 3;
+  // repository is the full repository path.
+  string repository = 4;
+  // number is the issue number shown on the forge.
+  int64 number = 5;
+  string title = 6;
+  // state is open or closed.
+  string state = 7;
+  // author is the author's login.
+  string author = 8;
+  // assignees are logins.
+  repeated string assignees = 9;
+  // labels are label names.
+  repeated string labels = 10;
+  // comments is the comment count.
+  int32 comments = 11;
+  google.protobuf.Timestamp updated_at = 12;
 }
 
 // ListConnectionsResponse distinguishes an absent connector from no connections.

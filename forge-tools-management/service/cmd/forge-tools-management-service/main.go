@@ -1,5 +1,6 @@
 // Command forge-tools-management-service serves management over HTTP and
-// gRPC, optionally connected to forge-connector and forge-repositories.
+// gRPC, optionally connected to forge-connector, forge-repositories and
+// forge-issues.
 package main
 
 import (
@@ -28,6 +29,8 @@ type settings struct {
 	timeout                                                          time.Duration
 	repositoriesAddress, repositoriesTokenFile, repositoriesTokenEnv string
 	repositoriesInsecure                                             bool
+	issuesAddress, issuesTokenFile, issuesTokenEnv                   string
+	issuesInsecure                                                   bool
 	connectorAddress, connectorTokenFile, connectorTokenEnv          string
 	connectorInsecure                                                bool
 	clients                                                          []serviceClient
@@ -52,6 +55,11 @@ func parse(args []string, getenv func(string) string, help io.Writer) (settings,
 	fs.StringVar(&s.repositoriesTokenEnv, "repositories-token-env", env("REPOSITORIES_TOKEN_ENV", ""), "repository service token variable name")
 	var insecure string
 	fs.StringVar(&insecure, "repositories-insecure", env("REPOSITORIES_INSECURE", "false"), "use plaintext to a trusted local repository service: true or false")
+	fs.StringVar(&s.issuesAddress, "issues-address", env("ISSUES_ADDRESS", ""), "optional forge-issues gRPC host:port")
+	fs.StringVar(&s.issuesTokenFile, "issues-token-file", env("ISSUES_TOKEN_FILE", ""), "issue service token file")
+	fs.StringVar(&s.issuesTokenEnv, "issues-token-env", env("ISSUES_TOKEN_ENV", ""), "issue service token variable name")
+	var issuesInsecure string
+	fs.StringVar(&issuesInsecure, "issues-insecure", env("ISSUES_INSECURE", "false"), "use plaintext to a trusted local issue service: true or false")
 	fs.StringVar(&s.connectorAddress, "connector-address", env("CONNECTOR_ADDRESS", ""), "optional forge-connector broker gRPC host:port")
 	fs.StringVar(&s.connectorTokenFile, "connector-admin-token-file", env("CONNECTOR_ADMIN_TOKEN_FILE", ""), "broker admin token file")
 	fs.StringVar(&s.connectorTokenEnv, "connector-admin-token-env", env("CONNECTOR_ADMIN_TOKEN_ENV", ""), "broker admin token variable name")
@@ -63,6 +71,9 @@ func parse(args []string, getenv func(string) string, help io.Writer) (settings,
 	repos := serviceClient{name: "forge-repositories"}
 	fs.StringVar(&repos.file, "repositories-connector-token-file", env("REPOSITORIES_CONNECTOR_TOKEN_FILE", ""), "repositories service client token file, registered in the broker")
 	fs.StringVar(&repos.env, "repositories-connector-token-env", env("REPOSITORIES_CONNECTOR_TOKEN_ENV", ""), "repositories service client token variable name")
+	issuesClient := serviceClient{name: "forge-issues"}
+	fs.StringVar(&issuesClient.file, "issues-connector-token-file", env("ISSUES_CONNECTOR_TOKEN_FILE", ""), "issues service client token file, registered in the broker")
+	fs.StringVar(&issuesClient.env, "issues-connector-token-env", env("ISSUES_CONNECTOR_TOKEN_ENV", ""), "issues service client token variable name")
 	var timeout string
 	fs.StringVar(&timeout, "request-timeout", env("REQUEST_TIMEOUT", "30s"), "maximum request duration")
 	if err := fs.Parse(args); err != nil {
@@ -84,10 +95,13 @@ func parse(args []string, getenv func(string) string, help io.Writer) (settings,
 	if insecure != "true" && insecure != "false" {
 		return settings{}, errors.New("invalid repositories-insecure setting")
 	}
+	if issuesInsecure != "true" && issuesInsecure != "false" {
+		return settings{}, errors.New("invalid issues-insecure setting")
+	}
 	if connectorInsecure != "true" && connectorInsecure != "false" {
 		return settings{}, errors.New("invalid connector-insecure setting")
 	}
-	s.repositoriesInsecure, s.connectorInsecure = insecure == "true", connectorInsecure == "true"
+	s.repositoriesInsecure, s.issuesInsecure, s.connectorInsecure = insecure == "true", issuesInsecure == "true", connectorInsecure == "true"
 	if s.tokenFile != "" && s.tokenEnv != "" {
 		return settings{}, errors.New("choose one service token source")
 	}
@@ -103,10 +117,19 @@ func parse(args []string, getenv func(string) string, help io.Writer) (settings,
 	if s.repositoriesAddress != "" && s.repositoriesTokenFile == "" && s.repositoriesTokenEnv == "" {
 		s.repositoriesTokenEnv = "FORGE_MANAGEMENT_REPOSITORIES_TOKEN"
 	}
+	if s.issuesTokenFile != "" && s.issuesTokenEnv != "" {
+		return settings{}, errors.New("choose one issue service token source")
+	}
+	if s.issuesAddress == "" && (s.issuesTokenFile != "" || s.issuesTokenEnv != "" || s.issuesInsecure) {
+		return settings{}, errors.New("issue settings require issues-address")
+	}
+	if s.issuesAddress != "" && s.issuesTokenFile == "" && s.issuesTokenEnv == "" {
+		s.issuesTokenEnv = "FORGE_MANAGEMENT_ISSUES_TOKEN"
+	}
 	if s.connectorTokenFile != "" && s.connectorTokenEnv != "" {
 		return settings{}, errors.New("choose one connector admin token source")
 	}
-	explicit := proxy.file != "" || proxy.env != "" || repos.file != "" || repos.env != ""
+	explicit := proxy.file != "" || proxy.env != "" || repos.file != "" || repos.env != "" || issuesClient.file != "" || issuesClient.env != ""
 	if s.connectorAddress == "" && (s.connectorTokenFile != "" || s.connectorTokenEnv != "" || s.connectorInsecure || explicit) {
 		return settings{}, errors.New("connector settings require connector-address")
 	}
@@ -119,7 +142,7 @@ func parse(args []string, getenv func(string) string, help io.Writer) (settings,
 	for _, c := range []struct {
 		client     *serviceClient
 		defaultEnv string
-	}{{&proxy, "FORGE_MANAGEMENT_PROXY_TOKEN"}, {&repos, "FORGE_MANAGEMENT_REPOSITORIES_CONNECTOR_TOKEN"}} {
+	}{{&proxy, "FORGE_MANAGEMENT_PROXY_TOKEN"}, {&repos, "FORGE_MANAGEMENT_REPOSITORIES_CONNECTOR_TOKEN"}, {&issuesClient, "FORGE_MANAGEMENT_ISSUES_CONNECTOR_TOKEN"}} {
 		if c.client.file != "" && c.client.env != "" {
 			return settings{}, fmt.Errorf("choose one %s client token source", c.client.name)
 		}
@@ -127,7 +150,7 @@ func parse(args []string, getenv func(string) string, help io.Writer) (settings,
 			c.client.env, c.client.optional = c.defaultEnv, true
 		}
 	}
-	s.clients = []serviceClient{proxy, repos}
+	s.clients = []serviceClient{proxy, repos, issuesClient}
 	return s, nil
 }
 
@@ -160,7 +183,12 @@ func run(ctx context.Context, s settings, ready func(grpcAddr, httpAddr net.Addr
 		return err
 	}
 	defer closeBackend()
-	config := management.Config{Repositories: reader}
+	issueReader, closeIssues, err := s.issueReader(ctx, token)
+	if err != nil {
+		return err
+	}
+	defer closeIssues()
+	config := management.Config{Repositories: reader, Issues: issueReader}
 	connector, closeConnector, err := s.connector(ctx, token)
 	if err != nil {
 		return err

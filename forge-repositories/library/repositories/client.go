@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -9,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/r59q/forge-tools/forge-core/forgeapi/forgehttp"
+	"github.com/r59q/forge-tools/forge-core/forgeapi/forgerest"
 )
 
 // Client reads repositories from one or more sources. It is safe for
@@ -69,7 +71,7 @@ func (c *Client) List(ctx context.Context, opts ListOptions) ([]Repository, erro
 	}
 	owner := strings.ToLower(strings.Trim(opts.Owner, "/"))
 	results, err := each(sources, func(s *source) ([]Repository, error) {
-		repos, err := getPages(ctx, s, s.forge.listPath(), s.repository)
+		repos, err := forgerest.Pages(ctx, s.Session, s.forge.listPath(), s.repository)
 		if err != nil || owner == "" {
 			return repos, err
 		}
@@ -124,7 +126,7 @@ func (c *Client) Branches(ctx context.Context, ref Ref) ([]Branch, error) {
 	}
 	s := c.byID[repo.Source.ID]
 	api, _ := s.forge.repoPath(repo.Path)
-	branches, err := getPages(ctx, s, s.forge.branchesPath(api), s.forge.branch)
+	branches, err := forgerest.Pages(ctx, s.Session, s.forge.branchesPath(api), s.forge.branch)
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +142,7 @@ func (c *Client) Tags(ctx context.Context, ref Ref) ([]Tag, error) {
 	if err != nil {
 		return nil, err
 	}
-	return getPages(ctx, s, s.forge.tagsPath(api), s.forge.tag)
+	return forgerest.Pages(ctx, s.Session, s.forge.tagsPath(api), s.forge.tag)
 }
 
 // Update changes the metadata of the repository ref names and returns the
@@ -163,8 +165,8 @@ func (c *Client) Update(ctx context.Context, ref Ref, u Update) (Repository, err
 	if u.DefaultBranch != nil {
 		body["default_branch"] = *u.DefaultBranch
 	}
-	var raw rawJSON
-	if err := send(ctx, s, s.forge.updateMethod(), api, body, &raw); err != nil {
+	var raw json.RawMessage
+	if err := forgerest.Send(ctx, s.Session, s.forge.updateMethod(), api, body, &raw); err != nil {
 		return Repository{}, err
 	}
 	return s.repository(raw)
@@ -180,9 +182,9 @@ func (c *Client) resolve(ctx context.Context, ref Ref) (*source, string, error) 
 		}
 		ref = repo.Ref()
 	}
-	path, err := cleanPath(ref.Path)
-	if err != nil {
-		return nil, "", err
+	path, ok := forgerest.CleanPath(ref.Path)
+	if !ok {
+		return nil, "", invalidPath(ref.Path)
 	}
 	s, ok := c.byID[ref.Source]
 	if !ok {
@@ -197,9 +199,9 @@ func (c *Client) resolve(ctx context.Context, ref Ref) (*source, string, error) 
 
 // find returns ref's repository on each source that has it.
 func (c *Client) find(ctx context.Context, ref Ref) ([]Repository, error) {
-	path, err := cleanPath(ref.Path)
-	if err != nil {
-		return nil, err
+	path, ok := forgerest.CleanPath(ref.Path)
+	if !ok {
+		return nil, invalidPath(ref.Path)
 	}
 	sources, err := c.pick(ref.Source)
 	if err != nil {
@@ -210,8 +212,8 @@ func (c *Client) find(ctx context.Context, ref Ref) ([]Repository, error) {
 		if !ok {
 			return nil, nil // this forge cannot hold such a path
 		}
-		var raw rawJSON
-		if err := send(ctx, s, "GET", api, nil, &raw); err != nil {
+		var raw json.RawMessage
+		if err := forgerest.Send(ctx, s.Session, "GET", api, nil, &raw); err != nil {
 			if errors.Is(err, forgehttp.ErrNotFound) && ref.Source == "" {
 				return nil, nil
 			}
@@ -273,7 +275,7 @@ func each[T any](sources []*source, fn func(*source) (T, error)) ([]T, error) {
 }
 
 // repository decodes one repository and stamps it with s.
-func (s *source) repository(raw rawJSON) (Repository, error) {
+func (s *source) repository(raw json.RawMessage) (Repository, error) {
 	r, err := s.forge.repository(raw)
 	if err != nil {
 		return Repository{}, err
@@ -293,23 +295,7 @@ func notFound(s *source, path string) error {
 	return fmt.Errorf("repositories: source %s: %q: %w", s.ID, path, forgehttp.ErrNotFound)
 }
 
-// cleanPath checks a repository path and trims surrounding slashes. It
-// rejects encoded or unsafe paths, so they are never double-encoded.
-func cleanPath(path string) (string, error) {
-	p := strings.Trim(strings.TrimSpace(path), "/")
-	segments := strings.Split(p, "/")
-	if len(segments) < 2 {
-		return "", fmt.Errorf("%w: path %q needs an owner and a name", ErrInvalid, path)
-	}
-	for _, seg := range segments {
-		if seg == "" || seg == "." || seg == ".." || strings.ContainsAny(seg, `%?#\`) {
-			return "", fmt.Errorf("%w: path %q", ErrInvalid, path)
-		}
-		for _, r := range seg {
-			if r <= ' ' || r == 0x7f {
-				return "", fmt.Errorf("%w: path %q", ErrInvalid, path)
-			}
-		}
-	}
-	return p, nil
+// invalidPath is the error for a path that forgerest.CleanPath rejects.
+func invalidPath(path string) error {
+	return fmt.Errorf("%w: path %q, want owner/name", ErrInvalid, path)
 }

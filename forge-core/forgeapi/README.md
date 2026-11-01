@@ -7,6 +7,7 @@ only the standard library.
 forgeauth/                  credentials, sessions, providers, registry
   github/ gitlab/ forgejo/  one provider per forge
 forgehttp/                  errors, Link pagination, rate limits
+forgerest/                  JSON requests, paged lists, path checks
 ```
 
 Module: `github.com/r59q/forge-tools/forge-core/forgeapi`
@@ -52,6 +53,31 @@ me, err := reg.Whoami(ctx, s) // GET /user
 - `ParseRateLimit` reads `Retry-After`, `X-RateLimit-*` and `RateLimit-*`.
 
 `forgehttp` does not import `forgeauth`.
+
+## forgerest
+
+JSON-over-HTTP helpers on a `*forgeauth.Session`, shared by the tools.
+
+```go
+var repo struct{ FullName string `json:"full_name"` }
+err := forgerest.Send(ctx, s, "GET", "/repos/mrbean/teddy", nil, &repo)
+
+issues, err := forgerest.Pages(ctx, s, "/repos/mrbean/teddy/issues?per_page=100",
+	func(raw json.RawMessage) (Issue, error) { ... })
+```
+
+- `Send` and `Do` send a JSON body when one is given, check the response
+  with `forgehttp.CheckResponse` and decode up to 32 MiB into `v`. A nil `v`
+  skips decoding. `Do` also returns the response headers. A redirect that
+  changes the method, as 301, 302 and 303 do for a write, is an error, so a
+  write is never dropped silently.
+- `Pages` reads a JSON array and follows `Link` next pages, up to 1000,
+  only within the session's scheme, host and base path. A repeated link is
+  an error.
+- `CleanPath` checks a repository path such as `owner/name` or
+  `group/sub/project`. It rejects encoded or unsafe paths, so they are
+  never double-encoded.
+- URLs in errors drop the query string.
 
 ## Develop
 

@@ -1,34 +1,53 @@
 # forge-issues
 
-A federated issue tracker for forges.
+Makes the issues of every forge connected through
+[forge-connector](../forge-connector/) available through one shared model.
+GitHub, GitLab and Forgejo are supported.
 
-forge-issues gives you one API for issues on GitHub, GitLab, Forgejo and other
-forges. It maps each forge's issues to a shared model, so your code works the
-same no matter which forge an issue lives on.
+The connector stores credentials and handles authentication. This tool only
+needs a connector client token: each connection the token may use becomes a
+source. Each issue says which connection, forge kind and forge host it came
+from.
 
-> Status: planning. There is no code yet.
-
-## Use it to
-
-- Read and manage issues on any supported forge through one API.
-- Track issues spread across several forges in one place.
-- Build forge-agnostic tools on top of issues.
+```text
+library/          Go module: shared model and forge adapters
+service/          REST and gRPC service over forge-connector connections
+```
 
 ## Concepts
 
-- **Issue**: the shared model for an issue, with common fields such as title,
-  body, state, labels, assignees and comments.
-- **Forge adapter**: connects to one forge and translates between its API and
-  the shared model.
+- **Source**: one forge connection.
+- **Issue**: title, body, state (open or closed), author, assignees, labels,
+  milestone, comment count and timestamps. Pull and merge requests are never
+  returned.
+- **Comment**: a user comment on an issue. GitLab system notes are left out.
+- **Ref**: a source, a repository path and an issue number. The number is the
+  one shown on the forge (GitLab's `iid`).
 
-## Projects
+A repository is just a path, such as `owner/name` or a nested GitLab path
+like `group/sub/project`. forge-issues does not depend on
+[forge-repositories](../forge-repositories/).
 
-| Project    | Description                                                  |
-| ---------- | ------------------------------------------------------------ |
-| `library/` | Go library: issue model, business rules and forge adapters.  |
-| `service/` | Service exposing the library over REST, gRPC and WebSockets. |
+## Operations
 
-Both projects are planned.
+- List a repository's issues, or the issues assigned to or created by the
+  account, filtered by state and labels. Without a source, every source is
+  asked and the results are merged.
+- Get an issue and list its comments.
+- Create an issue, update its title, body, state, labels and assignees, and
+  add comments. Writes always name a source.
+
+It never deletes issues or comments.
+
+The service gets its connections from the connector and passes each session
+to the library. The library only works with sessions; it never sees tokens or
+connection details.
+
+[forge-tools-management](../forge-tools-management/) lists issues in its web
+interface, and the [management example](../examples/management/) runs this
+service with the rest of the stack.
+
+Build and test each module from its own directory; see its README for setup.
 
 ## License
 

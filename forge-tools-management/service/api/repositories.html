@@ -14,7 +14,7 @@
       <caption>Complete repository listing</caption>
       <thead><tr><th scope="col">Full path</th><th scope="col">Source</th><th scope="col">Forge / host</th><th scope="col">Visibility</th></tr></thead>
       <tbody>{{range .Listing.Repositories}}<tr>
-        <td><strong>{{.Path}}</strong>{{if .Description}}<p>{{.Description}}</p>{{end}}</td>
+        <td><strong>{{.Path}}</strong>{{if .Description}}<p>{{.Description}}</p>{{end}}{{if $.Issues}}<p><a href="/issues?source={{.SourceId}}&amp;repository={{.Path}}">Issues</a></p>{{end}}</td>
         <td>{{.SourceId}}</td><td>{{.Forge}}{{if .Host}}<br>{{.Host}}{{end}}</td><td>{{.Visibility}}</td>
       </tr>{{end}}</tbody>
     </table></div>

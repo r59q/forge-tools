@@ -1,11 +1,13 @@
 # forge-tools-management service
 
-Forge connection management and repository inspection over HTTP and gRPC.
+Forge connection management, and repository and issue inspection, over HTTP
+and gRPC.
 The browser UI is server-rendered HTML with CSS and plain forms; no
 JavaScript, browser storage or frontend build is needed. It uses the
 [management library](../library/), the
-[forge-connector broker admin API](../../forge-connector/broker/) and the
-[forge-repositories gRPC API](../../forge-repositories/service/).
+[forge-connector broker admin API](../../forge-connector/broker/), the
+[forge-repositories gRPC API](../../forge-repositories/service/) and the
+[forge-issues gRPC API](../../forge-issues/service/).
 
 ## Build and test
 
@@ -19,7 +21,7 @@ go test -race ./...
 ```
 
 Keep the repository layout for relative module replacements. Tests need no
-live credentials. They run the real broker and repositories APIs against
+live credentials. They run the real broker, repositories and issues APIs against
 fake forges, and cover both transports, the web UI and its forms,
 service client registration, listing states, credential separation, rotation, access and
 cross-origin protection, and shutdown.
@@ -42,8 +44,9 @@ authentication is kept by the browser; close the browser session to sign
 out. Use a trusted browser profile.
 
 To manage connections, point management at a broker with its admin token.
-To list repositories, also point it at a repositories service. The proxy
-and repositories client tokens are registered in the broker; see below:
+To list repositories or issues, also point it at a repositories or issues
+service. The proxy, repositories and issues client tokens are registered in
+the broker; see below:
 
 ```sh
 /tmp/forge-tools-management-service \
@@ -55,12 +58,17 @@ and repositories client tokens are registered in the broker; see below:
   --repositories-connector-token-file /run/secrets/repositories-connector-token \
   --repositories-address 127.0.0.1:9092 \
   --repositories-token-file /run/secrets/repositories-token \
-  --repositories-insecure=true
+  --repositories-insecure=true \
+  --issues-connector-token-file /run/secrets/issues-connector-token \
+  --issues-address 127.0.0.1:9094 \
+  --issues-token-file /run/secrets/issues-token \
+  --issues-insecure=true
 ```
 
 ### Register service tokens
 
-The proxy and the repositories service each need a broker client token. You
+The proxy, the repositories service and the issues service each need a
+broker client token. You
 choose these tokens and give them to the services and to management.
 Management registers them in the broker at startup, each granted every
 connection, including ones added later:
@@ -69,6 +77,7 @@ connection, including ones added later:
 | --- | --- |
 | `--proxy-token-*` | `forge-connector-proxy`, may issue forge tokens |
 | `--repositories-connector-token-*` | `forge-repositories` |
+| `--issues-connector-token-*` | `forge-issues` |
 
 If the broker does not yet accept a token, management replaces the client of
 that name with one using the token, so changing a token and restarting
@@ -98,6 +107,12 @@ errors. Without a token setting, nothing is registered.
 | `--repositories-token-file` | `FORGE_MANAGEMENT_REPOSITORIES_TOKEN_FILE` | none |
 | `--repositories-token-env` | `FORGE_MANAGEMENT_REPOSITORIES_TOKEN_ENV` | `FORGE_MANAGEMENT_REPOSITORIES_TOKEN` when connected |
 | `--repositories-insecure` | `FORGE_MANAGEMENT_REPOSITORIES_INSECURE` | `false` |
+| `--issues-connector-token-file` | `FORGE_MANAGEMENT_ISSUES_CONNECTOR_TOKEN_FILE` | none |
+| `--issues-connector-token-env` | `FORGE_MANAGEMENT_ISSUES_CONNECTOR_TOKEN_ENV` | `FORGE_MANAGEMENT_ISSUES_CONNECTOR_TOKEN`, if set, when connected |
+| `--issues-address` | `FORGE_MANAGEMENT_ISSUES_ADDRESS` | none |
+| `--issues-token-file` | `FORGE_MANAGEMENT_ISSUES_TOKEN_FILE` | none |
+| `--issues-token-env` | `FORGE_MANAGEMENT_ISSUES_TOKEN_ENV` | `FORGE_MANAGEMENT_ISSUES_TOKEN` when connected |
+| `--issues-insecure` | `FORGE_MANAGEMENT_ISSUES_INSECURE` | `false` |
 | `--request-timeout` | `FORGE_MANAGEMENT_REQUEST_TIMEOUT` | `30s` |
 
 Flags override environment settings. Choose one file or environment token
@@ -111,7 +126,7 @@ backend shows a failure rather than an unconfigured state.
 
 Backend gRPC uses TLS and system trust roots by default. Set the
 `--*-insecure=true` flags only on a trusted local network, because the
-broker and repositories listeners are plaintext. For remote use, expose them
+broker, repositories and issues listeners are plaintext. For remote use, expose them
 through TLS endpoints. Management's listeners are plaintext on loopback; put
 remote HTTP and gRPC access behind TLS endpoints preserving Authorization.
 
@@ -138,13 +153,15 @@ The [proto](proto/management.proto) is the source of truth. Every RPC needs
 | RPC | REST endpoint |
 | --- | --- |
 | `ListRepositories` | `GET /v1/repositories` |
+| `ListIssues` | `GET /v1/issues?scope=&state=&source=&repository=` |
 | `ListConnections` | `GET /v1/connections` |
 | `AddConnection` | `POST /v1/connections` with `{"forge","host","name","credential"}` |
 | `TestConnection` | `POST /v1/connections/{id}/test` |
 | `RotateCredential` | `POST /v1/connections/{id}/credential` with `{"credential"}` |
 | `RemoveConnection` | `DELETE /v1/connections/{id}` |
 
-The browser routes use HTTP Basic authentication: `GET /`, `GET /connections`,
+The browser routes use HTTP Basic authentication: `GET /`, `GET /issues`
+with the same query as `ListIssues`, `GET /connections`,
 `POST /connections`, and `POST /connections/{id}/test`, `/credential` and
 `/delete`. REST and gRPC ignore forwarded identity and `Grpc-Metadata-*`
 headers. The operator token is never rendered in HTML.
@@ -156,13 +173,20 @@ api localhost:8083/v1/connections \
   -d "{\"forge\":\"gitlab\",\"host\":\"gitlab.example.com\",\"credential\":\"$TOKEN\"}"
 unset TOKEN
 api localhost:8083/v1/repositories
+api 'localhost:8083/v1/issues?state=all&repository=group/sub/project'
 ```
 
 JSON uses protobuf lowerCamelCase names and omits default values.
 `{"configured":true}` means a successful empty listing; `{}` means that
 capability is not configured. Repository entries contain `sourceId`, `forge`,
 `host`, `path`, `description` and `visibility`; `sourceId` is the connection
-ID, and with `path` identifies a repository. Connections contain `id`,
+ID, and with `path` identifies a repository. `ListIssues` lists the issues
+assigned to (`scope=assigned`, the default) or created by (`scope=created`)
+each connected account, or one repository's issues when `repository` is set;
+`scope` must then be empty. `state` is `open` (default), `closed` or `all`.
+Issue entries contain `sourceId`, `forge`, `host`, `repository`, `number`,
+`title`, `state`, `author`, `assignees`, `labels`, `comments` and
+`updatedAt`, but no bodies or URLs. Connections contain `id`,
 `name`, `forge`, `baseUrl`, `login`, `status` (`ok`, `invalid` or `revoked`)
 and `checkedAt`. There is no pagination. The backend gRPC receive limit is
 4 MiB; larger listings fail visibly rather than truncating results.
@@ -170,7 +194,7 @@ and `checkedAt`. There is no pagination. The backend gRPC receive limit is
 | Cause | gRPC | HTTP |
 | --- | --- | --- |
 | Missing, wrong or unreadable operator credential | `UNAUTHENTICATED` | 401 |
-| Bad input, or the forge rejected a new token | `INVALID_ARGUMENT` | 400 |
+| Bad input, such as an unknown issue scope, or the forge rejected a new token | `INVALID_ARGUMENT` | 400 |
 | `TestConnection`: the forge rejected the stored token or was unreachable | `FAILED_PRECONDITION` | 400 |
 | Connection not found | `NOT_FOUND` | 404 |
 | No connector configured | `UNIMPLEMENTED` | 501 |

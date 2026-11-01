@@ -13,11 +13,12 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-//go:embed layout.html repositories.html connections.html style.css
+//go:embed layout.html repositories.html issues.html connections.html style.css
 var files embed.FS
 
 var (
 	repositoriesPage = template.Must(template.ParseFS(files, "layout.html", "repositories.html"))
+	issuesPage       = template.Must(template.ParseFS(files, "layout.html", "issues.html"))
 	connectionsPage  = template.Must(template.ParseFS(files, "layout.html", "connections.html"))
 )
 
@@ -50,6 +51,7 @@ type connectionsData struct {
 func (s *Server) pages() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", s.repositories)
+	mux.HandleFunc("GET /issues", s.issues)
 	mux.HandleFunc("GET /style.css", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFileFS(w, r, files, "style.css")
 	})
@@ -110,7 +112,29 @@ func (s *Server) repositories(w http.ResponseWriter, r *http.Request) {
 		Page    string
 		Listing *pb.ListRepositoriesResponse
 		Failed  bool
-	}{"repositories", listing, err != nil})
+		Issues  bool
+	}{"repositories", listing, err != nil, s.client.IssuesConfigured()})
+}
+
+func (s *Server) issues(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	query := &pb.ListIssuesRequest{Scope: q.Get("scope"), State: q.Get("state"), Source: q.Get("source"), Repository: q.Get("repository")}
+	listing, err := s.ListIssues(r.Context(), query)
+	code := http.StatusOK
+	invalid := status.Code(err) == codes.InvalidArgument
+	if err != nil {
+		code = runtime.HTTPStatusFromCode(status.Code(err))
+		if code != http.StatusUnauthorized && !invalid {
+			code = http.StatusServiceUnavailable
+		}
+	}
+	render(w, r, code, issuesPage, struct {
+		Page    string
+		Query   *pb.ListIssuesRequest
+		Listing *pb.ListIssuesResponse
+		Failed  bool
+		Invalid bool
+	}{"issues", query, listing, err != nil, invalid})
 }
 
 // changed redirects after a successful change, so a reload does not repeat

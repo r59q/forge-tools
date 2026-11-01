@@ -1,0 +1,212 @@
+syntax = "proto3";
+
+package forge.issues.v1;
+option go_package = "github.com/r59q/forge-tools/forge-issues/service/issuespb";
+
+import "google/api/annotations.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+// Issues reads and writes issues and comments on every configured source (a
+// forge account, directly or through a forge-connector proxy connection)
+// through one forge-agnostic API. Pull and merge requests are never returned
+// or changed. Every RPC requires the service token in the Authorization:
+// Bearer header (gRPC metadata). Use TLS when it crosses a network boundary.
+// No response contains a forge token.
+//
+// Repository paths, such as owner/name or group/sub/project, contain slashes,
+// so they go in the query or body rather than the URL path.
+service Issues {
+  // ListSources lists the configured sources. GET /v1/sources.
+  rpc ListSources(google.protobuf.Empty) returns (ListSourcesResponse) {
+    option (google.api.http) = { get: "/v1/sources" };
+  }
+  // ListIssues lists one repository's issues, or each source's account-wide
+  // issues. GET /v1/issues?source=&repository=&state=&labels=&scope=.
+  rpc ListIssues(ListIssuesRequest) returns (ListIssuesResponse) {
+    option (google.api.http) = { get: "/v1/issues" };
+  }
+  // GetIssue reads one issue. Without a source the issue must exist on
+  // exactly one source. GET /v1/issues/{number}?repository=&source=.
+  rpc GetIssue(IssueRequest) returns (Issue) {
+    option (google.api.http) = { get: "/v1/issues/{number}" };
+  }
+  // CreateIssue opens an issue. POST /v1/issues.
+  rpc CreateIssue(CreateIssueRequest) returns (Issue) {
+    option (google.api.http) = { post: "/v1/issues" body: "*" };
+  }
+  // UpdateIssue changes an issue. Unset fields are left unchanged.
+  // PATCH /v1/issues/{number}.
+  rpc UpdateIssue(UpdateIssueRequest) returns (Issue) {
+    option (google.api.http) = { patch: "/v1/issues/{number}" body: "*" };
+  }
+  // ListComments lists an issue's comments, oldest first.
+  // GET /v1/issues/{number}/comments?repository=&source=.
+  rpc ListComments(IssueRequest) returns (ListCommentsResponse) {
+    option (google.api.http) = { get: "/v1/issues/{number}/comments" };
+  }
+  // AddComment adds a comment to an issue.
+  // POST /v1/issues/{number}/comments.
+  rpc AddComment(AddCommentRequest) returns (Comment) {
+    option (google.api.http) = { post: "/v1/issues/{number}/comments" body: "*" };
+  }
+}
+
+// Source is a configured source, without its URL or credentials.
+message Source {
+  // id names the source in requests and results.
+  string id = 1;
+  // kind is the forge type: github, gitlab or forgejo.
+  string kind = 2;
+}
+
+// ListSourcesResponse holds the configured sources in order.
+message ListSourcesResponse {
+  repeated Source sources = 1;
+}
+
+// ListIssuesRequest selects the issues to list.
+message ListIssuesRequest {
+  // source reads only this source. Empty reads every source.
+  string source = 1;
+  // repository lists this repository's issues, such as owner/name. On every
+  // source, sources without it are skipped. Empty lists each source's
+  // account-wide issues, selected by scope.
+  string repository = 2;
+  // state is open (default), closed or all.
+  string state = 3;
+  // labels keeps issues that have every label, ignoring case. In REST,
+  // repeat the parameter: labels=bug&labels=ui.
+  repeated string labels = 4;
+  // scope is assigned (default) or created. It must be empty when
+  // repository is set.
+  string scope = 5;
+}
+
+// ListIssuesResponse holds issues merged in source order.
+message ListIssuesResponse {
+  repeated Issue issues = 1;
+}
+
+// IssueRequest names one issue.
+message IssueRequest {
+  // number is the issue's number in its repository: the GitHub or Forgejo
+  // number, or the GitLab iid.
+  int64 number = 1;
+  // repository is the full repository path, such as owner/name or
+  // group/sub/project. It is not URL-encoded.
+  string repository = 2;
+  // source is a source ID. Empty searches every source.
+  string source = 3;
+}
+
+// CreateIssueRequest is an issue to open.
+message CreateIssueRequest {
+  // source is required.
+  string source = 1;
+  // repository is the full repository path.
+  string repository = 2;
+  // title is required.
+  string title = 3;
+  string body = 4;
+  // labels are label names.
+  repeated string labels = 5;
+  // assignees are logins.
+  repeated string assignees = 6;
+}
+
+// StringList is a list that can be told apart from no list: set it with no
+// values to clear.
+message StringList {
+  repeated string values = 1;
+}
+
+// UpdateIssueRequest changes an issue. At least one change is required.
+message UpdateIssueRequest {
+  int64 number = 1;
+  // source is required.
+  string source = 2;
+  string repository = 3;
+  // title must not be empty.
+  optional string title = 4;
+  // body sets the description; an empty string clears it.
+  optional string body = 5;
+  // state is open or closed.
+  optional string state = 6;
+  // labels replaces the label names.
+  StringList labels = 7;
+  // assignees replaces the assigned logins.
+  StringList assignees = 8;
+}
+
+// AddCommentRequest is a comment to add.
+message AddCommentRequest {
+  int64 number = 1;
+  // source is required.
+  string source = 2;
+  string repository = 3;
+  // body is the comment text. It must not be empty.
+  string body = 4;
+}
+
+// SourceInfo says where an issue was read from.
+message SourceInfo {
+  string id = 1;
+  string kind = 2;
+  // host is the forge's web host, such as gitlab.com.
+  string host = 3;
+}
+
+// User is a forge account.
+message User {
+  string login = 1;
+  // web_url is the profile page.
+  string web_url = 2;
+}
+
+// Issue is the shared model of an issue on any forge.
+message Issue {
+  SourceInfo source = 1;
+  // repository is the full repository path.
+  string repository = 2;
+  // id is the forge's own global issue ID.
+  string id = 3;
+  // number is the number within the repository; the GitLab iid.
+  int64 number = 4;
+  string title = 5;
+  string body = 6;
+  // state is open or closed.
+  string state = 7;
+  User author = 8;
+  repeated User assignees = 9;
+  // labels are label names.
+  repeated string labels = 10;
+  // milestone is the milestone's title.
+  string milestone = 11;
+  // comments is the comment count, without GitLab system notes.
+  int32 comments = 12;
+  // locked means only collaborators can comment.
+  bool locked = 13;
+  string web_url = 14;
+  google.protobuf.Timestamp created_at = 15;
+  google.protobuf.Timestamp updated_at = 16;
+  // closed_at is unset for open issues.
+  google.protobuf.Timestamp closed_at = 17;
+}
+
+// Comment is a comment on an issue.
+message Comment {
+  // id is the forge's own comment ID.
+  string id = 1;
+  User author = 2;
+  string body = 3;
+  // web_url is the comment's place on the issue page.
+  string web_url = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp updated_at = 6;
+}
+
+// ListCommentsResponse holds comments, oldest first.
+message ListCommentsResponse {
+  repeated Comment comments = 1;
+}

@@ -19,6 +19,7 @@ import (
 
 	"github.com/r59q/forge-tools/forge-core/forgeapi/forgeauth"
 	"github.com/r59q/forge-tools/forge-core/forgeapi/forgeauth/github"
+	"github.com/r59q/forge-tools/forge-issues/library/issues"
 	"github.com/r59q/forge-tools/forge-repositories/library/repositories"
 	repoapi "github.com/r59q/forge-tools/forge-repositories/service/api"
 	repopb "github.com/r59q/forge-tools/forge-repositories/service/repositoriespb"
@@ -38,36 +39,50 @@ func TestSettings(t *testing.T) {
 		t.Fatalf("settings: %+v %v", s, err)
 	}
 	s, err = parse([]string{"--repositories-address=localhost:9092"}, getenv, io.Discard)
-	if err != nil || s.repositoriesTokenEnv != "FORGE_MANAGEMENT_REPOSITORIES_TOKEN" || s.repositoriesInsecure {
+	if err != nil || s.repositoriesTokenEnv != "FORGE_MANAGEMENT_REPOSITORIES_TOKEN" || s.repositoriesInsecure || s.issuesAddress != "" {
 		t.Fatalf("backend settings: %+v %v", s, err)
+	}
+	values["FORGE_MANAGEMENT_ISSUES_ADDRESS"] = "localhost:9094"
+	s, err = parse([]string{"--issues-insecure=true"}, getenv, io.Discard)
+	delete(values, "FORGE_MANAGEMENT_ISSUES_ADDRESS")
+	if err != nil || s.issuesAddress != "localhost:9094" || s.issuesTokenEnv != "FORGE_MANAGEMENT_ISSUES_TOKEN" || !s.issuesInsecure {
+		t.Fatalf("issue backend settings: %+v %v", s, err)
 	}
 	for _, args := range [][]string{
 		{"--token-file=t", "--token-env=T"}, {"--request-timeout=0"}, {"--request-timeout=invalid-secret"}, {"extra"}, {"--unknown=secret"},
 		{"--http-listen="}, {"--grpc-listen="}, {"--repositories-insecure=invalid"}, {"--repositories-insecure=true"}, {"--repositories-token-env=T"},
 		{"--repositories-address=x", "--repositories-token-file=t", "--repositories-token-env=T"},
+		{"--issues-insecure=invalid"}, {"--issues-insecure=true"}, {"--issues-token-env=T"}, {"--issues-token-file=t"},
+		{"--issues-address=x", "--issues-token-file=t", "--issues-token-env=T"},
 	} {
 		if _, err := parse(args, getenv, io.Discard); err == nil || strings.Contains(err.Error(), "secret") {
 			t.Fatalf("accepted or echoed invalid flags: %v %v", args, err)
 		}
 	}
 	s, err = parse([]string{"--connector-address=broker:9090", "--connector-insecure=true", "--proxy-token-file=/p"}, getenv, io.Discard)
-	if err != nil || s.connectorTokenEnv != "FORGE_MANAGEMENT_CONNECTOR_ADMIN_TOKEN" || !s.connectorInsecure || len(s.clients) != 2 {
+	if err != nil || s.connectorTokenEnv != "FORGE_MANAGEMENT_CONNECTOR_ADMIN_TOKEN" || !s.connectorInsecure || len(s.clients) != 3 {
 		t.Fatalf("connector settings: %+v %v", s, err)
 	}
-	if p, r := s.clients[0], s.clients[1]; p.file != "/p" || p.optional || !p.canIssueTokens || r.env != "FORGE_MANAGEMENT_REPOSITORIES_CONNECTOR_TOKEN" || !r.optional || r.canIssueTokens {
+	if p, r, i := s.clients[0], s.clients[1], s.clients[2]; p.file != "/p" || p.optional || !p.canIssueTokens || r.env != "FORGE_MANAGEMENT_REPOSITORIES_CONNECTOR_TOKEN" || !r.optional || r.canIssueTokens ||
+		i.name != "forge-issues" || i.env != "FORGE_MANAGEMENT_ISSUES_CONNECTOR_TOKEN" || !i.optional || i.canIssueTokens {
 		t.Fatalf("client settings: %+v", s.clients)
+	}
+	s, err = parse([]string{"--connector-address=broker:9090", "--issues-connector-token-file=/i"}, getenv, io.Discard)
+	if err != nil || s.clients[2].file != "/i" || s.clients[2].optional {
+		t.Fatalf("issues client settings: %+v %v", s.clients, err)
 	}
 	for _, args := range [][]string{
 		{"--connector-insecure=true"}, {"--connector-admin-token-env=T"}, {"--proxy-token-env=T"}, {"--connector-insecure=yes"},
 		{"--connector-address=x", "--connector-admin-token-file=t", "--connector-admin-token-env=T"},
 		{"--connector-address=x", "--repositories-connector-token-file=t", "--repositories-connector-token-env=T"},
+		{"--connector-address=x", "--issues-connector-token-file=t", "--issues-connector-token-env=T"}, {"--issues-connector-token-env=T"},
 	} {
 		if _, err := parse(args, getenv, io.Discard); err == nil {
 			t.Fatalf("accepted invalid connector flags: %v", args)
 		}
 	}
 	var help bytes.Buffer
-	if _, err := parse([]string{"--help"}, getenv, &help); !errors.Is(err, flag.ErrHelp) || !strings.Contains(help.String(), "repositories-address") {
+	if _, err := parse([]string{"--help"}, getenv, &help); !errors.Is(err, flag.ErrHelp) || !strings.Contains(help.String(), "repositories-address") || !strings.Contains(help.String(), "issues-address") {
 		t.Fatal("missing help")
 	}
 }
@@ -97,6 +112,24 @@ func TestCredentialConfiguration(t *testing.T) {
 		if err == nil || strings.Contains(err.Error(), "synthetic") || strings.Contains(err.Error(), "secret") {
 			t.Fatal("accepted or leaked invalid backend token", err)
 		}
+	}
+	for _, env := range []string{"MANAGEMENT_TEST_EMPTY", "MANAGEMENT_TEST_INVALID", "MANAGEMENT_TEST_TOKEN"} {
+		_, _, err := (settings{issuesAddress: "localhost:1", issuesTokenEnv: env}).issueReader(context.Background(), op)
+		if err == nil || strings.Contains(err.Error(), "synthetic") || strings.Contains(err.Error(), "secret") {
+			t.Fatal("accepted or leaked invalid issue backend token", err)
+		}
+	}
+	issueFile := writeToken(t, "issues-synthetic")
+	issueReader, closeIssues, err := (settings{issuesAddress: "localhost:1", issuesTokenFile: issueFile}).issueReader(context.Background(), op)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeIssues()
+	if err := os.WriteFile(issueFile, []byte("operator-synthetic"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := issueReader.List(context.Background(), issues.ListOptions{}); err == nil {
+		t.Fatal("rotation allowed a shared operator/issue backend credential")
 	}
 	file := writeToken(t, "backend-synthetic\n")
 	reader, closeBackend, err := (settings{repositoriesAddress: "localhost:1", repositoriesTokenFile: file}).repositoryReader(context.Background(), op)

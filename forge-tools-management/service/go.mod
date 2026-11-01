@@ -7,6 +7,8 @@ require (
 	github.com/r59q/forge-tools/forge-connector/broker v0.0.0
 	github.com/r59q/forge-tools/forge-connector/library v0.0.0
 	github.com/r59q/forge-tools/forge-core/forgeapi v0.0.0
+	github.com/r59q/forge-tools/forge-issues/library v0.0.0
+	github.com/r59q/forge-tools/forge-issues/service v0.0.0
 	github.com/r59q/forge-tools/forge-repositories/library v0.0.0
 	github.com/r59q/forge-tools/forge-repositories/service v0.0.0
 	github.com/r59q/forge-tools/forge-tools-management/library v0.0.0
@@ -33,3 +35,7 @@ replace github.com/r59q/forge-tools/forge-tools-management/library => ../library
 replace github.com/r59q/forge-tools/forge-connector/library => ../../forge-connector/library
 
 replace github.com/r59q/forge-tools/forge-connector/broker => ../../forge-connector/broker
+
+replace github.com/r59q/forge-tools/forge-issues/library => ../../forge-issues/library
+
+replace github.com/r59q/forge-tools/forge-issues/service => ../../forge-issues/service

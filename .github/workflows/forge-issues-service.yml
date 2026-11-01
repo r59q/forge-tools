@@ -1,0 +1,53 @@
+name: forge-issues-service
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - forge-issues/service/**
+      - forge-issues/library/**
+      - forge-connector/library/**
+      - forge-core/forgeapi/**
+      - .dockerignore
+      - .github/workflows/forge-issues-service.yml
+      - .github/workflows/reusable-*.yml
+  pull_request:
+    paths:
+      - forge-issues/service/**
+      - forge-issues/library/**
+      - forge-connector/library/**
+      - forge-core/forgeapi/**
+      - .dockerignore
+      - .github/workflows/forge-issues-service.yml
+      - .github/workflows/reusable-*.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: ./.github/workflows/reusable-go.yml
+    with:
+      dir: forge-issues/service
+
+  # Pull requests build the image without pushing or registry access.
+  image:
+    if: github.event_name == 'pull_request'
+    needs: test
+    uses: ./.github/workflows/reusable-docker.yml
+    with:
+      image: forge-issues-service
+      dockerfile: forge-issues/service/Dockerfile
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+    needs: test
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/reusable-docker.yml
+    with:
+      image: forge-issues-service
+      dockerfile: forge-issues/service/Dockerfile
+      push: true

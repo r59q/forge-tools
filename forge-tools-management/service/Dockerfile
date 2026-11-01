@@ -10,6 +10,8 @@ COPY forge-connector/library/go.mod forge-connector/library/go.sum forge-connect
 COPY forge-connector/broker/go.mod forge-connector/broker/go.sum forge-connector/broker/
 COPY forge-repositories/library/go.mod forge-repositories/library/
 COPY forge-repositories/service/go.mod forge-repositories/service/go.sum forge-repositories/service/
+COPY forge-issues/library/go.mod forge-issues/library/
+COPY forge-issues/service/go.mod forge-issues/service/go.sum forge-issues/service/
 COPY forge-tools-management/library/go.mod forge-tools-management/library/
 COPY forge-tools-management/service/go.mod forge-tools-management/service/go.sum forge-tools-management/service/
 WORKDIR /src/forge-tools-management/service
@@ -19,6 +21,8 @@ COPY forge-core/forgeapi/ forge-core/forgeapi/
 COPY forge-connector/library/ forge-connector/library/
 COPY forge-repositories/library/ forge-repositories/library/
 COPY forge-repositories/service/ forge-repositories/service/
+COPY forge-issues/library/ forge-issues/library/
+COPY forge-issues/service/ forge-issues/service/
 COPY forge-tools-management/library/ forge-tools-management/library/
 COPY forge-tools-management/service/ forge-tools-management/service/
 WORKDIR /src/forge-tools-management/service

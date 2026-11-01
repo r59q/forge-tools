@@ -97,12 +97,13 @@ func waitForClient(t *testing.T, m *broker.Manager, token string) {
 func TestRegisterServiceClients(t *testing.T) {
 	logf = t.Logf
 	t.Cleanup(func() { logf = log.Printf })
-	proxyToken, reposToken := strings.Repeat("p", 40), strings.Repeat("r", 40)
+	proxyToken, reposToken, issuesToken := strings.Repeat("p", 40), strings.Repeat("r", 40), strings.Repeat("i", 40)
 	// The broker starts after management, which retries until it answers.
 	m, address, _ := startBroker(t, 1500*time.Millisecond)
 	t.Setenv("MANAGEMENT_TEST_ADMIN", "admin-synthetic")
 	t.Setenv("FORGE_MANAGEMENT_PROXY_TOKEN", proxyToken)
 	t.Setenv("FORGE_MANAGEMENT_REPOSITORIES_CONNECTOR_TOKEN", reposToken)
+	t.Setenv("FORGE_MANAGEMENT_ISSUES_CONNECTOR_TOKEN", issuesToken)
 	args := []string{"--token-file=" + writeToken(t, "operator-synthetic"), "--http-listen=127.0.0.1:0", "--grpc-listen=127.0.0.1:0", "--connector-address=" + address, "--connector-insecure=true", "--connector-admin-token-env=MANAGEMENT_TEST_ADMIN"}
 	s, err := parse(args, func(string) string { return "" }, io.Discard)
 	if err != nil {
@@ -111,8 +112,9 @@ func TestRegisterServiceClients(t *testing.T) {
 	startManagement(t, s)
 	waitForClient(t, m, proxyToken)
 	waitForClient(t, m, reposToken)
+	waitForClient(t, m, issuesToken)
 	clients, err := m.ListClients(context.Background())
-	if err != nil || len(clients) != 2 {
+	if err != nil || len(clients) != 3 {
 		t.Fatalf("clients = %+v, %v", clients, err)
 	}
 	for _, c := range clients {
@@ -129,7 +131,7 @@ func TestRegisterServiceClients(t *testing.T) {
 	if _, err := m.ClientConnections(context.Background(), forgeauth.StaticToken(proxyToken)); !errors.Is(err, broker.ErrUnauthorized) {
 		t.Fatalf("old proxy token = %v", err)
 	}
-	if clients, _ := m.ListClients(context.Background()); len(clients) != 2 {
+	if clients, _ := m.ListClients(context.Background()); len(clients) != 3 {
 		t.Fatalf("old client kept: %+v", clients)
 	}
 }

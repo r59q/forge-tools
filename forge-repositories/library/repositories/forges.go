@@ -26,9 +26,9 @@ type forge interface {
 	updateMethod() string
 	// repository, branch and tag decode one API object. Repository.Path
 	// must be set; Owner, Name and Source are filled in by the caller.
-	repository(raw rawJSON) (Repository, error)
-	branch(raw rawJSON) (Branch, error)
-	tag(raw rawJSON) (Tag, error)
+	repository(raw json.RawMessage) (Repository, error)
+	branch(raw json.RawMessage) (Branch, error)
+	tag(raw json.RawMessage) (Tag, error)
 }
 
 // forges holds the supported adapters by kind.
@@ -76,7 +76,7 @@ func (github) branchesPath(repo string) string     { return repo + "/branches?pe
 func (github) tagsPath(repo string) string         { return repo + "/tags?per_page=100" }
 func (github) updateMethod() string                { return http.MethodPatch }
 
-func (github) repository(raw rawJSON) (Repository, error) {
+func (github) repository(raw json.RawMessage) (Repository, error) {
 	var v githubRepo
 	if err := json.Unmarshal(raw, &v); err != nil {
 		return Repository{}, err
@@ -93,7 +93,7 @@ func (github) repository(raw rawJSON) (Repository, error) {
 	}, nil
 }
 
-func (github) branch(raw rawJSON) (Branch, error) {
+func (github) branch(raw json.RawMessage) (Branch, error) {
 	var v struct {
 		Name   string `json:"name"`
 		Commit struct {
@@ -105,7 +105,7 @@ func (github) branch(raw rawJSON) (Branch, error) {
 	return Branch{Name: v.Name, SHA: v.Commit.SHA, Protected: v.Protected}, err
 }
 
-func (github) tag(raw rawJSON) (Tag, error) {
+func (github) tag(raw json.RawMessage) (Tag, error) {
 	var v struct {
 		Name   string `json:"name"`
 		Commit struct {
@@ -147,7 +147,7 @@ func (gitlab) branchesPath(repo string) string { return repo + "/repository/bran
 func (gitlab) tagsPath(repo string) string     { return repo + "/repository/tags?per_page=100" }
 func (gitlab) updateMethod() string            { return http.MethodPut }
 
-func (gitlab) repository(raw rawJSON) (Repository, error) {
+func (gitlab) repository(raw json.RawMessage) (Repository, error) {
 	var v gitlabProject
 	if err := json.Unmarshal(raw, &v); err != nil {
 		return Repository{}, err
@@ -165,7 +165,7 @@ func (gitlab) repository(raw rawJSON) (Repository, error) {
 	}, nil
 }
 
-func (gitlab) branch(raw rawJSON) (Branch, error) {
+func (gitlab) branch(raw json.RawMessage) (Branch, error) {
 	var v struct {
 		Name   string `json:"name"`
 		Commit struct {
@@ -177,7 +177,7 @@ func (gitlab) branch(raw rawJSON) (Branch, error) {
 	return Branch{Name: v.Name, SHA: v.Commit.ID, Protected: v.Protected}, err
 }
 
-func (gitlab) tag(raw rawJSON) (Tag, error) {
+func (gitlab) tag(raw json.RawMessage) (Tag, error) {
 	var v struct {
 		Name   string `json:"name"`
 		Commit struct {
@@ -213,7 +213,7 @@ func (forgejo) branchesPath(repo string) string     { return repo + "/branches?l
 func (forgejo) tagsPath(repo string) string         { return repo + "/tags?limit=50" }
 func (forgejo) updateMethod() string                { return http.MethodPatch }
 
-func (forgejo) repository(raw rawJSON) (Repository, error) {
+func (forgejo) repository(raw json.RawMessage) (Repository, error) {
 	var v forgejoRepo
 	if err := json.Unmarshal(raw, &v); err != nil {
 		return Repository{}, err
@@ -226,7 +226,7 @@ func (forgejo) repository(raw rawJSON) (Repository, error) {
 	}, nil
 }
 
-func (forgejo) branch(raw rawJSON) (Branch, error) {
+func (forgejo) branch(raw json.RawMessage) (Branch, error) {
 	var v struct {
 		Name   string `json:"name"`
 		Commit struct {
@@ -238,7 +238,7 @@ func (forgejo) branch(raw rawJSON) (Branch, error) {
 	return Branch{Name: v.Name, SHA: v.Commit.ID, Protected: v.Protected}, err
 }
 
-func (forgejo) tag(raw rawJSON) (Tag, error) {
+func (forgejo) tag(raw json.RawMessage) (Tag, error) {
 	var v struct {
 		Name   string `json:"name"`
 		Commit struct {

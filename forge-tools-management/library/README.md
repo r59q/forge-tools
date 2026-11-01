@@ -6,11 +6,13 @@ Sets up and inspects forge-tools capabilities. Each is optional.
 client := management.New(management.Config{
 	Connector:    admin,  // *broker.Manager or a broker admin API adapter
 	Repositories: reader, // *repositories.Client or a remote adapter
+	Issues:       issues, // *issues.Client or a remote adapter
 })
 conn, err := client.AddConnection(ctx, management.NewConnection{
 	Kind: forgeauth.GitLab, Host: "gitlab.example.com", Name: "work", Credential: token,
 })
 listing, err := client.ListRepositories(ctx)
+open, err := client.ListIssues(ctx, management.IssueQuery{})
 ```
 
 Connections:
@@ -28,6 +30,14 @@ Connections:
 Repositories: `Configured: false` means no repository capability.
 `Configured: true` with no entries means a successful empty listing.
 Entries retain full paths, source IDs, forge kinds, hosts and visibility.
+
+Issues: `ListIssues` takes an `IssueQuery`. The zero value lists the open
+issues assigned to each connected account. `Scope` picks assigned or
+created issues, `State` picks open, closed or all, and `Repository` (with an
+optional `Source`) lists one repository's issues instead. A bad scope or
+state is `ErrInvalid`. `Configured` works as for repositories. Entries keep
+source IDs, forge kinds, hosts, repository paths and numbers, but not issue
+bodies or URLs.
 
 Errors are fixed values, such as `ErrInvalid` and `ErrNotFound`. They never
 include credentials, upstream details or partial results.

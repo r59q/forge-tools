@@ -1,0 +1,29 @@
+name: forge-tools-management-library
+
+# Libraries are published as Go modules through git, so there is no deploy job.
+on:
+  push:
+    branches: [master]
+    paths:
+      - forge-tools-management/library/**
+      - forge-repositories/library/**
+      - forge-core/forgeapi/**
+      - .github/workflows/forge-tools-management-library.yml
+      - .github/workflows/reusable-go.yml
+  pull_request:
+    paths:
+      - forge-tools-management/library/**
+      - forge-repositories/library/**
+      - forge-core/forgeapi/**
+      - .github/workflows/forge-tools-management-library.yml
+      - .github/workflows/reusable-go.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: ./.github/workflows/reusable-go.yml
+    with:
+      dir: forge-tools-management/library

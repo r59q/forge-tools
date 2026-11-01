@@ -1,0 +1,9 @@
+{
+  "sources": [
+    {
+      "id": "personal-github",
+      "kind": "github",
+      "tokenEnv": "GITHUB_TOKEN"
+    }
+  ]
+}

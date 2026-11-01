@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package forge.management.v1;
+option go_package = "github.com/r59q/forge-tools/forge-tools-management/service/managementpb";
+
+import "google/api/annotations.proto";
+import "google/protobuf/empty.proto";
+
+// Management provides read-only inspection. Every RPC requires the management
+// operator token in Authorization: Bearer metadata. Use TLS across networks.
+service Management {
+  // ListRepositories returns a complete listing or an error, never partial
+  // results. GET /v1/repositories. Backend authentication failures are
+  // UNAVAILABLE, distinct from caller UNAUTHENTICATED errors.
+  rpc ListRepositories(google.protobuf.Empty) returns (ListRepositoriesResponse) {
+    option (google.api.http) = { get: "/v1/repositories" };
+  }
+}
+
+// ListRepositoriesResponse distinguishes absent capabilities from empty lists.
+message ListRepositoriesResponse {
+  // configured is false when management has no repository capability.
+  bool configured = 1;
+  // repositories is complete only when the RPC succeeds.
+  repeated Repository repositories = 2;
+}
+
+// Repository contains display metadata, without URLs or credentials.
+message Repository {
+  // source_id and path together identify this repository.
+  string source_id = 1;
+  // forge is the kind, such as github, gitlab or forgejo.
+  string forge = 2;
+  // host is the originating forge's web host.
+  string host = 3;
+  // path is the full repository path, including any nested groups.
+  string path = 4;
+  string description = 5;
+  // visibility is public, internal or private, as reported upstream.
+  string visibility = 6;
+}

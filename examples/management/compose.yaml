@@ -1,0 +1,26 @@
+# Build from the repository root through each project's Dockerfile.
+services:
+  management:
+    build:
+      context: ../..
+      dockerfile: forge-tools-management/service/Dockerfile
+    environment:
+      FORGE_MANAGEMENT_TOKEN: ${FORGE_MANAGEMENT_TOKEN:?set in .env}
+      FORGE_MANAGEMENT_REPOSITORIES_ADDRESS: ${MANAGEMENT_REPOSITORIES_ADDRESS:-}
+      FORGE_MANAGEMENT_REPOSITORIES_INSECURE: ${MANAGEMENT_REPOSITORIES_INSECURE:-false}
+      FORGE_MANAGEMENT_REPOSITORIES_TOKEN: ${FORGE_REPOSITORIES_TOKEN:-}
+    ports:
+      - "127.0.0.1:8083:8080"
+      - "127.0.0.1:9093:9090"
+
+  repositories:
+    profiles: [repositories]
+    build:
+      context: ../..
+      dockerfile: forge-repositories/service/Dockerfile
+    environment:
+      FORGE_REPOSITORIES_TOKEN: ${FORGE_REPOSITORIES_TOKEN:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+    volumes:
+      - ./repositories.json:/config/repositories.json:ro
+    # Only management connects; no host port or unrelated service is needed.

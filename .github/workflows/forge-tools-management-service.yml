@@ -1,0 +1,77 @@
+name: forge-tools-management-service
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - forge-tools-management/service/**
+      - forge-tools-management/library/**
+      - forge-repositories/service/**
+      - forge-repositories/library/**
+      - forge-core/forgeapi/**
+      - examples/management/**
+      - .dockerignore
+      - .github/workflows/forge-tools-management-service.yml
+      - .github/workflows/reusable-*.yml
+  pull_request:
+    paths:
+      - forge-tools-management/service/**
+      - forge-tools-management/library/**
+      - forge-repositories/service/**
+      - forge-repositories/library/**
+      - forge-core/forgeapi/**
+      - examples/management/**
+      - .dockerignore
+      - .github/workflows/forge-tools-management-service.yml
+      - .github/workflows/reusable-*.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  example:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate standalone example
+        env:
+          FORGE_MANAGEMENT_TOKEN: example-operator-token
+        run: docker compose -f examples/management/compose.yaml config --quiet
+      - name: Validate connected example
+        env:
+          FORGE_MANAGEMENT_TOKEN: example-operator-token
+          FORGE_REPOSITORIES_TOKEN: example-repository-token
+          GITHUB_TOKEN: example-forge-token
+          MANAGEMENT_REPOSITORIES_ADDRESS: repositories:9090
+          MANAGEMENT_REPOSITORIES_INSECURE: "true"
+        run: docker compose -f examples/management/compose.yaml --profile repositories config --quiet
+
+  test:
+    uses: ./.github/workflows/reusable-go.yml
+    with:
+      dir: forge-tools-management/service
+
+  # Pull requests build the image without pushing or registry access.
+  image:
+    if: github.event_name == 'pull_request'
+    needs: test
+    uses: ./.github/workflows/reusable-docker.yml
+    with:
+      image: forge-tools-management-service
+      dockerfile: forge-tools-management/service/Dockerfile
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+    needs: test
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/reusable-docker.yml
+    with:
+      image: forge-tools-management-service
+      dockerfile: forge-tools-management/service/Dockerfile
+      push: true

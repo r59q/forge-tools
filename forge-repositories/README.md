@@ -12,6 +12,7 @@ does not depend on forge-connector itself.
 
 ```text
 library/          Go module: shared model and forge adapters
+service/          REST and gRPC service over the library, with a Dockerfile
 ```
 
 It reads repository metadata, branches with the default marked, and tags,

@@ -7,9 +7,13 @@ Run the forge-connector services with Docker Compose and use them with
 docker-compose.yml   broker and proxy from ghcr.io
 .env.example         secrets for docker-compose.yml
 go/                  Go programs using the libraries and the broker API
+management/          management UI alone or with a repositories service
 ```
 
 ## Run the services
+
+For a read-only repository web interface, see the
+[management setup example](management/). It can run without the broker or proxy.
 
 [docker-compose.yml](docker-compose.yml) runs the published
 [broker](../forge-connector/broker/) and [proxy](../forge-connector/proxy/)

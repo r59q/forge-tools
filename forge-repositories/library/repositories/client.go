@@ -26,11 +26,9 @@ type source struct {
 }
 
 // New returns a Client for the given sources. Each needs a unique, non-empty
-// ID and an open session of a supported kind.
+// ID and an open session of a supported kind. A Client without sources lists
+// nothing and finds nothing.
 func New(sources ...Source) (*Client, error) {
-	if len(sources) == 0 {
-		return nil, fmt.Errorf("%w: no sources", ErrInvalid)
-	}
 	c := &Client{byID: map[string]*source{}}
 	for _, s := range sources {
 		if strings.TrimSpace(s.ID) == "" {

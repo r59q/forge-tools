@@ -24,13 +24,14 @@ import (
 )
 
 func TestSettings(t *testing.T) {
-	values := map[string]string{"FORGE_REPOSITORIES_CONFIG": "env.json", "FORGE_REPOSITORIES_GRPC_LISTEN": "127.0.0.1:9001", "FORGE_REPOSITORIES_HTTP_LISTEN": "127.0.0.1:9002", "FORGE_REPOSITORIES_REQUEST_TIMEOUT": "2s"}
+	values := map[string]string{"FORGE_REPOSITORIES_CONNECTOR_URL": "http://env", "FORGE_REPOSITORIES_GRPC_LISTEN": "127.0.0.1:9001", "FORGE_REPOSITORIES_HTTP_LISTEN": "127.0.0.1:9002", "FORGE_REPOSITORIES_REQUEST_TIMEOUT": "2s"}
 	getenv := func(name string) string { return values[name] }
-	s, err := parse([]string{"--config=flag.json", "--request-timeout=3s"}, getenv, io.Discard)
-	if err != nil || s.configPath != "flag.json" || s.timeout != 3*time.Second || s.grpcAddress != "127.0.0.1:9001" || s.httpAddress != "127.0.0.1:9002" || s.tokenEnv != "FORGE_REPOSITORIES_TOKEN" {
+	s, err := parse([]string{"--connector-url=http://flag", "--request-timeout=3s"}, getenv, io.Discard)
+	if err != nil || s.connectorURL != "http://flag" || s.timeout != 3*time.Second || s.grpcAddress != "127.0.0.1:9001" || s.httpAddress != "127.0.0.1:9002" ||
+		s.tokenEnv != "FORGE_REPOSITORIES_TOKEN" || s.connectorTokenEnv != "FORGE_REPOSITORIES_CONNECTOR_TOKEN" {
 		t.Fatalf("settings: %+v %v", s, err)
 	}
-	for _, args := range [][]string{{"--token-file=t", "--token-env=T"}, {"--request-timeout=0"}, {"--config="}, {"extra"}, {"--unexpected=secret-sentinel"}} {
+	for _, args := range [][]string{{"--token-file=t", "--token-env=T"}, {"--connector-token-file=t", "--connector-token-env=T"}, {"--request-timeout=0"}, {"--connector-url="}, {"extra"}, {"--unexpected=secret-sentinel"}} {
 		if _, err := parse(args, getenv, io.Discard); err == nil || strings.Contains(err.Error(), "secret-sentinel") {
 			t.Fatalf("parse(%q) accepted or echoed input: %v", args, err)
 		}
@@ -40,9 +41,38 @@ func TestSettings(t *testing.T) {
 		t.Fatal("invalid environment timeout accepted or echoed")
 	}
 	var help bytes.Buffer
-	if _, err := parse([]string{"--help"}, getenv, &help); !errors.Is(err, flag.ErrHelp) || !strings.Contains(help.String(), "-config") {
+	if _, err := parse([]string{"--help"}, getenv, &help); !errors.Is(err, flag.ErrHelp) || !strings.Contains(help.String(), "-connector-url") {
 		t.Fatal("missing flag help")
 	}
+}
+
+// fakeProxy serves GET /connections and one GitHub connection, conn, like a
+// forge-connector proxy. It accepts only the client token "client".
+func fakeProxy(t *testing.T) *httptest.Server {
+	t.Helper()
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// GitLab sessions send PRIVATE-TOKEN, which the proxy accepts for GitLab.
+		if r.Header.Get("Authorization") != "Bearer client" && r.Header.Get("Private-Token") != "client" {
+			http.Error(w, "proxy: Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		switch r.URL.Path {
+		case "/connections":
+			fmt.Fprint(w, `{"connections":[
+				{"id":"conn","name":"me","kind":"github","status":"ok"},
+				{"id":"old","kind":"gitlab","status":"revoked"},
+				{"id":"svn","kind":"svn","status":"ok"},
+				{"id":"work","kind":"gitlab","status":"ok"}]}`)
+		case "/c/conn/user/repos":
+			fmt.Fprint(w, `[{"id":1,"full_name":"mrbean/teddy","html_url":"https://github.com/mrbean/teddy"}]`)
+		case "/c/work/projects":
+			fmt.Fprint(w, `[]`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(s.Close)
+	return s
 }
 
 func writeFile(t *testing.T, name, content string) string {
@@ -54,80 +84,11 @@ func writeFile(t *testing.T, name, content string) string {
 	return path
 }
 
-func TestConfigErrors(t *testing.T) {
-	t.Setenv("TEST_TOKEN", "forge-secret-sentinel")
-	for name, content := range map[string]string{
-		"not json":            `{"sources":`,
-		"unknown field":       `{"sources":[{"id":"a","kind":"github","tokenEnv":"TEST_TOKEN","token":"forge-secret-sentinel"}]}`,
-		"no sources":          `{}`,
-		"no id":               `{"sources":[{"kind":"github","tokenEnv":"TEST_TOKEN"}]}`,
-		"no kind":             `{"sources":[{"id":"a","tokenEnv":"TEST_TOKEN"}]}`,
-		"unknown kind":        `{"sources":[{"id":"a","kind":"svn","tokenEnv":"TEST_TOKEN"}]}`,
-		"no token":            `{"sources":[{"id":"a","kind":"github"}]}`,
-		"two tokens":          `{"sources":[{"id":"a","kind":"github","tokenEnv":"TEST_TOKEN","tokenFile":"/x"}]}`,
-		"unset token":         `{"sources":[{"id":"a","kind":"github","tokenEnv":"TEST_UNSET_TOKEN"}]}`,
-		"connection no proxy": `{"sources":[{"kind":"github","connection":"c1"}]}`,
-		"connection token":    `{"proxy":{"url":"http://p","tokenEnv":"TEST_TOKEN"},"sources":[{"kind":"github","connection":"c1","tokenEnv":"TEST_TOKEN"}]}`,
-		"bad proxy url":       `{"proxy":{"url":"ftp://p","tokenEnv":"TEST_TOKEN"},"sources":[{"kind":"github","connection":"c1"}]}`,
-		"proxy no token":      `{"proxy":{"url":"http://p"},"sources":[{"kind":"github","connection":"c1"}]}`,
-		"duplicate id":        `{"proxy":{"url":"http://p","tokenEnv":"TEST_TOKEN"},"sources":[{"kind":"github","connection":"c1"},{"id":"c1","kind":"gitlab","connection":"c2"}]}`,
-	} {
-		cfg, err := readConfig(writeFile(t, "config.json", content))
-		if err == nil {
-			_, err = cfg.client(context.Background())
-		}
-		if err == nil {
-			t.Errorf("%s: accepted", name)
-		} else if strings.Contains(err.Error(), "sentinel") {
-			t.Errorf("%s: error leaks the token: %v", name, err)
-		}
-	}
-	if _, err := readConfig(filepath.Join(t.TempDir(), "missing.json")); err == nil {
-		t.Error("missing file accepted")
-	}
-}
-
-func TestConfigSources(t *testing.T) {
-	t.Setenv("TEST_PROXY_TOKEN", "client")
-	tokenFile := writeFile(t, "gitlab-token", "forge\n")
-	cfg, err := readConfig(writeFile(t, "config.json", fmt.Sprintf(`{
-		"proxy": {"url": "http://proxy:8081/", "tokenEnv": "TEST_PROXY_TOKEN"},
-		"sources": [
-			{"kind": "github", "connection": "c/1"},
-			{"id": "work", "kind": "gitlab", "baseUrl": "https://gitlab.example/api/v4", "tokenFile": %q}
-		]
-	}`, tokenFile)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	client, err := cfg.client(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	var got []string
-	for _, s := range client.Sources() {
-		got = append(got, s.ID+" "+string(s.Session.Kind)+" "+s.Session.BaseURL)
-	}
-	want := "c/1 github http://proxy:8081/c/c%2F1, work gitlab https://gitlab.example/api/v4"
-	if strings.Join(got, ", ") != want {
-		t.Fatalf("sources = %q, want %q", got, want)
-	}
-}
-
 func TestRun(t *testing.T) {
-	// A fake forge-connector proxy connection in front of GitHub.
-	forge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer client" || r.URL.Path != "/c/conn/user/repos" {
-			http.Error(w, `{"message":"no"}`, http.StatusUnauthorized)
-			return
-		}
-		fmt.Fprint(w, `[{"id":1,"full_name":"mrbean/teddy","html_url":"https://github.com/mrbean/teddy"}]`)
-	}))
-	defer forge.Close()
-	t.Setenv("TEST_PROXY_TOKEN", "client")
-	configPath := writeFile(t, "config.json", fmt.Sprintf(`{"proxy":{"url":%q,"tokenEnv":"TEST_PROXY_TOKEN"},"sources":[{"kind":"github","connection":"conn"}]}`, forge.URL))
+	p := fakeProxy(t)
+	t.Setenv("TEST_CONNECTOR_TOKEN", "client")
 	tokenFile := writeFile(t, "token", "service\n")
-	s, err := parse([]string{"--config=" + configPath, "--token-file=" + tokenFile, "--grpc-listen=127.0.0.1:0", "--http-listen=127.0.0.1:0"}, func(string) string { return "" }, io.Discard)
+	s, err := parse([]string{"--connector-url=" + p.URL, "--connector-token-env=TEST_CONNECTOR_TOKEN", "--token-file=" + tokenFile, "--grpc-listen=127.0.0.1:0", "--http-listen=127.0.0.1:0"}, func(string) string { return "" }, io.Discard)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +123,7 @@ func TestRun(t *testing.T) {
 	defer conn.Close()
 	rpcCtx := metadata.AppendToOutgoingContext(context.Background(), "authorization", "Bearer service")
 	sources, err := pb.NewRepositoriesClient(conn).ListSources(rpcCtx, &emptypb.Empty{})
-	if err != nil || len(sources.GetSources()) != 1 || sources.GetSources()[0].GetId() != "conn" {
+	if err != nil || len(sources.GetSources()) != 2 || sources.GetSources()[0].GetId() != "conn" {
 		t.Fatalf("gRPC: %v %v", sources, err)
 	}
 
@@ -172,13 +133,16 @@ func TestRun(t *testing.T) {
 	}
 }
 
-func TestRunRequiresServiceToken(t *testing.T) {
-	configPath := writeFile(t, "config.json", `{"sources":[]}`)
+func TestRunRequiresTokens(t *testing.T) {
+	t.Setenv("TEST_CONNECTOR_TOKEN", "client")
 	for _, token := range []string{"", "two words"} {
-		tokenFile := writeFile(t, "token", token)
-		s := settings{configPath: configPath, tokenFile: tokenFile, grpcAddress: "127.0.0.1:0", httpAddress: "127.0.0.1:0", timeout: time.Second}
+		s := settings{connectorURL: "http://p", tokenFile: writeFile(t, "token", token), connectorTokenEnv: "TEST_CONNECTOR_TOKEN", grpcAddress: "127.0.0.1:0", httpAddress: "127.0.0.1:0", timeout: time.Second}
 		if err := run(context.Background(), s, nil); err == nil || !strings.Contains(err.Error(), "service token") {
-			t.Errorf("token %q: %v", token, err)
+			t.Errorf("service token %q: %v", token, err)
+		}
+		s = settings{connectorURL: "http://p", tokenFile: writeFile(t, "token", "service"), connectorTokenFile: writeFile(t, "connector", token), grpcAddress: "127.0.0.1:0", httpAddress: "127.0.0.1:0", timeout: time.Second}
+		if err := run(context.Background(), s, nil); err == nil || !strings.Contains(err.Error(), "connector token") {
+			t.Errorf("connector token %q: %v", token, err)
 		}
 	}
 }

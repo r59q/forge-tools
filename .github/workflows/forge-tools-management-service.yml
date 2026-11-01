@@ -6,6 +6,8 @@ on:
     paths:
       - forge-tools-management/service/**
       - forge-tools-management/library/**
+      - forge-connector/library/**
+      - forge-connector/broker/**
       - forge-repositories/service/**
       - forge-repositories/library/**
       - forge-core/forgeapi/**
@@ -17,6 +19,8 @@ on:
     paths:
       - forge-tools-management/service/**
       - forge-tools-management/library/**
+      - forge-connector/library/**
+      - forge-connector/broker/**
       - forge-repositories/service/**
       - forge-repositories/library/**
       - forge-core/forgeapi/**
@@ -37,18 +41,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Validate standalone example
+      - name: Validate example
         env:
+          FORGE_BROKER_KEY: example-broker-key
+          FORGE_BROKER_ADMIN_TOKEN: example-admin-token
           FORGE_MANAGEMENT_TOKEN: example-operator-token
+          FORGE_PROXY_TOKEN: example-proxy-token
+          FORGE_REPOSITORIES_CONNECTOR_TOKEN: example-connector-token
+          FORGE_REPOSITORIES_TOKEN: example-repositories-token
         run: docker compose -f examples/management/compose.yaml config --quiet
-      - name: Validate connected example
-        env:
-          FORGE_MANAGEMENT_TOKEN: example-operator-token
-          FORGE_REPOSITORIES_TOKEN: example-repository-token
-          GITHUB_TOKEN: example-forge-token
-          MANAGEMENT_REPOSITORIES_ADDRESS: repositories:9090
-          MANAGEMENT_REPOSITORIES_INSECURE: "true"
-        run: docker compose -f examples/management/compose.yaml --profile repositories config --quiet
 
   test:
     uses: ./.github/workflows/reusable-go.yml

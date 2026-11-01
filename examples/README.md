@@ -7,13 +7,13 @@ Run the forge-connector services with Docker Compose and use them with
 docker-compose.yml   broker and proxy from ghcr.io
 .env.example         secrets for docker-compose.yml
 go/                  Go programs using the libraries and the broker API
-management/          management UI alone or with a repositories service
+management/          full stack, with connections set up in the management UI
 ```
 
 ## Run the services
 
-For a read-only repository web interface, see the
-[management setup example](management/). It can run without the broker or proxy.
+The quickest start is the [management setup example](management/): it runs
+the whole stack, and you connect forges in a web interface.
 
 [docker-compose.yml](docker-compose.yml) runs the published
 [broker](../forge-connector/broker/) and [proxy](../forge-connector/proxy/)
@@ -53,13 +53,12 @@ images. Ports are bound to localhost. The steps below need `curl`, `jq`,
      -d "{\"forgeId\":\"$FORGE\",\"name\":\"me\",\"credential\":\"$GITHUB_TOKEN\"}" | jq -r .id)
    ```
 
-3. Create a client for the proxy and start it. Client scopes cannot change
-   later, so list every connection the proxy should serve. The token is
-   returned once:
+3. Create a client for the proxy and start it. `allConnections` grants it
+   every connection, including ones added later. The token is returned once:
 
    ```sh
    PROXY_TOKEN=$(broker localhost:8080/v1/clients \
-     -d "{\"name\":\"proxy\",\"connectionIds\":[\"$CONN\"],\"canIssueTokens\":true}" | jq -r .token)
+     -d '{"name":"proxy","allConnections":true,"canIssueTokens":true}' | jq -r .token)
    sed -i "s|^FORGE_PROXY_TOKEN=.*|FORGE_PROXY_TOKEN=$PROXY_TOKEN|" .env
    docker compose --profile proxy up -d
    curl --retry 5 --retry-all-errors --retry-delay 1 localhost:8081/healthz
@@ -111,10 +110,10 @@ FORGE_TOKEN=$GITHUB_TOKEN go run ./repos
 # ...or through the proxy. Only the URL and token change.
 FORGE_TOKEN=$CLIENT_TOKEN go run ./repos -url http://127.0.0.1:8081/c/$CONN
 
-# List repositories with the forge-repositories library through the proxy,
-# then show one repository's branches and tags.
-FORGE_TOKEN=$CLIENT_TOKEN go run ./repositories -source github:$CONN
-FORGE_TOKEN=$CLIENT_TOKEN go run ./repositories -source github:$CONN -refs <owner>/<name>
+# List repositories of every connection the client may use, then show one
+# repository's branches and tags.
+FORGE_TOKEN=$CLIENT_TOKEN go run ./repositories
+FORGE_TOKEN=$CLIENT_TOKEN go run ./repositories -refs <owner>/<name>
 
 # List forges, connections and clients over the broker's gRPC API.
 go run ./broker-admin -addr 127.0.0.1:9090
@@ -123,13 +122,13 @@ go run ./broker-admin -addr 127.0.0.1:9090
 - [repos](go/repos/main.go) opens a `forgeauth` session, calls `Whoami` and
   follows `Link` pagination with `forgehttp`. Use `-kind gitlab` or
   `-kind forgejo` with `-url` for other forges.
-- [repositories](go/repositories/main.go) opens one session per
-  `-source kind:connectionID` against the proxy and reads them all through one
-  [forge-repositories](../forge-repositories/library/) client. Repeat
-  `-source` to combine forges, for example a GitHub and a GitLab connection,
-  and add `-owner <name>` to list one owner's repositories across all of them.
-  The client token must be scoped to every listed connection. Its test runs
-  the real proxy handler in front of fake GitHub and GitLab APIs.
+- [repositories](go/repositories/main.go) asks the connector for every
+  connection the client token may use and reads them all through one
+  [forge-repositories](../forge-repositories/library/) client. Scope the
+  client to several connections, such as GitHub and GitLab, and add
+  `-owner <name>` to list one owner's repositories across all of them, or
+  `-source <connectionID>` to read one. Its test runs the real proxy handler
+  in front of fake GitHub and GitLab APIs.
 - [broker-admin](go/broker-admin/main.go) calls the broker with the generated
   `brokerpb` client, sending the admin token as `authorization` metadata.
 

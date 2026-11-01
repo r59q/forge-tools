@@ -1,5 +1,5 @@
-// Command forge-tools-management-service serves read-only management over
-// HTTP and gRPC, optionally connected to forge-repositories.
+// Command forge-tools-management-service serves management over HTTP and
+// gRPC, optionally connected to forge-connector and forge-repositories.
 package main
 
 import (
@@ -28,6 +28,9 @@ type settings struct {
 	timeout                                                          time.Duration
 	repositoriesAddress, repositoriesTokenFile, repositoriesTokenEnv string
 	repositoriesInsecure                                             bool
+	connectorAddress, connectorTokenFile, connectorTokenEnv          string
+	connectorInsecure                                                bool
+	clients                                                          []serviceClient
 }
 
 func parse(args []string, getenv func(string) string, help io.Writer) (settings, error) {
@@ -49,6 +52,17 @@ func parse(args []string, getenv func(string) string, help io.Writer) (settings,
 	fs.StringVar(&s.repositoriesTokenEnv, "repositories-token-env", env("REPOSITORIES_TOKEN_ENV", ""), "repository service token variable name")
 	var insecure string
 	fs.StringVar(&insecure, "repositories-insecure", env("REPOSITORIES_INSECURE", "false"), "use plaintext to a trusted local repository service: true or false")
+	fs.StringVar(&s.connectorAddress, "connector-address", env("CONNECTOR_ADDRESS", ""), "optional forge-connector broker gRPC host:port")
+	fs.StringVar(&s.connectorTokenFile, "connector-admin-token-file", env("CONNECTOR_ADMIN_TOKEN_FILE", ""), "broker admin token file")
+	fs.StringVar(&s.connectorTokenEnv, "connector-admin-token-env", env("CONNECTOR_ADMIN_TOKEN_ENV", ""), "broker admin token variable name")
+	var connectorInsecure string
+	fs.StringVar(&connectorInsecure, "connector-insecure", env("CONNECTOR_INSECURE", "false"), "use plaintext to a trusted local broker: true or false")
+	proxy := serviceClient{name: "forge-connector-proxy", canIssueTokens: true}
+	fs.StringVar(&proxy.file, "proxy-token-file", env("PROXY_TOKEN_FILE", ""), "proxy client token file, registered in the broker")
+	fs.StringVar(&proxy.env, "proxy-token-env", env("PROXY_TOKEN_ENV", ""), "proxy client token variable name")
+	repos := serviceClient{name: "forge-repositories"}
+	fs.StringVar(&repos.file, "repositories-connector-token-file", env("REPOSITORIES_CONNECTOR_TOKEN_FILE", ""), "repositories service client token file, registered in the broker")
+	fs.StringVar(&repos.env, "repositories-connector-token-env", env("REPOSITORIES_CONNECTOR_TOKEN_ENV", ""), "repositories service client token variable name")
 	var timeout string
 	fs.StringVar(&timeout, "request-timeout", env("REQUEST_TIMEOUT", "30s"), "maximum request duration")
 	if err := fs.Parse(args); err != nil {
@@ -67,13 +81,13 @@ func parse(args []string, getenv func(string) string, help io.Writer) (settings,
 	if fs.NArg() != 0 || s.grpcAddress == "" || s.httpAddress == "" || s.timeout <= 0 {
 		return settings{}, errors.New("invalid startup settings")
 	}
-	switch insecure {
-	case "true":
-		s.repositoriesInsecure = true
-	case "false":
-	default:
+	if insecure != "true" && insecure != "false" {
 		return settings{}, errors.New("invalid repositories-insecure setting")
 	}
+	if connectorInsecure != "true" && connectorInsecure != "false" {
+		return settings{}, errors.New("invalid connector-insecure setting")
+	}
+	s.repositoriesInsecure, s.connectorInsecure = insecure == "true", connectorInsecure == "true"
 	if s.tokenFile != "" && s.tokenEnv != "" {
 		return settings{}, errors.New("choose one service token source")
 	}
@@ -89,6 +103,31 @@ func parse(args []string, getenv func(string) string, help io.Writer) (settings,
 	if s.repositoriesAddress != "" && s.repositoriesTokenFile == "" && s.repositoriesTokenEnv == "" {
 		s.repositoriesTokenEnv = "FORGE_MANAGEMENT_REPOSITORIES_TOKEN"
 	}
+	if s.connectorTokenFile != "" && s.connectorTokenEnv != "" {
+		return settings{}, errors.New("choose one connector admin token source")
+	}
+	explicit := proxy.file != "" || proxy.env != "" || repos.file != "" || repos.env != ""
+	if s.connectorAddress == "" && (s.connectorTokenFile != "" || s.connectorTokenEnv != "" || s.connectorInsecure || explicit) {
+		return settings{}, errors.New("connector settings require connector-address")
+	}
+	if s.connectorAddress == "" {
+		return s, nil
+	}
+	if s.connectorTokenFile == "" && s.connectorTokenEnv == "" {
+		s.connectorTokenEnv = "FORGE_MANAGEMENT_CONNECTOR_ADMIN_TOKEN"
+	}
+	for _, c := range []struct {
+		client     *serviceClient
+		defaultEnv string
+	}{{&proxy, "FORGE_MANAGEMENT_PROXY_TOKEN"}, {&repos, "FORGE_MANAGEMENT_REPOSITORIES_CONNECTOR_TOKEN"}} {
+		if c.client.file != "" && c.client.env != "" {
+			return settings{}, fmt.Errorf("choose one %s client token source", c.client.name)
+		}
+		if c.client.file == "" && c.client.env == "" {
+			c.client.env, c.client.optional = c.defaultEnv, true
+		}
+	}
+	s.clients = []serviceClient{proxy, repos}
 	return s, nil
 }
 
@@ -121,7 +160,21 @@ func run(ctx context.Context, s settings, ready func(grpcAddr, httpAddr net.Addr
 		return err
 	}
 	defer closeBackend()
-	service, err := api.New(management.New(reader), token, s.timeout)
+	config := management.Config{Repositories: reader}
+	connector, closeConnector, err := s.connector(ctx, token)
+	if err != nil {
+		return err
+	}
+	defer closeConnector()
+	var clients []serviceClient
+	if connector != nil {
+		config.Connector = connector
+		if clients, err = s.clientTokens(ctx, token, connector.token); err != nil {
+			return err
+		}
+	}
+	client := management.New(config)
+	service, err := api.New(client, token, s.timeout)
 	if err != nil {
 		return errors.New("cannot initialize API")
 	}
@@ -145,6 +198,12 @@ func run(ctx context.Context, s settings, ready func(grpcAddr, httpAddr net.Addr
 	failures := make(chan error, 2)
 	go func() { failures <- grpcServer.Serve(grpcListener) }()
 	go func() { failures <- httpServer.Serve(httpListener) }()
+	// Register service clients while serving, so the UI is up even when the
+	// broker is not yet.
+	registerCtx, stopRegister := context.WithCancel(ctx)
+	registered := make(chan struct{})
+	go func() { register(registerCtx, client, clients, s.timeout); close(registered) }()
+	defer func() { stopRegister(); <-registered }()
 	if ready != nil {
 		ready(grpcListener.Addr(), httpListener.Addr())
 	}

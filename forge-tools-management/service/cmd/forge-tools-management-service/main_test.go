@@ -50,6 +50,22 @@ func TestSettings(t *testing.T) {
 			t.Fatalf("accepted or echoed invalid flags: %v %v", args, err)
 		}
 	}
+	s, err = parse([]string{"--connector-address=broker:9090", "--connector-insecure=true", "--proxy-token-file=/p"}, getenv, io.Discard)
+	if err != nil || s.connectorTokenEnv != "FORGE_MANAGEMENT_CONNECTOR_ADMIN_TOKEN" || !s.connectorInsecure || len(s.clients) != 2 {
+		t.Fatalf("connector settings: %+v %v", s, err)
+	}
+	if p, r := s.clients[0], s.clients[1]; p.file != "/p" || p.optional || !p.canIssueTokens || r.env != "FORGE_MANAGEMENT_REPOSITORIES_CONNECTOR_TOKEN" || !r.optional || r.canIssueTokens {
+		t.Fatalf("client settings: %+v", s.clients)
+	}
+	for _, args := range [][]string{
+		{"--connector-insecure=true"}, {"--connector-admin-token-env=T"}, {"--proxy-token-env=T"}, {"--connector-insecure=yes"},
+		{"--connector-address=x", "--connector-admin-token-file=t", "--connector-admin-token-env=T"},
+		{"--connector-address=x", "--repositories-connector-token-file=t", "--repositories-connector-token-env=T"},
+	} {
+		if _, err := parse(args, getenv, io.Discard); err == nil {
+			t.Fatalf("accepted invalid connector flags: %v", args)
+		}
+	}
 	var help bytes.Buffer
 	if _, err := parse([]string{"--help"}, getenv, &help); !errors.Is(err, flag.ErrHelp) || !strings.Contains(help.String(), "repositories-address") {
 		t.Fatal("missing help")
@@ -220,7 +236,7 @@ func TestRunWithNativeRepositories(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	backend, err := repoapi.New(client, forgeauth.StaticToken("backend-synthetic"), time.Second)
+	backend, err := repoapi.New(repoapi.Fixed(client), forgeauth.StaticToken("backend-synthetic"), time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}

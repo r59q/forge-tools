@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/r59q/forge-tools/forge-core/forgeapi/forgeauth"
@@ -30,7 +31,7 @@ func (s settings) repositoryReader(ctx context.Context, operator forgeauth.Crede
 	if s.repositoriesTokenFile != "" {
 		token = forgeauth.FileToken(s.repositoriesTokenFile)
 	}
-	if _, err := backendToken(ctx, token, operator); err != nil {
+	if _, err := secondToken(ctx, "repository service", token, operator); err != nil {
 		return nil, nil, err
 	}
 	transport := credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12})
@@ -44,21 +45,24 @@ func (s settings) repositoryReader(ctx context.Context, operator forgeauth.Crede
 	return &remoteRepositories{client: pb.NewRepositoriesClient(conn), token: token, operator: operator}, func() { _ = conn.Close() }, nil
 }
 
-// backendToken rereads both credentials, including after rotation, so the
-// browser's operator token cannot also serve as a backend credential.
-func backendToken(ctx context.Context, source, operator forgeauth.Credentials) (string, error) {
+// secondToken rereads a backend credential, including after rotation, and
+// checks that the browser's operator token cannot also serve as it. A nil
+// operator skips that check.
+func secondToken(ctx context.Context, name string, source, operator forgeauth.Credentials) (string, error) {
 	token, err := source.Token(ctx)
 	if err != nil {
-		return "", errors.New("repository service token required")
+		return "", fmt.Errorf("%s token required", name)
 	}
 	h := http.Header{}
 	h.Set("Authorization", "Bearer "+token)
 	if parsed, ok := forgeauth.AuthorizationToken(h, "Bearer"); !ok || parsed != token {
-		return "", errors.New("repository service token must be a nonempty bearer token")
+		return "", fmt.Errorf("%s token must be a nonempty bearer token", name)
 	}
-	op, err := operator.Token(ctx)
-	if err != nil || op == token {
-		return "", errors.New("operator and repository service tokens must be distinct")
+	if operator == nil {
+		return token, nil
+	}
+	if op, err := operator.Token(ctx); err != nil || op == token {
+		return "", fmt.Errorf("operator and %s tokens must be distinct", name)
 	}
 	return token, nil
 }
@@ -66,7 +70,7 @@ func backendToken(ctx context.Context, source, operator forgeauth.Credentials) (
 // List calls only the existing repository listing RPC. Browser metadata is
 // never forwarded. The backend controls source selection and forge access.
 func (r *remoteRepositories) List(ctx context.Context, _ repositories.ListOptions) ([]repositories.Repository, error) {
-	token, err := backendToken(ctx, r.token, r.operator)
+	token, err := secondToken(ctx, "repository service", r.token, r.operator)
 	if err != nil {
 		return nil, err
 	}

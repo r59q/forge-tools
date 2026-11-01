@@ -35,7 +35,8 @@ type Store interface {
 	// the ID from all client scopes.
 	DeleteConnection(context.Context, ID) error
 
-	// CreateClient inserts a client. All scoped connections must exist.
+	// CreateClient inserts a client. All scoped connections must exist, and an
+	// AllConnections client lists none.
 	CreateClient(context.Context, Client) error
 	// GetClient returns metadata and the token hash for trusted callers.
 	GetClient(context.Context, ID) (Client, error)

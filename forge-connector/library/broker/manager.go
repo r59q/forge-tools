@@ -140,21 +140,54 @@ func (m *Manager) DeleteConnection(ctx context.Context, id ID) error {
 // write-only client credentials; it cannot be retrieved later. The token type
 // redacts fmt, slog and JSON output. The returned Client omits TokenHash.
 func (m *Manager) CreateClient(ctx context.Context, name string, connections []ID, canIssueTokens bool) (Client, forgeauth.StaticToken, error) {
+	return m.createClient(ctx, Client{Name: name, Connections: slices.Clone(connections), CanIssueTokens: canIssueTokens}, "")
+}
+
+// CreateClientForAll creates a client granted every connection, including
+// ones created later, such as a proxy or tool service. Its token is returned
+// once, as with CreateClient.
+func (m *Manager) CreateClientForAll(ctx context.Context, name string, canIssueTokens bool) (Client, forgeauth.StaticToken, error) {
+	return m.createClient(ctx, Client{Name: name, AllConnections: true, CanIssueTokens: canIssueTokens}, "")
+}
+
+// MinClientTokenLength is the shortest token RegisterClient accepts.
+const MinClientTokenLength = 32
+
+// RegisterClient creates a client with a caller-chosen token, such as one
+// generated into a deployment's configuration. The token must have at least
+// MinClientTokenLength printable characters, without spaces, and differ from
+// every other client's token. Only its hash is stored. Client supplies Name,
+// Connections, AllConnections and CanIssueTokens; the ID is generated.
+func (m *Manager) RegisterClient(ctx context.Context, client Client, token forgeauth.StaticToken) (Client, error) {
+	if len(token) < MinClientTokenLength || strings.IndexFunc(string(token), func(r rune) bool { return r <= ' ' || r >= 0x7f }) >= 0 {
+		return Client{}, ErrInvalid
+	}
+	created, _, err := m.createClient(ctx, Client{
+		Name: client.Name, Connections: slices.Clone(client.Connections),
+		AllConnections: client.AllConnections, CanIssueTokens: client.CanIssueTokens,
+	}, token)
+	return created, err
+}
+
+func (m *Manager) createClient(ctx context.Context, client Client, token forgeauth.StaticToken) (Client, forgeauth.StaticToken, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if err := ctx.Err(); err != nil {
 		return Client{}, "", err
 	}
-	id := randomID()
-	token := base64.RawURLEncoding.EncodeToString(randomBytes(32))
-	client := Client{
-		ID: id, Name: name, TokenHash: sha256.Sum256([]byte(token)),
-		Connections: slices.Clone(connections), CanIssueTokens: canIssueTokens,
+	if token == "" {
+		token = forgeauth.StaticToken(base64.RawURLEncoding.EncodeToString(randomBytes(32)))
+	} else if _, err := m.authenticate(ctx, token); err == nil {
+		return Client{}, "", ErrConflict
+	} else if !errors.Is(err, ErrUnauthorized) {
+		return Client{}, "", err
 	}
+	client.ID = randomID()
+	client.TokenHash = sha256.Sum256([]byte(token))
 	if err := m.store.CreateClient(ctx, client); err != nil {
 		return Client{}, "", safeError(err, ErrStorage)
 	}
-	return clientMetadata(client), forgeauth.StaticToken(token), nil
+	return clientMetadata(client), token, nil
 }
 
 // DeleteClient immediately invalidates the client's token.
@@ -214,7 +247,74 @@ func (m *Manager) IssueToken(ctx context.Context, clientToken forgeauth.StaticTo
 	return IssuedToken{Kind: forge.Kind, BaseURL: forge.BaseURL, Token: token}, nil
 }
 
+// ClientConnection is a connection as its client sees it: no credential,
+// identity or endpoint.
+type ClientConnection struct {
+	// ID identifies the connection.
+	ID ID
+	// Name is an owner-defined label.
+	Name string
+	// Kind is the forge kind, such as github.
+	Kind forgeauth.Kind
+	// Status is the last credential check's result. Only StatusOK is usable.
+	Status Status
+}
+
+// ClientConnections returns the connections in token's scope, ordered by ID,
+// with their forge kind and status. It does not require CanIssueTokens.
+// Unknown tokens fail with ErrUnauthorized.
+func (m *Manager) ClientConnections(ctx context.Context, token forgeauth.StaticToken) ([]ClientConnection, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	client, err := m.authenticate(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	ids := slices.Clone(client.Connections)
+	if client.AllConnections {
+		conns, err := m.store.ListConnections(ctx)
+		if err != nil {
+			return nil, safeError(err, ErrStorage)
+		}
+		for _, conn := range conns {
+			ids = append(ids, conn.ID)
+		}
+	}
+	slices.Sort(ids)
+	result := []ClientConnection{}
+	for _, id := range slices.Compact(ids) {
+		conn, forge, err := m.connection(ctx, id)
+		if errors.Is(err, ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, ClientConnection{ID: conn.ID, Name: conn.Name, Kind: forge.Kind, Status: conn.Status})
+	}
+	return result, nil
+}
+
 func (m *Manager) verifyClient(ctx context.Context, token forgeauth.StaticToken, connectionID ID) (Client, error) {
+	matched, err := m.authenticate(ctx, token)
+	if err != nil {
+		return Client{}, err
+	}
+	if !matched.AllConnections && !slices.Contains(matched.Connections, connectionID) {
+		return Client{}, ErrForbidden
+	}
+	conn, err := m.store.GetConnection(ctx, connectionID)
+	if err != nil {
+		return Client{}, safeError(err, ErrStorage)
+	}
+	if conn.Status != StatusOK {
+		return Client{}, ErrUnavailable
+	}
+	return matched, nil
+}
+
+// authenticate returns the client whose token hash matches token.
+func (m *Manager) authenticate(ctx context.Context, token forgeauth.StaticToken) (Client, error) {
 	clients, err := m.store.ListClients(ctx)
 	if err != nil {
 		return Client{}, safeError(err, ErrStorage)
@@ -232,16 +332,6 @@ func (m *Manager) verifyClient(ctx context.Context, token forgeauth.StaticToken,
 	}
 	if found != 1 || token == "" {
 		return Client{}, ErrUnauthorized
-	}
-	if !slices.Contains(matched.Connections, connectionID) {
-		return Client{}, ErrForbidden
-	}
-	conn, err := m.store.GetConnection(ctx, connectionID)
-	if err != nil {
-		return Client{}, safeError(err, ErrStorage)
-	}
-	if conn.Status != StatusOK {
-		return Client{}, ErrUnavailable
 	}
 	return matched, nil
 }

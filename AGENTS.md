@@ -21,9 +21,15 @@ public.
 
 ## Tools
 
-- Each tool must be useful on its own.
-- Tools must not depend on each other, unless combining them is the point of
-  the tool.
+- Each tool must be useful on its own, together with forge-connector.
+- Tools must not depend on each other, except on forge-connector, or when
+  combining them is the point of the tool.
+- forge-connector is how tools reach forges. It owns connections, credentials
+  and authentication, and supplies ready sessions. Tools ask it for
+  connections and make forge API calls without handling tokens.
+- forge-connector knows no tool domain, such as repositories or issues, and
+  exposes no domain APIs. Tools own their domain and know nothing about how
+  connections are made.
 - Code needed by several tools goes in `forge-core/`. `forge-core/` must not
   depend on any tool.
 

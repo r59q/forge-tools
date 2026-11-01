@@ -51,7 +51,8 @@ service Broker {
   rpc DeleteConnection(ConnectionRequest) returns (google.protobuf.Empty) {
     option (google.api.http) = { delete: "/v1/connections/{id}" };
   }
-  // CreateClient returns a client token once. Admin: POST /v1/clients.
+  // CreateClient returns the client token once, generated unless supplied.
+  // Admin: POST /v1/clients.
   rpc CreateClient(CreateClientRequest) returns (CreateClientResponse) {
     option (google.api.http) = { post: "/v1/clients" body: "*" };
   }
@@ -74,6 +75,12 @@ service Broker {
   // Client: POST /v1/connections/{connection_id}/verify.
   rpc VerifyClient(VerifyClientRequest) returns (Client) {
     option (google.api.http) = { post: "/v1/connections/{connection_id}/verify" body: "*" };
+  }
+  // ListClientConnections lists the connections in the bearer client token's
+  // scope, with their forge kind and status. It does not require
+  // can_issue_tokens. Client: GET /v1/client/connections.
+  rpc ListClientConnections(google.protobuf.Empty) returns (ListClientConnectionsResponse) {
+    option (google.api.http) = { get: "/v1/client/connections" };
   }
 }
 
@@ -126,6 +133,8 @@ message Client {
   repeated string connection_ids = 3;
   // can_issue_tokens permits IssueToken in addition to VerifyClient.
   bool can_issue_tokens = 4;
+  // all_connections grants every connection, including ones created later.
+  bool all_connections = 5;
 }
 // CreateForgeRequest registers a provider and explicit API URL.
 message CreateForgeRequest {
@@ -180,6 +189,13 @@ message CreateClientRequest {
   repeated string connection_ids = 2;
   // can_issue_tokens permits disclosure of forge tokens through IssueToken.
   bool can_issue_tokens = 3;
+  // all_connections grants every connection, including ones created later,
+  // for services such as a proxy. connection_ids must then be empty.
+  bool all_connections = 4;
+  // token optionally sets the client token, such as one from a deployment's
+  // configuration. It needs at least 32 printable characters, without spaces,
+  // and must be unique. When empty, the broker generates one.
+  string token = 5;
 }
 // CreateClientResponse is the only opportunity to obtain the new client token.
 message CreateClientResponse {
@@ -216,4 +232,21 @@ message IssueTokenResponse {
 message VerifyClientRequest {
   // connection_id is the requested connection.
   string connection_id = 1;
+}
+// ClientConnection is a connection as its client sees it: no credential,
+// identity or endpoint.
+message ClientConnection {
+  // id is the connection ID.
+  string id = 1;
+  // name is an owner-defined label.
+  string name = 2;
+  // kind is github, gitlab or forgejo.
+  string kind = 3;
+  // status is ok, invalid or revoked. Only ok permits client use.
+  string status = 4;
+}
+// ListClientConnectionsResponse contains the client's connections in ID order.
+message ListClientConnectionsResponse {
+  // connections never contains credentials.
+  repeated ClientConnection connections = 1;
 }

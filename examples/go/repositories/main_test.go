@@ -39,6 +39,17 @@ func (b fakeBroker) VerifyClient(_ context.Context, token forgeauth.StaticToken,
 	return broker.Client{}, nil
 }
 
+func (b fakeBroker) ClientConnections(_ context.Context, token forgeauth.StaticToken) ([]broker.ClientConnection, error) {
+	if string(token) != clientToken {
+		return nil, broker.ErrUnauthorized
+	}
+	var out []broker.ClientConnection
+	for _, id := range []broker.ID{"gh-conn", "gl-conn"} {
+		out = append(out, broker.ClientConnection{ID: id, Kind: b[id].Kind, Status: broker.StatusOK})
+	}
+	return out, nil
+}
+
 func (b fakeBroker) IssueToken(_ context.Context, id broker.ID) (broker.IssuedToken, error) {
 	c, ok := b[id]
 	if !ok {
@@ -115,7 +126,7 @@ func setup(t *testing.T) (proxyURL string, gh, gl *fakeForge) {
 		"gh-conn": {Kind: forgeauth.GitHub, BaseURL: gh.srv.URL},
 		"gl-conn": {Kind: forgeauth.GitLab, BaseURL: gl.srv.URL + "/api/v4"},
 	}
-	h, err := proxy.New(proxy.Config{Verifier: b, TokenIssuer: b, Registry: &reg})
+	h, err := proxy.New(proxy.Config{Verifier: b, TokenIssuer: b, Connections: b, Registry: &reg})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +147,7 @@ func lines(s string) []string {
 func TestListThroughProxy(t *testing.T) {
 	proxyURL, _, _ := setup(t)
 	var out strings.Builder
-	opts := options{Proxy: proxyURL, Sources: []string{"github:gh-conn", "gitlab:gl-conn"}, Owner: "mrbean"}
+	opts := options{Proxy: proxyURL, Owner: "mrbean"}
 	if err := run(context.Background(), opts, forgeauth.StaticToken(clientToken), &out); err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +163,7 @@ func TestListThroughProxy(t *testing.T) {
 func TestListPagesThroughProxy(t *testing.T) {
 	proxyURL, gh, _ := setup(t)
 	var out strings.Builder
-	opts := options{Proxy: proxyURL, Sources: []string{"github:gh-conn"}}
+	opts := options{Proxy: proxyURL, Source: "gh-conn"}
 	if err := run(context.Background(), opts, forgeauth.StaticToken(clientToken), &out); err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +178,7 @@ func TestListPagesThroughProxy(t *testing.T) {
 func TestRefsNestedPathThroughProxy(t *testing.T) {
 	proxyURL, gh, gl := setup(t)
 	var out strings.Builder
-	opts := options{Proxy: proxyURL, Sources: []string{"github:gh-conn", "gitlab:gl-conn"}, Refs: "mrbean/tools/cli"}
+	opts := options{Proxy: proxyURL, Refs: "mrbean/tools/cli"}
 	if err := run(context.Background(), opts, forgeauth.StaticToken(clientToken), &out); err != nil {
 		t.Fatal(err)
 	}
@@ -190,17 +201,15 @@ func TestRefsNestedPathThroughProxy(t *testing.T) {
 
 func TestRejectedClientToken(t *testing.T) {
 	proxyURL, _, _ := setup(t)
-	opts := options{Proxy: proxyURL, Sources: []string{"github:gh-conn"}}
+	opts := options{Proxy: proxyURL}
 	if err := run(context.Background(), opts, forgeauth.StaticToken("wrong"), &strings.Builder{}); err == nil {
 		t.Fatal("run succeeded with a rejected client token")
 	}
 }
 
-func TestBadSource(t *testing.T) {
-	for _, sources := range [][]string{nil, {"github"}, {"svn:conn"}} {
-		opts := options{Proxy: "http://127.0.0.1:1", Sources: sources}
-		if err := run(context.Background(), opts, forgeauth.StaticToken(clientToken), &strings.Builder{}); err == nil {
-			t.Errorf("run(%q) succeeded", sources)
-		}
+func TestBadProxyURL(t *testing.T) {
+	opts := options{Proxy: "ftp://proxy"}
+	if err := run(context.Background(), opts, forgeauth.StaticToken(clientToken), &strings.Builder{}); err == nil {
+		t.Error("run accepted a non-HTTP proxy URL")
 	}
 }

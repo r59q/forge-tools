@@ -238,6 +238,7 @@ func TestTransports(t *testing.T) {
 			for _, token := range []string{"", "wrong", adminToken} {
 				invoke("IssueToken", &pb.IssueTokenRequest{ConnectionId: conn.Id}, &pb.IssueTokenResponse{}, token, codes.Unauthenticated)
 				invoke("VerifyClient", &pb.VerifyClientRequest{ConnectionId: conn.Id}, &pb.Client{}, token, codes.Unauthenticated)
+				invoke("ListClientConnections", &emptypb.Empty{}, &pb.ListClientConnectionsResponse{}, token, codes.Unauthenticated)
 			}
 			for _, auth := range [][]string{{"Basic " + adminToken}, {"Bearer "}, {"Bearer " + adminToken, "Bearer " + adminToken}, {"Bearer bad token"}} {
 				if err := w.invoke("ListForges", &emptypb.Empty{}, &pb.ListForgesResponse{}, auth); status.Code(err) != codes.Unauthenticated {
@@ -273,6 +274,29 @@ func TestTransports(t *testing.T) {
 			invoke("CreateClient", &pb.CreateClientRequest{ConnectionIds: []string{conn.Id}}, verifyOnly, adminToken, codes.OK)
 			invoke("VerifyClient", &pb.VerifyClientRequest{ConnectionId: conn.Id}, &pb.Client{}, verifyOnly.Token, codes.OK)
 			invoke("IssueToken", &pb.IssueTokenRequest{ConnectionId: conn.Id}, &pb.IssueTokenResponse{}, verifyOnly.Token, codes.PermissionDenied)
+			listed := &pb.ListClientConnectionsResponse{}
+			invoke("ListClientConnections", &emptypb.Empty{}, listed, verifyOnly.Token, codes.OK)
+			if len(listed.Connections) != 1 || listed.Connections[0].Id != conn.Id || listed.Connections[0].Kind != "github" || listed.Connections[0].Status != "ok" {
+				t.Fatalf("ListClientConnections = %v", listed)
+			}
+			invoke("CreateClient", &pb.CreateClientRequest{AllConnections: true, ConnectionIds: []string{conn.Id}}, &pb.CreateClientResponse{}, adminToken, codes.InvalidArgument)
+			everything := &pb.CreateClientResponse{}
+			invoke("CreateClient", &pb.CreateClientRequest{AllConnections: true}, everything, adminToken, codes.OK)
+			if !everything.Client.AllConnections || len(everything.Client.ConnectionIds) != 0 {
+				t.Fatalf("all-connections client = %v", everything.Client)
+			}
+			chosen := strings.Repeat("c", 40)
+			registered := &pb.CreateClientResponse{}
+			invoke("CreateClient", &pb.CreateClientRequest{AllConnections: true, Token: chosen}, registered, adminToken, codes.OK)
+			invoke("CreateClient", &pb.CreateClientRequest{Token: chosen}, &pb.CreateClientResponse{}, adminToken, codes.FailedPrecondition)
+			invoke("CreateClient", &pb.CreateClientRequest{Token: "short"}, &pb.CreateClientResponse{}, adminToken, codes.InvalidArgument)
+			invoke("ListClientConnections", &emptypb.Empty{}, &pb.ListClientConnectionsResponse{}, chosen, codes.OK)
+			invoke("DeleteClient", &pb.ClientRequest{Id: registered.Client.Id}, &emptypb.Empty{}, adminToken, codes.OK)
+			later := &pb.Connection{}
+			invoke("CreateConnection", &pb.CreateConnectionRequest{ForgeId: f.Id, Credential: forgeToken}, later, adminToken, codes.OK)
+			invoke("VerifyClient", &pb.VerifyClientRequest{ConnectionId: later.Id}, &pb.Client{}, everything.Token, codes.OK)
+			invoke("IssueToken", &pb.IssueTokenRequest{ConnectionId: later.Id}, &pb.IssueTokenResponse{}, everything.Token, codes.PermissionDenied)
+			invoke("DeleteConnection", &pb.ConnectionRequest{Id: later.Id}, &emptypb.Empty{}, adminToken, codes.OK)
 			emptyScope := &pb.CreateClientResponse{}
 			invoke("CreateClient", &pb.CreateClientRequest{CanIssueTokens: true}, emptyScope, adminToken, codes.OK)
 			invoke("VerifyClient", &pb.VerifyClientRequest{ConnectionId: conn.Id}, &pb.Client{}, emptyScope.Token, codes.PermissionDenied)

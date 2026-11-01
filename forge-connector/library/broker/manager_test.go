@@ -293,6 +293,110 @@ func TestClientAuthorization(t *testing.T) {
 	}
 }
 
+func TestClientForAllConnections(t *testing.T) {
+	f := setup(t, github.Provider{})
+	before := f.connection(t)
+	client, token, err := f.manager.CreateClientForAll(f.ctx, "proxy", true)
+	if err != nil || token == "" || !client.AllConnections || len(client.Connections) != 0 || client.TokenHash != [32]byte{} {
+		t.Fatalf("CreateClientForAll = %+v, %v", client, err)
+	}
+	after := f.connection(t)
+	for _, id := range []broker.ID{before.ID, after.ID} {
+		if _, err := f.manager.VerifyClient(f.ctx, token, id); err != nil {
+			t.Fatalf("VerifyClient(%s) = %v", id, err)
+		}
+		if _, err := f.manager.IssueToken(f.ctx, token, id); err != nil {
+			t.Fatalf("IssueToken(%s) = %v", id, err)
+		}
+	}
+	if _, err := f.manager.VerifyClient(f.ctx, token, "missing"); !errors.Is(err, broker.ErrNotFound) {
+		t.Fatalf("VerifyClient(missing) = %v", err)
+	}
+	got, err := f.manager.ClientConnections(f.ctx, token)
+	if err != nil || len(got) != 2 {
+		t.Fatalf("ClientConnections = %+v, %v", got, err)
+	}
+	_, reader, err := f.manager.CreateClientForAll(f.ctx, "reader", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.manager.IssueToken(f.ctx, reader, after.ID); !errors.Is(err, broker.ErrForbidden) {
+		t.Fatalf("IssueToken without grant = %v", err)
+	}
+	clients, err := f.manager.ListClients(f.ctx)
+	if err != nil || len(clients) != 2 || !clients[0].AllConnections {
+		t.Fatalf("ListClients = %+v, %v", clients, err)
+	}
+}
+
+func TestRegisterClient(t *testing.T) {
+	f := setup(t, github.Provider{})
+	conn := f.connection(t)
+	token := forgeauth.StaticToken(strings.Repeat("a", broker.MinClientTokenLength))
+	for _, bad := range []forgeauth.StaticToken{"", token[1:], token[1:] + " ", token + "\n"} {
+		if _, err := f.manager.RegisterClient(f.ctx, broker.Client{Name: "bad"}, bad); !errors.Is(err, broker.ErrInvalid) {
+			t.Fatalf("RegisterClient(%q) = %v", bad, err)
+		}
+	}
+	client, err := f.manager.RegisterClient(f.ctx, broker.Client{ID: "ignored", Name: "proxy", AllConnections: true, CanIssueTokens: true}, token)
+	if err != nil || client.ID == "ignored" || client.ID == "" || !client.AllConnections || client.TokenHash != [32]byte{} {
+		t.Fatalf("RegisterClient = %+v, %v", client, err)
+	}
+	if _, err := f.manager.IssueToken(f.ctx, token, conn.ID); err != nil {
+		t.Fatalf("registered token rejected: %v", err)
+	}
+	if _, err := f.manager.RegisterClient(f.ctx, broker.Client{Name: "copy"}, token); !errors.Is(err, broker.ErrConflict) {
+		t.Fatalf("duplicate token = %v", err)
+	}
+	if _, err := f.manager.RegisterClient(f.ctx, broker.Client{Name: "both", AllConnections: true, Connections: []broker.ID{conn.ID}}, token+"b"); !errors.Is(err, broker.ErrInvalid) {
+		t.Fatalf("all and listed connections = %v", err)
+	}
+	if clients, _ := f.manager.ListClients(f.ctx); len(clients) != 1 {
+		t.Fatalf("clients = %+v", clients)
+	}
+}
+
+func TestClientConnections(t *testing.T) {
+	f := setup(t, gitlab.Provider{})
+	a := f.connection(t)
+	b := f.connection(t)
+	f.connection(t) // out of scope
+	_, token := f.client(t, []broker.ID{b.ID, a.ID}, false)
+	f.status.Store(http.StatusUnauthorized)
+	if _, err := f.manager.TestConnection(f.ctx, b.ID); err == nil {
+		t.Fatal("revocation not detected")
+	}
+	got, err := f.manager.ClientConnections(f.ctx, token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []broker.ClientConnection{
+		{ID: a.ID, Name: "Connection", Kind: forgeauth.GitLab, Status: broker.StatusOK},
+		{ID: b.ID, Name: "Connection", Kind: forgeauth.GitLab, Status: broker.StatusRevoked},
+	}
+	if a.ID > b.ID {
+		want[0], want[1] = want[1], want[0]
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("ClientConnections = %+v, want %+v", got, want)
+	}
+	_, emptyToken := f.client(t, nil, false)
+	if got, err := f.manager.ClientConnections(f.ctx, emptyToken); err != nil || got == nil || len(got) != 0 {
+		t.Fatalf("empty scope = %+v, %v", got, err)
+	}
+	for _, token := range []forgeauth.StaticToken{"", "unknown", oldToken} {
+		if _, err := f.manager.ClientConnections(f.ctx, token); !errors.Is(err, broker.ErrUnauthorized) {
+			t.Fatalf("token %q: %v", token, err)
+		}
+	}
+	if err := f.manager.DeleteConnection(f.ctx, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := f.manager.ClientConnections(f.ctx, token); err != nil || len(got) != 1 || got[0].ID != b.ID {
+		t.Fatalf("after delete = %+v, %v", got, err)
+	}
+}
+
 func TestSecretsAreWriteOnly(t *testing.T) {
 	f := setup(t, github.Provider{})
 	f.echo.Store(true)

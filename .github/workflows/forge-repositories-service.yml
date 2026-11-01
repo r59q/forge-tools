@@ -6,6 +6,7 @@ on:
     paths:
       - forge-repositories/service/**
       - forge-repositories/library/**
+      - forge-connector/library/**
       - forge-core/forgeapi/**
       - .dockerignore
       - .github/workflows/forge-repositories-service.yml
@@ -14,6 +15,7 @@ on:
     paths:
       - forge-repositories/service/**
       - forge-repositories/library/**
+      - forge-connector/library/**
       - forge-core/forgeapi/**
       - .dockerignore
       - .github/workflows/forge-repositories-service.yml

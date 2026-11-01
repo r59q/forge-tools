@@ -1,8 +1,10 @@
 # forge-tools-management service
 
-Read-only repository inspection over HTTP and gRPC. The browser UI is
-server-rendered HTML with CSS; no JavaScript, browser storage or frontend
-build is needed. It uses the [management library](../library/) and the existing
+Forge connection management and repository inspection over HTTP and gRPC.
+The browser UI is server-rendered HTML with CSS and plain forms; no
+JavaScript, browser storage or frontend build is needed. It uses the
+[management library](../library/), the
+[forge-connector broker admin API](../../forge-connector/broker/) and the
 [forge-repositories gRPC API](../../forge-repositories/service/).
 
 ## Build and test
@@ -17,11 +19,14 @@ go test -race ./...
 ```
 
 Keep the repository layout for relative module replacements. Tests need no
-live credentials. They use local fake forges and the real repositories API,
-and cover both transports, the web UI, source identity, listing states,
-credential separation, rotation, access protection and shutdown.
+live credentials. They run the real broker and repositories APIs against
+fake forges, and cover both transports, the web UI and its forms,
+service client registration, listing states, credential separation, rotation, access and
+cross-origin protection, and shutdown.
 
 ## Configure and run
+
+For a complete stack, use the [Compose example](../../examples/management/).
 
 Generate a management operator token and start without any connected tools:
 
@@ -32,24 +37,48 @@ openssl rand -hex 32 > /tmp/management-operator-token
 ```
 
 Open `http://127.0.0.1:8083/`. At the browser authentication prompt, enter
-username `operator` and the management token as password. The page shows
-**No repository capability configured**. Basic authentication is kept by the
-browser; close the browser session to sign out. Use a trusted browser profile.
+username `operator` and the management token as password. Basic
+authentication is kept by the browser; close the browser session to sign
+out. Use a trusted browser profile.
 
-To connect an existing repositories service on the same machine:
+To manage connections, point management at a broker with its admin token.
+To list repositories, also point it at a repositories service. The proxy
+and repositories client tokens are registered in the broker; see below:
 
 ```sh
 /tmp/forge-tools-management-service \
   --token-file /tmp/management-operator-token \
+  --connector-address 127.0.0.1:9090 \
+  --connector-admin-token-file /run/secrets/broker-admin-token \
+  --connector-insecure=true \
+  --proxy-token-file /run/secrets/proxy-token \
+  --repositories-connector-token-file /run/secrets/repositories-connector-token \
   --repositories-address 127.0.0.1:9092 \
-  --repositories-token-file /run/secrets/repositories-service-token \
+  --repositories-token-file /run/secrets/repositories-token \
   --repositories-insecure=true
 ```
 
-The backend token is the repositories service's caller token, never a forge
-token. Management must use a distinct operator token; matching values are
-rejected at startup and after rotation. Both token sources are reread for
-every request. Do not pass token values in flags, URLs or configuration files.
+### Register service tokens
+
+The proxy and the repositories service each need a broker client token. You
+choose these tokens and give them to the services and to management.
+Management registers them in the broker at startup, each granted every
+connection, including ones added later:
+
+| Setting | Broker client |
+| --- | --- |
+| `--proxy-token-*` | `forge-connector-proxy`, may issue forge tokens |
+| `--repositories-connector-token-*` | `forge-repositories` |
+
+If the broker does not yet accept a token, management replaces the client of
+that name with one using the token, so changing a token and restarting
+management rotates it. Tokens need at least 32 printable characters and
+must differ from each other and from the operator and admin tokens. Startup
+fails otherwise. Registration retries in the background until the broker
+answers, while the UI is already served; until then, those services return
+errors. Without a token setting, nothing is registered.
+
+### Settings
 
 | Flag | Environment variable | Default |
 | --- | --- | --- |
@@ -57,6 +86,14 @@ every request. Do not pass token values in flags, URLs or configuration files.
 | `--grpc-listen` | `FORGE_MANAGEMENT_GRPC_LISTEN` | `127.0.0.1:9093` |
 | `--token-file` | `FORGE_MANAGEMENT_TOKEN_FILE` | none |
 | `--token-env` | `FORGE_MANAGEMENT_TOKEN_ENV` | `FORGE_MANAGEMENT_TOKEN` |
+| `--connector-address` | `FORGE_MANAGEMENT_CONNECTOR_ADDRESS` | none |
+| `--connector-admin-token-file` | `FORGE_MANAGEMENT_CONNECTOR_ADMIN_TOKEN_FILE` | none |
+| `--connector-admin-token-env` | `FORGE_MANAGEMENT_CONNECTOR_ADMIN_TOKEN_ENV` | `FORGE_MANAGEMENT_CONNECTOR_ADMIN_TOKEN` when connected |
+| `--connector-insecure` | `FORGE_MANAGEMENT_CONNECTOR_INSECURE` | `false` |
+| `--proxy-token-file` | `FORGE_MANAGEMENT_PROXY_TOKEN_FILE` | none |
+| `--proxy-token-env` | `FORGE_MANAGEMENT_PROXY_TOKEN_ENV` | `FORGE_MANAGEMENT_PROXY_TOKEN`, if set, when connected |
+| `--repositories-connector-token-file` | `FORGE_MANAGEMENT_REPOSITORIES_CONNECTOR_TOKEN_FILE` | none |
+| `--repositories-connector-token-env` | `FORGE_MANAGEMENT_REPOSITORIES_CONNECTOR_TOKEN_ENV` | `FORGE_MANAGEMENT_REPOSITORIES_CONNECTOR_TOKEN`, if set, when connected |
 | `--repositories-address` | `FORGE_MANAGEMENT_REPOSITORIES_ADDRESS` | none |
 | `--repositories-token-file` | `FORGE_MANAGEMENT_REPOSITORIES_TOKEN_FILE` | none |
 | `--repositories-token-env` | `FORGE_MANAGEMENT_REPOSITORIES_TOKEN_ENV` | `FORGE_MANAGEMENT_REPOSITORIES_TOKEN` when connected |
@@ -65,61 +102,83 @@ every request. Do not pass token values in flags, URLs or configuration files.
 
 Flags override environment settings. Choose one file or environment token
 source for each credential. Token environment settings name a variable;
-they do not contain a token value. Invalid settings fail startup without
-echoing input. Backend reachability is checked when listing, so a disconnected
-backend starts and displays a failure rather than an unconfigured state.
+they do not contain a token value. Service client tokens are read at
+startup; all other tokens are reread for every request.
+The operator token must differ from the backend tokens; matching values are
+rejected at startup and after rotation. Invalid settings fail startup
+without echoing input. Backends are contacted per request, so a stopped
+backend shows a failure rather than an unconfigured state.
 
-Backend gRPC uses TLS and system trust roots by default. Set
-`--repositories-insecure=true` only for a trusted local network, because the
-repositories service's own listener is plaintext. For remote use, expose it
-through a TLS endpoint. Management's listeners are plaintext on loopback;
-put remote HTTP and gRPC access behind TLS endpoints preserving Authorization.
+Backend gRPC uses TLS and system trust roots by default. Set the
+`--*-insecure=true` flags only on a trusted local network, because the
+broker and repositories listeners are plaintext. For remote use, expose them
+through TLS endpoints. Management's listeners are plaintext on loopback; put
+remote HTTP and gRPC access behind TLS endpoints preserving Authorization.
 
-All authenticated management operators see the union visible to the backend's
-configured credentials. There is no per-operator forge identity or additional
-permission grant. Choose upstream credentials and operator access accordingly.
-No mutations or unrelated tools are invoked. Repository text is escaped by
-`html/template`; URLs are excluded from management results. Responses are
-`no-store` with a restrictive Content Security Policy. The service does not
-log requests, responses or backend errors; configure any reverse proxy to
-omit credentials too. SIGINT/SIGTERM drain requests for up to five seconds.
+## Security
+
+The broker admin token can read and change every connection, so treat the
+management operator token as equally sensitive. All operators see what the
+connected accounts can see; management grants no forge permissions.
+
+Forge tokens are write-only: they are sent to the broker and never returned,
+rendered or logged. Forms that change state reject cross-origin browser
+requests. Successful changes redirect, and failures show fixed messages
+without upstream details. Page text is escaped by `html/template`.
+Responses are `no-store` with a restrictive Content Security Policy. The
+service does not log requests, responses or backend errors; configure any
+reverse proxy to omit credentials and form bodies too. SIGINT/SIGTERM drain
+requests for up to five seconds.
 
 ## API
 
-The [proto](proto/management.proto) defines the sole capability:
+The [proto](proto/management.proto) is the source of truth. Every RPC needs
+`Authorization: Bearer <operator token>`.
 
-| RPC | REST endpoint | Authentication |
-| --- | --- | --- |
-| `Management.ListRepositories(Empty)` | `GET /v1/repositories` | `Authorization: Bearer <operator token>` |
+| RPC | REST endpoint |
+| --- | --- |
+| `ListRepositories` | `GET /v1/repositories` |
+| `ListConnections` | `GET /v1/connections` |
+| `AddConnection` | `POST /v1/connections` with `{"forge","host","name","credential"}` |
+| `TestConnection` | `POST /v1/connections/{id}/test` |
+| `RotateCredential` | `POST /v1/connections/{id}/credential` with `{"credential"}` |
+| `RemoveConnection` | `DELETE /v1/connections/{id}` |
 
-The browser routes `GET /` and `GET /style.css` require Basic authentication.
-REST and gRPC require Bearer authentication; they ignore forwarded identity
-and `Grpc-Metadata-*` headers. The operator token is never rendered in HTML.
+The browser routes use HTTP Basic authentication: `GET /`, `GET /connections`,
+`POST /connections`, and `POST /connections/{id}/test`, `/credential` and
+`/delete`. REST and gRPC ignore forwarded identity and `Grpc-Metadata-*`
+headers. The operator token is never rendered in HTML.
 
 ```sh
-curl -fsS -H "Authorization: Bearer $(cat /tmp/management-operator-token)" \
-  http://127.0.0.1:8083/v1/repositories
+api() { curl -fsS -H "Authorization: Bearer $(cat /tmp/management-operator-token)" "$@"; }
+read -rs TOKEN
+api localhost:8083/v1/connections \
+  -d "{\"forge\":\"gitlab\",\"host\":\"gitlab.example.com\",\"credential\":\"$TOKEN\"}"
+unset TOKEN
+api localhost:8083/v1/repositories
 ```
 
-JSON uses protobuf lowerCamelCase names and omits default values: `{}` means
-unconfigured; `{"configured":true}` means a successful empty listing.
-Successful nonempty responses add `repositories`, whose entries contain
-`sourceId`, `forge`, `host`, `path`, `description` and `visibility`.
-`sourceId` plus `path` is the repository identity. There is no pagination in
-management; the existing repository capability supplies the complete listing.
-The backend gRPC receive limit is 4 MiB; larger listings fail visibly rather
-than truncating results.
+JSON uses protobuf lowerCamelCase names and omits default values.
+`{"configured":true}` means a successful empty listing; `{}` means that
+capability is not configured. Repository entries contain `sourceId`, `forge`,
+`host`, `path`, `description` and `visibility`; `sourceId` is the connection
+ID, and with `path` identifies a repository. Connections contain `id`,
+`name`, `forge`, `baseUrl`, `login`, `status` (`ok`, `invalid` or `revoked`)
+and `checkedAt`. There is no pagination. The backend gRPC receive limit is
+4 MiB; larger listings fail visibly rather than truncating results.
 
 | Cause | gRPC | HTTP |
 | --- | --- | --- |
 | Missing, wrong or unreadable operator credential | `UNAUTHENTICATED` | 401 |
-| Repository service failure, access denial, rejected backend/forge credential, malformed identity or oversized result | `UNAVAILABLE` | 503 |
+| Bad input, or the forge rejected a new token | `INVALID_ARGUMENT` | 400 |
+| `TestConnection`: the forge rejected the stored token or was unreachable | `FAILED_PRECONDITION` | 400 |
+| Connection not found | `NOT_FOUND` | 404 |
+| No connector configured | `UNIMPLEMENTED` | 501 |
+| Backend failure, rejected backend credential or oversized result | `UNAVAILABLE` | 503 |
 | Request deadline | `DEADLINE_EXCEEDED` | 504 |
 | Canceled request | `CANCELED` | 499 |
 
-Failures expose no backend error details or partial results. The browser uses
-a failed-listing page with HTTP 503 for listing errors. Refresh reruns the
-listing; stale data is not retained.
+Failures expose no backend error details or partial results.
 
 ## Docker
 

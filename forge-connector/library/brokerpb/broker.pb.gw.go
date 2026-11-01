@@ -516,6 +516,27 @@ func local_request_Broker_VerifyClient_0(ctx context.Context, marshaler runtime.
 	return msg, metadata, err
 }
 
+func request_Broker_ListClientConnections_0(ctx context.Context, marshaler runtime.Marshaler, client BrokerClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq emptypb.Empty
+		metadata runtime.ServerMetadata
+	)
+	if req.Body != nil {
+		_, _ = io.Copy(io.Discard, req.Body)
+	}
+	msg, err := client.ListClientConnections(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+}
+
+func local_request_Broker_ListClientConnections_0(ctx context.Context, marshaler runtime.Marshaler, server BrokerServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq emptypb.Empty
+		metadata runtime.ServerMetadata
+	)
+	msg, err := server.ListClientConnections(ctx, &protoReq)
+	return msg, metadata, err
+}
+
 // RegisterBrokerHandlerServer registers the http handlers for service Broker to "mux".
 // UnaryRPC     :call BrokerServer directly.
 // StreamingRPC :currently unsupported pending https://github.com/grpc/grpc-go/issues/906.
@@ -802,6 +823,26 @@ func RegisterBrokerHandlerServer(ctx context.Context, mux *runtime.ServeMux, ser
 		}
 		forward_Broker_VerifyClient_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 	})
+	mux.Handle(http.MethodGet, pattern_Broker_ListClientConnections_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		var stream runtime.ServerTransportStream
+		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/forge.connector.v1.Broker/ListClientConnections", runtime.WithHTTPPathPattern("/v1/client/connections"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := local_request_Broker_ListClientConnections_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_Broker_ListClientConnections_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
 
 	return nil
 }
@@ -1080,39 +1121,58 @@ func RegisterBrokerHandlerClient(ctx context.Context, mux *runtime.ServeMux, cli
 		}
 		forward_Broker_VerifyClient_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 	})
+	mux.Handle(http.MethodGet, pattern_Broker_ListClientConnections_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/forge.connector.v1.Broker/ListClientConnections", runtime.WithHTTPPathPattern("/v1/client/connections"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_Broker_ListClientConnections_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_Broker_ListClientConnections_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
 	return nil
 }
 
 var (
-	pattern_Broker_CreateForge_0      = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "forges"}, ""))
-	pattern_Broker_ListForges_0       = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "forges"}, ""))
-	pattern_Broker_DeleteForge_0      = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"v1", "forges", "id"}, ""))
-	pattern_Broker_CreateConnection_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "connections"}, ""))
-	pattern_Broker_ListConnections_0  = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "connections"}, ""))
-	pattern_Broker_GetConnection_0    = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"v1", "connections", "id"}, ""))
-	pattern_Broker_TestConnection_0   = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"v1", "connections", "id", "test"}, ""))
-	pattern_Broker_RotateCredential_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"v1", "connections", "id", "credential"}, ""))
-	pattern_Broker_DeleteConnection_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"v1", "connections", "id"}, ""))
-	pattern_Broker_CreateClient_0     = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "clients"}, ""))
-	pattern_Broker_ListClients_0      = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "clients"}, ""))
-	pattern_Broker_DeleteClient_0     = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"v1", "clients", "id"}, ""))
-	pattern_Broker_IssueToken_0       = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"v1", "connections", "connection_id", "token"}, ""))
-	pattern_Broker_VerifyClient_0     = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"v1", "connections", "connection_id", "verify"}, ""))
+	pattern_Broker_CreateForge_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "forges"}, ""))
+	pattern_Broker_ListForges_0            = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "forges"}, ""))
+	pattern_Broker_DeleteForge_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"v1", "forges", "id"}, ""))
+	pattern_Broker_CreateConnection_0      = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "connections"}, ""))
+	pattern_Broker_ListConnections_0       = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "connections"}, ""))
+	pattern_Broker_GetConnection_0         = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"v1", "connections", "id"}, ""))
+	pattern_Broker_TestConnection_0        = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"v1", "connections", "id", "test"}, ""))
+	pattern_Broker_RotateCredential_0      = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"v1", "connections", "id", "credential"}, ""))
+	pattern_Broker_DeleteConnection_0      = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"v1", "connections", "id"}, ""))
+	pattern_Broker_CreateClient_0          = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "clients"}, ""))
+	pattern_Broker_ListClients_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "clients"}, ""))
+	pattern_Broker_DeleteClient_0          = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"v1", "clients", "id"}, ""))
+	pattern_Broker_IssueToken_0            = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"v1", "connections", "connection_id", "token"}, ""))
+	pattern_Broker_VerifyClient_0          = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"v1", "connections", "connection_id", "verify"}, ""))
+	pattern_Broker_ListClientConnections_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"v1", "client", "connections"}, ""))
 )
 
 var (
-	forward_Broker_CreateForge_0      = runtime.ForwardResponseMessage
-	forward_Broker_ListForges_0       = runtime.ForwardResponseMessage
-	forward_Broker_DeleteForge_0      = runtime.ForwardResponseMessage
-	forward_Broker_CreateConnection_0 = runtime.ForwardResponseMessage
-	forward_Broker_ListConnections_0  = runtime.ForwardResponseMessage
-	forward_Broker_GetConnection_0    = runtime.ForwardResponseMessage
-	forward_Broker_TestConnection_0   = runtime.ForwardResponseMessage
-	forward_Broker_RotateCredential_0 = runtime.ForwardResponseMessage
-	forward_Broker_DeleteConnection_0 = runtime.ForwardResponseMessage
-	forward_Broker_CreateClient_0     = runtime.ForwardResponseMessage
-	forward_Broker_ListClients_0      = runtime.ForwardResponseMessage
-	forward_Broker_DeleteClient_0     = runtime.ForwardResponseMessage
-	forward_Broker_IssueToken_0       = runtime.ForwardResponseMessage
-	forward_Broker_VerifyClient_0     = runtime.ForwardResponseMessage
+	forward_Broker_CreateForge_0           = runtime.ForwardResponseMessage
+	forward_Broker_ListForges_0            = runtime.ForwardResponseMessage
+	forward_Broker_DeleteForge_0           = runtime.ForwardResponseMessage
+	forward_Broker_CreateConnection_0      = runtime.ForwardResponseMessage
+	forward_Broker_ListConnections_0       = runtime.ForwardResponseMessage
+	forward_Broker_GetConnection_0         = runtime.ForwardResponseMessage
+	forward_Broker_TestConnection_0        = runtime.ForwardResponseMessage
+	forward_Broker_RotateCredential_0      = runtime.ForwardResponseMessage
+	forward_Broker_DeleteConnection_0      = runtime.ForwardResponseMessage
+	forward_Broker_CreateClient_0          = runtime.ForwardResponseMessage
+	forward_Broker_ListClients_0           = runtime.ForwardResponseMessage
+	forward_Broker_DeleteClient_0          = runtime.ForwardResponseMessage
+	forward_Broker_IssueToken_0            = runtime.ForwardResponseMessage
+	forward_Broker_VerifyClient_0          = runtime.ForwardResponseMessage
+	forward_Broker_ListClientConnections_0 = runtime.ForwardResponseMessage
 )

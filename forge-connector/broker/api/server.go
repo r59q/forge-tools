@@ -136,7 +136,7 @@ func client(c broker.Client) *pb.Client {
 	for i, id := range c.Connections {
 		ids[i] = string(id)
 	}
-	return &pb.Client{Id: string(c.ID), Name: c.Name, ConnectionIds: ids, CanIssueTokens: c.CanIssueTokens}
+	return &pb.Client{Id: string(c.ID), Name: c.Name, ConnectionIds: ids, CanIssueTokens: c.CanIssueTokens, AllConnections: c.AllConnections}
 }
 
 // CreateForge registers a validated endpoint for the owner.
@@ -220,9 +220,22 @@ func (s *Server) DeleteConnection(ctx context.Context, r *pb.ConnectionRequest) 
 // CreateClient returns the new client's random token once.
 func (s *Server) CreateClient(ctx context.Context, r *pb.CreateClientRequest) (*pb.CreateClientResponse, error) {
 	return call(s, ctx, true, func(ctx context.Context, _ forgeauth.StaticToken) (*pb.CreateClientResponse, error) {
+		if r.GetAllConnections() && len(r.GetConnectionIds()) > 0 {
+			return nil, broker.ErrInvalid
+		}
 		ids := make([]broker.ID, len(r.GetConnectionIds()))
 		for i, id := range r.GetConnectionIds() {
 			ids[i] = broker.ID(id)
+		}
+		if r.GetToken() != "" {
+			c, err := s.manager.RegisterClient(ctx, broker.Client{
+				Name: r.GetName(), Connections: ids, AllConnections: r.GetAllConnections(), CanIssueTokens: r.GetCanIssueTokens(),
+			}, forgeauth.StaticToken(r.GetToken()))
+			return &pb.CreateClientResponse{Client: client(c), Token: r.GetToken()}, err
+		}
+		if r.GetAllConnections() {
+			c, token, err := s.manager.CreateClientForAll(ctx, r.GetName(), r.GetCanIssueTokens())
+			return &pb.CreateClientResponse{Client: client(c), Token: string(token)}, err
 		}
 		c, token, err := s.manager.CreateClient(ctx, r.GetName(), ids, r.GetCanIssueTokens())
 		return &pb.CreateClientResponse{Client: client(c), Token: string(token)}, err
@@ -261,5 +274,17 @@ func (s *Server) VerifyClient(ctx context.Context, r *pb.VerifyClientRequest) (*
 	return call(s, ctx, false, func(ctx context.Context, token forgeauth.StaticToken) (*pb.Client, error) {
 		c, err := s.manager.VerifyClient(ctx, token, broker.ID(r.GetConnectionId()))
 		return client(c), err
+	})
+}
+
+// ListClientConnections lists the bearer token's connections, with kind and status.
+func (s *Server) ListClientConnections(ctx context.Context, _ *emptypb.Empty) (*pb.ListClientConnectionsResponse, error) {
+	return call(s, ctx, false, func(ctx context.Context, token forgeauth.StaticToken) (*pb.ListClientConnectionsResponse, error) {
+		values, err := s.manager.ClientConnections(ctx, token)
+		result := &pb.ListClientConnectionsResponse{}
+		for _, c := range values {
+			result.Connections = append(result.Connections, &pb.ClientConnection{Id: string(c.ID), Name: c.Name, Kind: string(c.Kind), Status: string(c.Status)})
+		}
+		return result, err
 	})
 }

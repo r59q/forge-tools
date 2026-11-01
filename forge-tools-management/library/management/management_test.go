@@ -44,7 +44,7 @@ func TestListing(t *testing.T) {
 		}), wantErr: ErrUnavailable},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := New(tc.reader).ListRepositories(context.Background())
+			got, err := New(Config{Repositories: tc.reader}).ListRepositories(context.Background())
 			if !errors.Is(err, tc.wantErr) || got.Configured != tc.configured || len(got.Repositories) != tc.count {
 				t.Fatalf("got %+v, %v", got, err)
 			}
@@ -58,13 +58,13 @@ func TestListing(t *testing.T) {
 func TestCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := New(nil).ListRepositories(ctx); !errors.Is(err, context.Canceled) {
+	if _, err := New(Config{}).ListRepositories(ctx); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
-	client := New(readerFunc(func(ctx context.Context, _ repositories.ListOptions) ([]repositories.Repository, error) {
+	client := New(Config{Repositories: readerFunc(func(ctx context.Context, _ repositories.ListOptions) ([]repositories.Repository, error) {
 		cancel()
 		return nil, ctx.Err()
-	}))
+	})})
 	ctx, cancel = context.WithCancel(context.Background())
 	defer cancel()
 	if _, err := client.ListRepositories(ctx); !errors.Is(err, context.Canceled) {

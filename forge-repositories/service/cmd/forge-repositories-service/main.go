@@ -1,5 +1,5 @@
 // Command forge-repositories-service serves repositories, branches and tags
-// from every configured forge source over REST and gRPC.
+// from every forge connected through forge-connector, over REST and gRPC.
 package main
 
 import (
@@ -15,16 +15,20 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/r59q/forge-tools/forge-connector/library/connector"
 	"github.com/r59q/forge-tools/forge-core/forgeapi/forgeauth"
+	"github.com/r59q/forge-tools/forge-repositories/library/repositories"
 	"github.com/r59q/forge-tools/forge-repositories/service/api"
 	pb "github.com/r59q/forge-tools/forge-repositories/service/repositoriespb"
 	"google.golang.org/grpc"
 )
 
 type settings struct {
-	grpcAddress, httpAddress, configPath string
-	tokenFile, tokenEnv                  string
-	timeout                              time.Duration
+	grpcAddress, httpAddress              string
+	tokenFile, tokenEnv                   string
+	connectorURL                          string
+	connectorTokenFile, connectorTokenEnv string
+	timeout                               time.Duration
 }
 
 func parse(args []string, getenv func(string) string, help io.Writer) (settings, error) {
@@ -39,9 +43,11 @@ func parse(args []string, getenv func(string) string, help io.Writer) (settings,
 	fs.SetOutput(io.Discard)
 	fs.StringVar(&s.grpcAddress, "grpc-listen", env("GRPC_LISTEN", "127.0.0.1:9092"), "gRPC listen address")
 	fs.StringVar(&s.httpAddress, "http-listen", env("HTTP_LISTEN", "127.0.0.1:8082"), "REST listen address")
-	fs.StringVar(&s.configPath, "config", env("CONFIG", ""), "JSON file listing the sources (required)")
 	fs.StringVar(&s.tokenFile, "token-file", env("TOKEN_FILE", ""), "file containing the service bearer token")
 	fs.StringVar(&s.tokenEnv, "token-env", env("TOKEN_ENV", ""), "service token variable name (default FORGE_REPOSITORIES_TOKEN)")
+	fs.StringVar(&s.connectorURL, "connector-url", env("CONNECTOR_URL", ""), "forge-connector proxy URL (required)")
+	fs.StringVar(&s.connectorTokenFile, "connector-token-file", env("CONNECTOR_TOKEN_FILE", ""), "file containing the connector client token")
+	fs.StringVar(&s.connectorTokenEnv, "connector-token-env", env("CONNECTOR_TOKEN_ENV", ""), "connector client token variable name (default FORGE_REPOSITORIES_CONNECTOR_TOKEN)")
 	var timeout string
 	fs.StringVar(&timeout, "request-timeout", env("REQUEST_TIMEOUT", "30s"), "maximum request duration")
 	if err := fs.Parse(args); err != nil {
@@ -60,8 +66,8 @@ func parse(args []string, getenv func(string) string, help io.Writer) (settings,
 	if fs.NArg() != 0 || s.grpcAddress == "" || s.httpAddress == "" || s.timeout <= 0 {
 		return settings{}, errors.New("invalid startup settings")
 	}
-	if s.configPath == "" {
-		return settings{}, errors.New("configuration file required: set --config or FORGE_REPOSITORIES_CONFIG")
+	if s.connectorURL == "" {
+		return settings{}, errors.New("connector URL required: set --connector-url or FORGE_REPOSITORIES_CONNECTOR_URL")
 	}
 	if s.tokenFile != "" && s.tokenEnv != "" {
 		return settings{}, errors.New("choose one service token source")
@@ -69,42 +75,66 @@ func parse(args []string, getenv func(string) string, help io.Writer) (settings,
 	if s.tokenFile == "" && s.tokenEnv == "" {
 		s.tokenEnv = "FORGE_REPOSITORIES_TOKEN"
 	}
+	if s.connectorTokenFile != "" && s.connectorTokenEnv != "" {
+		return settings{}, errors.New("choose one connector token source")
+	}
+	if s.connectorTokenFile == "" && s.connectorTokenEnv == "" {
+		s.connectorTokenEnv = "FORGE_REPOSITORIES_CONNECTOR_TOKEN"
+	}
 	return s, nil
 }
 
-// serviceToken checks that the service token is set and usable as a bearer
-// token, without ever including its value in an error.
-func (s settings) serviceToken(ctx context.Context) (forgeauth.Credentials, error) {
-	var creds forgeauth.Credentials = forgeauth.EnvToken(s.tokenEnv)
-	if s.tokenFile != "" {
-		creds = forgeauth.FileToken(s.tokenFile)
+// bearerToken checks that a token source is set and usable as a bearer
+// token, without ever including its value in an error. Tokens are reread
+// on each use, so rotation needs no restart.
+func bearerToken(ctx context.Context, name, file, env string) (forgeauth.Credentials, error) {
+	var creds forgeauth.Credentials = forgeauth.EnvToken(env)
+	if file != "" {
+		creds = forgeauth.FileToken(file)
 	}
 	token, err := creds.Token(ctx)
 	if err != nil {
-		return nil, errors.New("service token required: configure token file or environment source")
+		return nil, fmt.Errorf("%s token required: configure token file or environment source", name)
 	}
 	h := http.Header{}
 	h.Set("Authorization", "Bearer "+token)
 	if parsed, ok := forgeauth.AuthorizationToken(h, "Bearer"); !ok || parsed != token {
-		return nil, errors.New("service token must be a nonempty bearer token")
+		return nil, fmt.Errorf("%s token must be a nonempty bearer token", name)
 	}
 	return creds, nil
 }
 
+// sources asks the connector for its connections on every request and reads
+// each as a source named by its connection ID. The connector supplies
+// authenticated sessions, so this service never handles forge credentials.
+func sources(conn *connector.Client) api.Sources {
+	return func(ctx context.Context) (*repositories.Client, error) {
+		conns, err := conn.Connections(ctx)
+		if err != nil {
+			return nil, err
+		}
+		sources := make([]repositories.Source, len(conns))
+		for i, c := range conns {
+			sources[i] = repositories.Source{ID: string(c.ID), Session: c.Session}
+		}
+		return repositories.New(sources...)
+	}
+}
+
 func run(ctx context.Context, s settings, ready func(grpcAddr, httpAddr net.Addr)) error {
-	token, err := s.serviceToken(ctx)
+	token, err := bearerToken(ctx, "service", s.tokenFile, s.tokenEnv)
 	if err != nil {
 		return err
 	}
-	cfg, err := readConfig(s.configPath)
+	connectorToken, err := bearerToken(ctx, "connector", s.connectorTokenFile, s.connectorTokenEnv)
 	if err != nil {
 		return err
 	}
-	client, err := cfg.client(ctx)
+	conn, err := connector.New(connector.Config{URL: s.connectorURL, Credentials: connectorToken})
 	if err != nil {
-		return err
+		return errors.New("connector URL must be an http or https URL")
 	}
-	service, err := api.New(client, token, s.timeout)
+	service, err := api.New(sources(conn), token, s.timeout)
 	if err != nil {
 		return errors.New("cannot initialize API")
 	}

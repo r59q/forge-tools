@@ -17,6 +17,19 @@ Requests go to `/c/{connectionID}/<forge API path>`. Send the client token as
 bodies and responses pass through unchanged, and pagination links are rewritten
 to point back at the proxy.
 
+`GET /connections` lists the connections the client token may use, so callers
+need no connection IDs in their own configuration:
+
+```sh
+curl -H "Authorization: Bearer $CLIENT_TOKEN" localhost:8081/connections
+# {"connections":[{"id":"…","name":"me","kind":"github","status":"ok"}]}
+```
+
+Only connections with status `ok` can be used. Forge credentials and URLs are
+never listed. The proxy's own client must also cover a connection to serve it.
+Go tools use the [connector package](../library/README.md#connector), which
+turns this list into ready sessions.
+
 The proxy has no gRPC or protobuf forwarding API. The forge API surface is
 plain HTTP by design, so the proxy forwards plain HTTP.
 
@@ -36,7 +49,7 @@ The module uses relative replacements for `../library` and
 `../../forge-core/forgeapi`; keep that checkout layout. It does not import the
 broker service. Tests run a fake gRPC broker built from the generated
 `brokerpb` package against a local forge server. They cover the full request,
-token and verification caches, token drop on a forge 401, broker outages, and a
+connection listing, token and verification caches, token drop on a forge 401, broker outages, and a
 `forgeauth` session paging through results via the proxy.
 
 ## Run
@@ -113,6 +126,7 @@ strings, tokens and headers are never logged.
 | Status | Meaning |
 | --- | --- |
 | 401 | Missing or invalid client token |
+| 405 | `/connections` with a method other than `GET` |
 | 403 | Client may not use the connection |
 | 404 | Unknown connection |
 | 503 | Broker unavailable or rejected the proxy's own token |

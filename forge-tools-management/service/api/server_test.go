@@ -36,7 +36,12 @@ func (f readerFunc) List(ctx context.Context, o repositories.ListOptions) ([]rep
 
 func setup(t *testing.T, reader management.RepositoryReader, timeout time.Duration) (*Server, http.Handler, pb.ManagementClient) {
 	t.Helper()
-	s, err := New(management.New(reader), forgeauth.StaticToken(operatorToken), timeout)
+	return setupConfig(t, management.Config{Repositories: reader}, timeout)
+}
+
+func setupConfig(t *testing.T, config management.Config, timeout time.Duration) (*Server, http.Handler, pb.ManagementClient) {
+	t.Helper()
+	s, err := New(management.New(config), forgeauth.StaticToken(operatorToken), timeout)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,10 +251,10 @@ func TestInvalidServer(t *testing.T) {
 	if _, err := New(nil, forgeauth.StaticToken(operatorToken), time.Second); err == nil {
 		t.Fatal("nil client accepted")
 	}
-	if _, err := New(management.New(nil), nil, time.Second); err == nil {
+	if _, err := New(management.New(management.Config{}), nil, time.Second); err == nil {
 		t.Fatal("nil credentials accepted")
 	}
-	if _, err := New(management.New(nil), forgeauth.StaticToken(operatorToken), 0); err == nil {
+	if _, err := New(management.New(management.Config{}), forgeauth.StaticToken(operatorToken), 0); err == nil {
 		t.Fatal("invalid timeout accepted")
 	}
 }

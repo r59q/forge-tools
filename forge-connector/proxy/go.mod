@@ -6,6 +6,7 @@ require (
 	github.com/r59q/forge-tools/forge-connector/library v0.0.0
 	github.com/r59q/forge-tools/forge-core/forgeapi v0.0.0
 	google.golang.org/grpc v1.75.1
+	google.golang.org/protobuf v1.36.10
 )
 
 require (
@@ -15,7 +16,6 @@ require (
 	golang.org/x/text v0.29.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250929231259-57b25ae835d4 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250929231259-57b25ae835d4 // indirect
-	google.golang.org/protobuf v1.36.10 // indirect
 )
 
 replace github.com/r59q/forge-tools/forge-connector/library => ../library

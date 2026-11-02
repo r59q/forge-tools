@@ -1,0 +1,502 @@
+syntax = "proto3";
+
+package forge.code.v1;
+option go_package = "github.com/r59q/forge-tools/forge-code/service/codepb";
+
+import "google/api/annotations.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+// Code reads and writes Git repository content on every configured source
+// (a forge-connector connection) through one forge-agnostic API. Every RPC
+// requires the service token in the Authorization: Bearer header (gRPC
+// metadata). Use TLS when it crosses a network boundary. No response
+// contains a forge token.
+//
+// Repository paths, file paths and ref names contain slashes, so they go in
+// the query or body rather than the URL path. Every read resolves its
+// revision once and reads only that commit; results name it.
+//
+// A revision is a full object ID, HEAD, refs/heads/X, refs/tags/X or a bare
+// name X, each optionally followed by ~N or ^N. A bare name that is both a
+// tag and a branch is FAILED_PRECONDITION. Short object IDs are rejected.
+// An empty revision is HEAD.
+service Code {
+  // ListSources lists the configured sources. GET /v1/sources.
+  rpc ListSources(google.protobuf.Empty) returns (ListSourcesResponse) {
+    option (google.api.http) = { get: "/v1/sources" };
+  }
+  // GetCapabilities says what a source supports.
+  // GET /v1/capabilities?source=.
+  rpc GetCapabilities(CapabilitiesRequest) returns (Capabilities) {
+    option (google.api.http) = { get: "/v1/capabilities" };
+  }
+  // Resolve returns the commit a revision names.
+  // GET /v1/resolve?source=&repository=&revision=.
+  rpc Resolve(RevisionRequest) returns (Resolved) {
+    option (google.api.http) = { get: "/v1/resolve" };
+  }
+  // ListRefs lists branches and tags, sorted by name.
+  // GET /v1/refs?source=&repository=&prefix=&limit=.
+  rpc ListRefs(ListRefsRequest) returns (RefList) {
+    option (google.api.http) = { get: "/v1/refs" };
+  }
+  // GetCommit reads the commit a revision names.
+  // GET /v1/commit?source=&repository=&revision=.
+  rpc GetCommit(RevisionRequest) returns (Commit) {
+    option (google.api.http) = { get: "/v1/commit" };
+  }
+  // ListHistory returns one page of commits reachable from a revision.
+  // GET /v1/history?source=&repository=&revision=&path=&page_size=&cursor=.
+  rpc ListHistory(HistoryRequest) returns (HistoryPage) {
+    option (google.api.http) = { get: "/v1/history" };
+  }
+  // GetTree lists a directory.
+  // GET /v1/tree?source=&repository=&revision=&path=&recursive=&max_entries=.
+  rpc GetTree(TreeRequest) returns (Tree) {
+    option (google.api.http) = { get: "/v1/tree" };
+  }
+  // Stat describes one path, including its mode.
+  // GET /v1/stat?source=&repository=&revision=&path=.
+  rpc Stat(PathRequest) returns (PathInfo) {
+    option (google.api.http) = { get: "/v1/stat" };
+  }
+  // GetFile reads a file of at most 4 MiB; larger files are OUT_OF_RANGE.
+  // Symlinks are not followed. GET /v1/file?source=&repository=&revision=&path=.
+  rpc GetFile(PathRequest) returns (File) {
+    option (google.api.http) = { get: "/v1/file" };
+  }
+  // GetBlob reads a blob of at most 4 MiB; larger blobs are OUT_OF_RANGE.
+  // GET /v1/blob?source=&repository=&id=.
+  rpc GetBlob(BlobRequest) returns (File) {
+    option (google.api.http) = { get: "/v1/blob" };
+  }
+  // ReadFile streams a file in chunks of up to 64 KiB. The first chunk
+  // carries the blob. gRPC only; REST clients use GET /v1/raw.
+  rpc ReadFile(PathRequest) returns (stream Chunk);
+  // ReadBlob streams a blob in chunks of up to 64 KiB. The first chunk
+  // carries the blob. gRPC only; REST clients use GET /v1/raw.
+  rpc ReadBlob(BlobRequest) returns (stream Chunk);
+  // GetMergeBase returns the best common ancestor of two revisions.
+  // GET /v1/merge-base?source=&repository=&a=&b=.
+  rpc GetMergeBase(MergeBaseRequest) returns (MergeBase) {
+    option (google.api.http) = { get: "/v1/merge-base" };
+  }
+  // Compare lists the changes between two revisions.
+  // GET /v1/compare?source=&repository=&base=&head=&mode=&paths=&patches=.
+  rpc Compare(CompareRequest) returns (Diff) {
+    option (google.api.http) = { get: "/v1/compare" };
+  }
+  // CreateCommit makes a commit and moves a ref to it in one
+  // compare-and-swap push. POST /v1/commits.
+  rpc CreateCommit(CreateCommitRequest) returns (Commit) {
+    option (google.api.http) = { post: "/v1/commits" body: "*" };
+  }
+  // UpdateRefs creates, moves and deletes refs in one atomic
+  // compare-and-swap push. POST /v1/ref-updates.
+  rpc UpdateRefs(UpdateRefsRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = { post: "/v1/ref-updates" body: "*" };
+  }
+}
+
+// Source is a configured source, without its URL or credentials.
+message Source {
+  // id names the source in requests.
+  string id = 1;
+  // kind is the forge type: github, gitlab or forgejo.
+  string kind = 2;
+}
+
+// ListSourcesResponse holds the configured sources in order.
+message ListSourcesResponse {
+  // sources are the configured sources.
+  repeated Source sources = 1;
+}
+
+// CapabilitiesRequest names a source.
+message CapabilitiesRequest {
+  // source is a source ID. It is required.
+  string source = 1;
+}
+
+// Capabilities says what a source supports.
+message Capabilities {
+  // tree_ids reports that trees carry their IDs. It is false on GitLab.
+  bool tree_ids = 1;
+  // merge_base reports that GetMergeBase and merge-base Compare work.
+  bool merge_base = 2;
+  // writes reports that the source can push. Whether a repository allows
+  // atomic or deleting pushes is checked on write.
+  bool writes = 3;
+}
+
+// RevisionRequest names a revision in a repository.
+message RevisionRequest {
+  // source is a source ID. It is required.
+  string source = 1;
+  // repository is the full repository path, such as owner/name or
+  // group/sub/project. It is not URL-encoded.
+  string repository = 2;
+  // revision is the revision to read. Empty is HEAD.
+  string revision = 3;
+}
+
+// Resolved is a revision resolved to a commit.
+message Resolved {
+  // commit is the commit's object ID.
+  string commit = 1;
+  // ref is the full ref name that matched, or empty if the revision
+  // started with an object ID.
+  string ref = 2;
+}
+
+// ListRefsRequest selects the refs to list.
+message ListRefsRequest {
+  // source is a source ID. It is required.
+  string source = 1;
+  // repository is the full repository path.
+  string repository = 2;
+  // prefix is refs/heads/, refs/tags/, or empty for both.
+  string prefix = 3;
+  // limit caps the number of refs. Zero means 10000.
+  int32 limit = 4;
+}
+
+// Ref is a branch or tag.
+message Ref {
+  // name is the full ref name, such as refs/heads/main.
+  string name = 1;
+  // target is the object the ref points to: the tag object for an
+  // annotated tag, otherwise the commit.
+  string target = 2;
+  // commit is the commit after peeling tags, or empty if a tag points to
+  // something else.
+  string commit = 3;
+}
+
+// RefList holds branches and tags.
+message RefList {
+  // default_branch is the default branch's full ref name, or empty.
+  string default_branch = 1;
+  // refs are sorted by name. Branches come first when the limit cuts the
+  // listing off.
+  repeated Ref refs = 2;
+  // truncated reports that more refs exist than were returned.
+  bool truncated = 3;
+}
+
+// Signature is a commit author or committer.
+message Signature {
+  // name is the person's name.
+  string name = 1;
+  // email is the person's email address.
+  string email = 2;
+  // when is the time of the signature. In writes, unset means now.
+  google.protobuf.Timestamp when = 3;
+}
+
+// Commit is a Git commit.
+message Commit {
+  // id is the commit's object ID.
+  string id = 1;
+  // tree is the root tree's object ID. It is empty on GitLab.
+  string tree = 2;
+  // parents are the parent commits, first parent first.
+  repeated string parents = 3;
+  // author wrote the change.
+  Signature author = 4;
+  // committer made the commit.
+  Signature committer = 5;
+  // message is the full commit message.
+  string message = 6;
+}
+
+// HistoryRequest selects a page of history.
+message HistoryRequest {
+  // source is a source ID. It is required.
+  string source = 1;
+  // repository is the full repository path.
+  string repository = 2;
+  // revision is where the history starts. Empty is HEAD. It is ignored
+  // when cursor is set.
+  string revision = 3;
+  // path keeps only commits that change this file or directory.
+  string path = 4;
+  // page_size is the number of commits per page: default 50, at most 100.
+  int32 page_size = 5;
+  // cursor continues from a previous HistoryPage.next.
+  string cursor = 6;
+}
+
+// HistoryPage is one page of history.
+message HistoryPage {
+  // tip is the commit the history starts from. All pages share it.
+  string tip = 1;
+  // commits are in the forge's log order, newest first.
+  repeated Commit commits = 2;
+  // next is the cursor for the next page, or empty after the last page.
+  string next = 3;
+}
+
+// TreeRequest selects a directory listing.
+message TreeRequest {
+  // source is a source ID. It is required.
+  string source = 1;
+  // repository is the full repository path.
+  string repository = 2;
+  // revision is the revision to read. Empty is HEAD.
+  string revision = 3;
+  // path is the directory to list. Empty is the root.
+  string path = 4;
+  // recursive lists every entry below path, not only its children.
+  bool recursive = 5;
+  // max_entries caps the number of entries. Zero means 100000.
+  int32 max_entries = 6;
+}
+
+// Entry is one tree entry.
+message Entry {
+  // name is the entry's base name.
+  string name = 1;
+  // path is the entry's path from the repository root.
+  string path = 2;
+  // mode is the Git mode as six octal digits, such as 100644, 100755,
+  // 120000 (symlink), 040000 (directory) or 160000 (submodule).
+  string mode = 3;
+  // type is blob, tree or commit (a submodule).
+  string type = 4;
+  // id is the entry's object ID.
+  string id = 5;
+  // size is a blob's size in bytes, or -1 if unknown or not a blob.
+  int64 size = 6;
+}
+
+// Tree is a directory listing at one commit.
+message Tree {
+  // commit is the commit the tree was read from.
+  string commit = 1;
+  // id is the directory's tree ID. It is empty on GitLab.
+  string id = 2;
+  // path is the listed directory, empty for the root.
+  string path = 3;
+  // entries are sorted by path.
+  repeated Entry entries = 4;
+  // truncated reports that the listing hit max_entries or a call limit.
+  bool truncated = 5;
+}
+
+// PathRequest names a path at a revision.
+message PathRequest {
+  // source is a source ID. It is required.
+  string source = 1;
+  // repository is the full repository path.
+  string repository = 2;
+  // revision is the revision to read. Empty is HEAD.
+  string revision = 3;
+  // path is the file's path from the repository root. It is required.
+  string path = 4;
+}
+
+// PathInfo describes one path at one commit.
+message PathInfo {
+  // commit is the commit the path was read from.
+  string commit = 1;
+  // entry is the path's tree entry.
+  Entry entry = 2;
+}
+
+// BlobRequest names a blob.
+message BlobRequest {
+  // source is a source ID. It is required.
+  string source = 1;
+  // repository is the full repository path.
+  string repository = 2;
+  // id is the blob's full object ID.
+  string id = 3;
+}
+
+// Blob describes file content.
+message Blob {
+  // id is the blob's object ID.
+  string id = 1;
+  // commit is the commit the file was read from, or empty for a blob.
+  string commit = 2;
+  // path is the file's path, or empty for a blob.
+  string path = 3;
+  // size is the content size in bytes, or -1 if unknown.
+  int64 size = 4;
+  // lfs_pointer reports that the content is a Git LFS pointer. LFS content
+  // is never fetched.
+  bool lfs_pointer = 5;
+}
+
+// File is a blob with its content.
+message File {
+  // blob describes the content.
+  Blob blob = 1;
+  // content is the full content, at most 4 MiB. JSON carries it as base64.
+  bytes content = 2;
+}
+
+// Chunk is one part of a streamed blob.
+message Chunk {
+  // blob describes the content. Only the first chunk sets it.
+  Blob blob = 1;
+  // data is the next part of the content, at most 64 KiB.
+  bytes data = 2;
+}
+
+// MergeBaseRequest names two revisions.
+message MergeBaseRequest {
+  // source is a source ID. It is required.
+  string source = 1;
+  // repository is the full repository path.
+  string repository = 2;
+  // a is the first revision.
+  string a = 3;
+  // b is the second revision.
+  string b = 4;
+}
+
+// MergeBase is the best common ancestor of two revisions.
+message MergeBase {
+  // commit is the merge base's object ID.
+  string commit = 1;
+}
+
+// CompareRequest selects two revisions to compare.
+message CompareRequest {
+  // source is a source ID. It is required.
+  string source = 1;
+  // repository is the full repository path.
+  string repository = 2;
+  // base is the old revision.
+  string base = 3;
+  // head is the new revision.
+  string head = 4;
+  // mode is merge_base (default), comparing head with the merge base of
+  // base and head, or direct, comparing head with base.
+  string mode = 5;
+  // paths keeps only changes at or below these paths. In REST, repeat the
+  // parameter: paths=a&paths=b.
+  repeated string paths = 6;
+  // patches adds unified diffs to text changes.
+  bool patches = 7;
+  // context is the number of context lines. Zero means 3; negative means
+  // none.
+  int32 context = 8;
+  // max_changes caps the number of changes. Zero means 3000.
+  int32 max_changes = 9;
+  // max_patch_files caps how many changes get a patch. Zero means 100;
+  // values over 1000 are lowered to 1000.
+  int32 max_patch_files = 10;
+  // max_patch_bytes caps one patch's size. Zero means 256 KiB; values
+  // over 1 MiB are lowered to 1 MiB. One compare reads at most 64 MiB of
+  // blobs for patches.
+  int32 max_patch_bytes = 11;
+}
+
+// Change is one changed path.
+message Change {
+  // status is added, deleted, modified, renamed or type_changed.
+  string status = 1;
+  // old_path is the path in the base, empty if added.
+  string old_path = 2;
+  // path is the path in the head, empty if deleted.
+  string path = 3;
+  // old_mode is the mode in the base, empty if added.
+  string old_mode = 4;
+  // mode is the mode in the head, empty if deleted.
+  string mode = 5;
+  // old_id is the object ID in the base, empty if added.
+  string old_id = 6;
+  // id is the object ID in the head, empty if deleted.
+  string id = 7;
+  // binary reports binary content, so no patch is made.
+  bool binary = 8;
+  // additions is the number of added lines, if a patch was made.
+  int32 additions = 9;
+  // deletions is the number of deleted lines, if a patch was made.
+  int32 deletions = 10;
+  // patch is the unified diff, if patches were asked for.
+  string patch = 11;
+  // patch_omitted reports that a patch was asked for but left out.
+  bool patch_omitted = 12;
+}
+
+// Diff is the result of Compare.
+message Diff {
+  // base is the resolved base commit.
+  string base = 1;
+  // head is the resolved head commit.
+  string head = 2;
+  // merge_base is the commit head was compared with in merge_base mode,
+  // or empty in direct mode.
+  string merge_base = 3;
+  // changes are sorted by path.
+  repeated Change changes = 4;
+  // truncated reports that the diff hit max_changes or a call limit.
+  bool truncated = 5;
+}
+
+// FileChange is one file to add, change or delete.
+message FileChange {
+  // path is the file's path from the repository root.
+  string path = 1;
+  // delete removes the file. mode, content and submodule must be empty.
+  bool delete = 2;
+  // mode is 100644, 100755, 120000 (content is the target) or 160000 (set
+  // submodule). Empty keeps the existing mode, or 100644 for a new file.
+  string mode = 3;
+  // content is the new file content. JSON carries it as base64.
+  bytes content = 4;
+  // submodule is the commit of a 160000 entry.
+  string submodule = 5;
+}
+
+// CreateCommitRequest is a commit to create and push.
+message CreateCommitRequest {
+  // source is a source ID. It is required.
+  string source = 1;
+  // repository is the full repository path.
+  string repository = 2;
+  // parents are the parent commits. None makes a root commit and two or
+  // more a merge. Changes apply to the first parent's tree.
+  repeated string parents = 3;
+  // changes are the file changes, at most one per path. Content totals at
+  // most 64 MiB.
+  repeated FileChange changes = 4;
+  // author wrote the change. name and email are required.
+  Signature author = 5;
+  // committer made the commit. Unset means author.
+  Signature committer = 6;
+  // message is the commit message. It is required.
+  string message = 7;
+  // ref is the branch or tag to move to the new commit, such as
+  // refs/heads/main. It is required.
+  string ref = 8;
+  // old is ref's expected current value. All zeros means ref must not
+  // exist. Otherwise the push fails with ABORTED.
+  string old = 9;
+}
+
+// RefUpdate moves, creates or deletes one ref.
+message RefUpdate {
+  // name is the full ref name, such as refs/heads/main.
+  string name = 1;
+  // old is the expected current value. All zeros means it must not exist.
+  string old = 2;
+  // new is the new value. All zeros deletes the ref.
+  string new = 3;
+}
+
+// UpdateRefsRequest is a set of ref updates that apply together or not at
+// all.
+message UpdateRefsRequest {
+  // source is a source ID. It is required.
+  string source = 1;
+  // repository is the full repository path.
+  string repository = 2;
+  // updates are the ref updates, at most one per ref.
+  repeated RefUpdate updates = 3;
+}

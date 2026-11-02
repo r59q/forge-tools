@@ -132,7 +132,7 @@ func (b *Broker) IssueToken(ctx context.Context, id broker.ID) (broker.IssuedTok
 		return broker.IssuedToken{}, b.issueError(id, err)
 	}
 	issued := broker.IssuedToken{
-		Kind: forgeauth.Kind(resp.GetKind()), BaseURL: resp.GetBaseUrl(),
+		Kind: forgeauth.Kind(resp.GetKind()), BaseURL: resp.GetBaseUrl(), GitBaseURL: resp.GetGitBaseUrl(),
 		Token: forgeauth.StaticToken(resp.GetToken()),
 	}
 	b.tokens.set(string(id), issued, b.tokenTTL)

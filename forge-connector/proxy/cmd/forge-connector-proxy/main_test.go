@@ -33,6 +33,23 @@ func TestParseDefaults(t *testing.T) {
 	if s.brokerTLS {
 		t.Error("TLS enabled by default")
 	}
+	if s.allowGitPush || s.maxGitPushBytes != 2<<30 {
+		t.Errorf("git push = %v, limit %d", s.allowGitPush, s.maxGitPushBytes)
+	}
+}
+
+func TestParseGitPush(t *testing.T) {
+	env := func(key string) string {
+		return map[string]string{"FORGE_PROXY_ALLOW_GIT_PUSH": "true", "FORGE_PROXY_MAX_GIT_PUSH_BYTES": "1024"}[key]
+	}
+	s, err := parse(nil, env, io.Discard)
+	if err != nil || !s.allowGitPush || s.maxGitPushBytes != 1024 {
+		t.Fatalf("settings = %+v, %v", s, err)
+	}
+	s, err = parse([]string{"--allow-git-push=false"}, env, io.Discard)
+	if err != nil || s.allowGitPush {
+		t.Fatalf("flag did not override env: %+v, %v", s, err)
+	}
 }
 
 func TestParseEnvAndFlagPrecedence(t *testing.T) {
@@ -63,6 +80,9 @@ func TestParseRejects(t *testing.T) {
 		"bad duration":      {"--token-ttl", "soon"},
 		"negative duration": {"--verify-ttl", "-1s"},
 		"bad bool":          {"--broker-tls", "maybe"},
+		"bad push bool":     {"--allow-git-push", "maybe"},
+		"zero push limit":   {"--max-git-push-bytes", "0"},
+		"bad push limit":    {"--max-git-push-bytes", "2G"},
 		"empty broker":      {"--broker-addr", ""},
 		"positional":        {"extra"},
 		"unknown flag":      {"--nope"},

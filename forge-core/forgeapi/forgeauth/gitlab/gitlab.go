@@ -3,6 +3,7 @@ package gitlab
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -14,7 +15,10 @@ import (
 // use.
 type Provider struct{}
 
-var _ forgeauth.Provider = Provider{}
+var (
+	_ forgeauth.Provider         = Provider{}
+	_ forgeauth.GitAuthenticator = Provider{}
+)
 
 // Kind returns forgeauth.GitLab.
 func (Provider) Kind() forgeauth.Kind { return forgeauth.GitLab }
@@ -53,6 +57,9 @@ func (Provider) Whoami(ctx context.Context, s *forgeauth.Session) (forgeauth.Ide
 // SetToken calls SetToken.
 func (Provider) SetToken(h http.Header, token string) { SetToken(h, token) }
 
+// SetGitToken calls SetGitToken.
+func (Provider) SetGitToken(h http.Header, token string) { SetGitToken(h, token) }
+
 // TokenFromHeader calls TokenFromHeader.
 func (Provider) TokenFromHeader(h http.Header) (string, bool) { return TokenFromHeader(h) }
 
@@ -69,4 +76,14 @@ func TokenFromHeader(h http.Header) (string, bool) {
 		return forgeauth.HeaderToken(h, "PRIVATE-TOKEN")
 	}
 	return forgeauth.AuthorizationToken(h, "Bearer")
+}
+
+// gitUser is the user name sent with the token in Git requests.
+const gitUser = "oauth2"
+
+// SetGitToken sets "Authorization: Basic" with the user oauth2 and the
+// token as password. GitLab accepts it for personal, project, group and
+// OAuth tokens; PRIVATE-TOKEN works only for the API.
+func SetGitToken(h http.Header, token string) {
+	h.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(gitUser+":"+token)))
 }

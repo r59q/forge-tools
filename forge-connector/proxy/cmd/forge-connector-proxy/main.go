@@ -19,6 +19,7 @@ import (
 	"time"
 
 	pb "github.com/r59q/forge-tools/forge-connector/library/brokerpb"
+	"github.com/r59q/forge-tools/forge-connector/library/proxy"
 	"github.com/r59q/forge-tools/forge-connector/proxy/service"
 	"github.com/r59q/forge-tools/forge-core/forgeapi/forgeauth"
 	"github.com/r59q/forge-tools/forge-core/forgeapi/forgeauth/forgejo"
@@ -34,9 +35,10 @@ import (
 type settings struct {
 	httpAddress, grpcAddress, brokerAddress string
 	tokenFile, tokenEnv                     string
-	brokerTLS                               bool
+	brokerTLS, allowGitPush                 bool
 	brokerCA, publicURL                     string
 	tokenTTL, verifyTTL, brokerTimeout      time.Duration
+	maxGitPushBytes                         int64
 }
 
 func parse(args []string, getenv func(string) string, help io.Writer) (settings, error) {
@@ -58,6 +60,10 @@ func parse(args []string, getenv func(string) string, help io.Writer) (settings,
 	fs.StringVar(&s.brokerCA, "broker-ca-file", env("BROKER_CA_FILE", ""), "PEM CA file for the broker (implies --broker-tls)")
 	brokerTLS := env("BROKER_TLS", "false")
 	fs.StringVar(&brokerTLS, "broker-tls", brokerTLS, "use TLS to reach the broker (true or false)")
+	allowGitPush := env("ALLOW_GIT_PUSH", "false")
+	fs.StringVar(&allowGitPush, "allow-git-push", allowGitPush, "serve git-receive-pack on the Git route (true or false)")
+	maxGitPush := env("MAX_GIT_PUSH_BYTES", strconv.FormatInt(proxy.DefaultMaxGitPushBytes, 10))
+	fs.StringVar(&maxGitPush, "max-git-push-bytes", maxGitPush, "largest Git push body in bytes")
 	var tokenTTL, verifyTTL, brokerTimeout string
 	fs.StringVar(&tokenTTL, "token-ttl", env("TOKEN_TTL", service.DefaultTokenTTL.String()), "how long forge tokens are cached")
 	fs.StringVar(&verifyTTL, "verify-ttl", env("VERIFY_TTL", service.DefaultVerifyTTL.String()), "how long a client approval is cached")
@@ -75,6 +81,12 @@ func parse(args []string, getenv func(string) string, help io.Writer) (settings,
 		return settings{}, errors.New("invalid broker TLS setting")
 	}
 	s.brokerTLS = s.brokerTLS || s.brokerCA != ""
+	if s.allowGitPush, err = strconv.ParseBool(allowGitPush); err != nil {
+		return settings{}, errors.New("invalid allow-git-push setting")
+	}
+	if s.maxGitPushBytes, err = strconv.ParseInt(maxGitPush, 10, 64); err != nil || s.maxGitPushBytes <= 0 {
+		return settings{}, errors.New("invalid max-git-push-bytes")
+	}
 	for _, d := range []struct {
 		name, value string
 		dst         *time.Duration
@@ -152,7 +164,10 @@ func run(ctx context.Context, s settings, logger *slog.Logger) error {
 	if err != nil {
 		return errors.New("cannot initialize broker client")
 	}
-	server, err := service.New(service.Config{Broker: brk, Registry: &registry, PublicURL: s.publicURL, Logger: logger})
+	server, err := service.New(service.Config{
+		Broker: brk, Registry: &registry, PublicURL: s.publicURL, Logger: logger,
+		AllowGitPush: s.allowGitPush, MaxGitPushBytes: s.maxGitPushBytes,
+	})
 	if err != nil {
 		return errors.New("cannot initialize proxy")
 	}

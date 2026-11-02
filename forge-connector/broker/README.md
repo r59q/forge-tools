@@ -117,7 +117,11 @@ credentials fail authentication. REST does not trust `Grpc-Metadata-*` headers.
 | `ListClientConnections` | `GET /v1/client/connections` |
 
 Start by creating a forge with `kind`, `baseUrl` (including its API path) and
-optional `name`. Create a connection with `forgeId`, `credential` and optional
+optional `name`. The optional `gitBaseUrl` sets the Git host used by the
+proxy's Git route, such as `https://github.com`; it follows the `baseUrl`
+rules. When it is empty, the broker derives it from `baseUrl` (for example
+`https://api.github.com` gives `https://github.com`, and `/api/v4` or
+`/api/v1` is stripped), or leaves it empty, which disables Git for that forge. Create a connection with `forgeId`, `credential` and optional
 `name`; the broker checks Whoami before saving it. Create a client with
 `connectionIds`, `canIssueTokens` and optional `name`, and save its returned
 token securely. Set `allConnections` instead of `connectionIds` to grant every
@@ -125,7 +129,7 @@ connection, including ones created later, such as for a proxy. To use a token
 from your own configuration, set `token`; it needs at least 32 printable
 characters, without spaces, and must be unique. Use that token as the bearer credential for client operations.
 `CreateClient` returns its token once; `IssueToken` deliberately returns the
-forge credential to an authorized client. All other results are metadata only.
+forge credential, with the forge's kind, API and Git base URLs, to an authorized client. All other results are metadata only.
 
 `ListClientConnections` returns the ID, name, forge kind and status of each
 connection in the bearer token's scope, never credentials or URLs. It does not
@@ -151,6 +155,8 @@ are never returned.
 
 SQLite uses the pure-Go `modernc.org/sqlite` driver with no cgo. Schema version
 1 is applied transactionally on first open; newer unknown versions are rejected.
+Records are JSON, so new fields such as a forge's Git base URL need no
+migration; forges stored before it get the derived default.
 Use one broker process per database. A single database connection serializes
 transactions. Connection metadata and AES-256-GCM ciphertext are written
 atomically; client tokens are stored only as SHA-256 hashes. Metadata and hashes

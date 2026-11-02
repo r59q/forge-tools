@@ -3,6 +3,7 @@ package service_test
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -71,7 +72,7 @@ func (b *fakeBroker) IssueToken(ctx context.Context, r *pb.IssueTokenRequest) (*
 	case r.GetConnectionId() != connID:
 		return nil, status.Error(codes.PermissionDenied, "no")
 	}
-	return &pb.IssueTokenResponse{Kind: "github", BaseUrl: b.baseURL, Token: b.forgeToken}, nil
+	return &pb.IssueTokenResponse{Kind: "github", BaseUrl: b.baseURL, GitBaseUrl: b.baseURL + "/git", Token: b.forgeToken}, nil
 }
 
 func (b *fakeBroker) VerifyClient(ctx context.Context, r *pb.VerifyClientRequest) (*pb.Client, error) {
@@ -130,6 +131,7 @@ type env struct {
 
 type options struct {
 	tokenTTL, verifyTTL time.Duration
+	allowGitPush        bool
 }
 
 func newEnv(t *testing.T, o options) *env {
@@ -181,7 +183,7 @@ func (e *env) finish(t *testing.T, o options, addr string) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	server, err := service.New(service.Config{Broker: e.adapter, Registry: registry(t), Logger: logger})
+	server, err := service.New(service.Config{Broker: e.adapter, Registry: registry(t), Logger: logger, AllowGitPush: o.allowGitPush})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -636,5 +638,69 @@ func TestHealthzWhileStopping(t *testing.T) {
 func TestInvalidBrokerConfig(t *testing.T) {
 	if _, err := service.NewBroker(service.BrokerConfig{}); !errors.Is(err, broker.ErrInvalid) {
 		t.Errorf("err = %v", err)
+	}
+}
+
+func (e *env) git(t *testing.T, method, path, contentType string) int {
+	t.Helper()
+	req, err := http.NewRequest(method, e.proxy.URL+path, strings.NewReader("0000"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+callerToken)
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	return resp.StatusCode
+}
+
+func TestGitRoute(t *testing.T) {
+	e := newEnv(t, options{tokenTTL: time.Hour, verifyTTL: time.Hour})
+	var paths sync.Map
+	e.forgeFunc.Store(func(w http.ResponseWriter, r *http.Request) {
+		paths.Store(int(e.forgeHits.Load()), r.URL.RequestURI())
+		if r.Header.Get("Authorization") == "Basic "+base64.StdEncoding.EncodeToString([]byte("x-access-token:stale")) {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/x-git-upload-pack-advertisement")
+	})
+	if code := e.git(t, http.MethodGet, "/g/"+connID+"/o/r.git/info/refs?service=git-upload-pack", ""); code != 200 {
+		t.Fatalf("status = %d", code)
+	}
+	want := http.Header{}
+	github.SetGitToken(want, forgeToken)
+	if e.forgeAuth(1) != want.Get("Authorization") {
+		t.Errorf("forge saw %q", e.forgeAuth(1))
+	}
+	if p, _ := paths.Load(1); p != "/git/o/r.git/info/refs?service=git-upload-pack" {
+		t.Errorf("forge path = %v", p)
+	}
+	// Push is off by default.
+	if code := e.git(t, http.MethodPost, "/g/"+connID+"/o/r.git/git-receive-pack", "application/x-git-receive-pack-request"); code != 404 {
+		t.Errorf("push status = %d", code)
+	}
+	// A forge 401 on the Git route drops the cached token too.
+	e.broker.set(func() { e.broker.forgeToken = "stale" })
+	e.clock.advance(2 * time.Hour)
+	if code := e.git(t, http.MethodPost, "/g/"+connID+"/o/r.git/git-upload-pack", "application/x-git-upload-pack-request"); code != 401 {
+		t.Fatalf("stale status = %d", code)
+	}
+	e.broker.set(func() { e.broker.forgeToken = forgeToken })
+	if code := e.git(t, http.MethodPost, "/g/"+connID+"/o/r.git/git-upload-pack", "application/x-git-upload-pack-request"); code != 200 {
+		t.Fatalf("refreshed status = %d", code)
+	}
+	if logs := e.logs.String(); !strings.Contains(logs, "connection="+connID) || strings.Contains(logs, "service=") {
+		t.Errorf("logs = %s", logs)
+	}
+
+	e = newEnv(t, options{allowGitPush: true})
+	if code := e.git(t, http.MethodPost, "/g/"+connID+"/o/r.git/git-receive-pack", "application/x-git-receive-pack-request"); code != 200 {
+		t.Errorf("push with AllowGitPush = %d", code)
 	}
 }

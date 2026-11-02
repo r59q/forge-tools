@@ -219,6 +219,9 @@ type IssuedToken struct {
 	Kind forgeauth.Kind
 	// BaseURL is the forge API endpoint for Token.
 	BaseURL string
+	// GitBaseURL is the forge's Git smart-HTTP base URL for Token, or empty
+	// if unknown.
+	GitBaseURL string
 	// Token is the decrypted forge credential, redacted from formatted output.
 	Token forgeauth.StaticToken
 }
@@ -244,7 +247,8 @@ func (m *Manager) IssueToken(ctx context.Context, clientToken forgeauth.StaticTo
 	if err != nil {
 		return IssuedToken{}, err
 	}
-	return IssuedToken{Kind: forge.Kind, BaseURL: forge.BaseURL, Token: token}, nil
+	forge = withGitDefault(forge)
+	return IssuedToken{Kind: forge.Kind, BaseURL: forge.BaseURL, GitBaseURL: forge.GitBaseURL, Token: token}, nil
 }
 
 // ClientConnection is a connection as its client sees it: no credential,

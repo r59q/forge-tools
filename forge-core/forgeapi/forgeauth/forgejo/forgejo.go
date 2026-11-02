@@ -3,6 +3,7 @@ package forgejo
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -14,7 +15,10 @@ import (
 // use.
 type Provider struct{}
 
-var _ forgeauth.Provider = Provider{}
+var (
+	_ forgeauth.Provider         = Provider{}
+	_ forgeauth.GitAuthenticator = Provider{}
+)
 
 // Kind returns forgeauth.Forgejo.
 func (Provider) Kind() forgeauth.Kind { return forgeauth.Forgejo }
@@ -48,6 +52,9 @@ func (Provider) Whoami(ctx context.Context, s *forgeauth.Session) (forgeauth.Ide
 // SetToken calls SetToken.
 func (Provider) SetToken(h http.Header, token string) { SetToken(h, token) }
 
+// SetGitToken calls SetGitToken.
+func (Provider) SetGitToken(h http.Header, token string) { SetGitToken(h, token) }
+
 // TokenFromHeader calls TokenFromHeader.
 func (Provider) TokenFromHeader(h http.Header) (string, bool) { return TokenFromHeader(h) }
 
@@ -60,4 +67,14 @@ func SetToken(h http.Header, token string) {
 // "Authorization: Bearer <token>" header, the two forms Forgejo accepts.
 func TokenFromHeader(h http.Header) (string, bool) {
 	return forgeauth.AuthorizationToken(h, "token", "Bearer")
+}
+
+// gitUser is the user name sent with the token in Git requests.
+const gitUser = "forge-tools"
+
+// SetGitToken sets "Authorization: Basic" with the user forge-tools and
+// the token as password. Forgejo ignores the user name when the password
+// is a token.
+func SetGitToken(h http.Header, token string) {
+	h.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(gitUser+":"+token)))
 }

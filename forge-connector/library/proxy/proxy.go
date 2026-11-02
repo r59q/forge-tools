@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httputil"
+	"strings"
 
 	"github.com/r59q/forge-tools/forge-connector/library/broker"
 	"github.com/r59q/forge-tools/forge-core/forgeapi/forgeauth"
@@ -48,9 +49,16 @@ type Config struct {
 	// PublicURL is the proxy's public HTTP(S) origin, without a path. If empty,
 	// response URLs use the incoming Host and TLS state, ignoring forwarded headers.
 	PublicURL string
+	// AllowGitPush enables git-receive-pack on the Git route. When false,
+	// push requests get 404 and only fetches are served.
+	AllowGitPush bool
+	// MaxGitPushBytes caps a push request body. Zero means
+	// DefaultMaxGitPushBytes.
+	MaxGitPushBytes int64
 }
 
-// Handler serves /c/{connectionID}/<API path>, and GET /connections when
+// Handler serves /c/{connectionID}/<API path>, the Git smart-HTTP route
+// /g/{connectionID}/{repoPath}.git/{endpoint}, and GET /connections when
 // Config.Connections is set. Use New to construct it. Mount
 // it without path cleaning so encoded traversal is rejected, not redirected.
 // Requests inherit the caller's context; the service should set deadlines.
@@ -61,6 +69,8 @@ type Handler struct {
 	registry  *forgeauth.Registry
 	transport http.RoundTripper
 	publicURL string
+	allowPush bool
+	maxPush   int64
 }
 
 var _ http.Handler = (*Handler)(nil)
@@ -68,8 +78,12 @@ var _ http.Handler = (*Handler)(nil)
 // New validates config and constructs a Handler. Invalid configuration returns
 // broker.ErrInvalid. The adapters and transport are shared across requests.
 func New(config Config) (*Handler, error) {
-	if config.Verifier == nil || config.TokenIssuer == nil || config.Registry == nil {
+	if config.Verifier == nil || config.TokenIssuer == nil || config.Registry == nil || config.MaxGitPushBytes < 0 {
 		return nil, broker.ErrInvalid
+	}
+	maxPush := config.MaxGitPushBytes
+	if maxPush == 0 {
+		maxPush = DefaultMaxGitPushBytes
 	}
 	publicURL := ""
 	if config.PublicURL != "" {
@@ -84,7 +98,8 @@ func New(config Config) (*Handler, error) {
 		rt = http.DefaultTransport
 	}
 	return &Handler{verifier: config.Verifier, issuer: config.TokenIssuer, lister: config.Connections,
-		registry: config.Registry, transport: rt, publicURL: publicURL}, nil
+		registry: config.Registry, transport: rt, publicURL: publicURL,
+		allowPush: config.AllowGitPush, maxPush: maxPush}, nil
 }
 
 // Format keeps adapter credentials out of formatted output.
@@ -96,6 +111,10 @@ func (*Handler) Format(f fmt.State, _ rune) { _, _ = f.Write([]byte("proxy.Handl
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL != nil && r.URL.EscapedPath() == ConnectionsPath {
 		h.connections(w, r)
+		return
+	}
+	if r.URL != nil && strings.HasPrefix(r.URL.EscapedPath(), GitPrefix) {
+		h.serveGit(w, r)
 		return
 	}
 	id, apiPath, code := route(r)
@@ -138,14 +157,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	target := targetURL(base, apiPath, r.URL)
-	origin := h.publicURL
-	if origin == "" {
-		origin = "http://" + r.Host
-		if r.TLS != nil {
-			origin = "https://" + r.Host
-		}
-	}
-	if public, ok := baseURL(origin); !ok || public.Path != "" {
+	origin, ok := h.origin(r)
+	if !ok {
 		proxyError(w, http.StatusBadRequest)
 		return
 	}
@@ -179,6 +192,21 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	p.ServeHTTP(&responseWriter{ResponseWriter: w, rewrite: func(h http.Header) {
 		rewriteHeaders(h, base, target, proxyBase)
 	}}, r)
+}
+
+// origin returns the proxy's public origin for response URLs.
+func (h *Handler) origin(r *http.Request) (string, bool) {
+	origin := h.publicURL
+	if origin == "" {
+		origin = "http://" + r.Host
+		if r.TLS != nil {
+			origin = "https://" + r.Host
+		}
+	}
+	if public, ok := baseURL(origin); !ok || public.Path != "" {
+		return "", false
+	}
+	return origin, true
 }
 
 // Informational responses and trailers are sent outside ModifyResponse.

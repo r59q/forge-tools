@@ -14,8 +14,9 @@ type Store interface {
 	GetForge(context.Context, ID) (Forge, error)
 	// ListForges returns all forges, ordered by ID.
 	ListForges(context.Context) ([]Forge, error)
-	// UpdateForge replaces metadata. Kind and BaseURL cannot change while
-	// connections exist, to prevent sending credentials to another endpoint.
+	// UpdateForge replaces metadata. Kind, BaseURL and GitBaseURL cannot
+	// change while connections exist, to prevent sending credentials to
+	// another endpoint.
 	UpdateForge(context.Context, Forge) error
 	// DeleteForge fails with ErrConflict while any connection references it.
 	DeleteForge(context.Context, ID) error

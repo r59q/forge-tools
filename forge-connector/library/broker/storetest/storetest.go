@@ -15,7 +15,7 @@ import (
 
 func contract(t *testing.T, s broker.Store) {
 	ctx := context.Background()
-	f := broker.Forge{ID: "f", Kind: forgeauth.GitHub, BaseURL: "https://example.com"}
+	f := broker.Forge{ID: "f", Kind: forgeauth.GitHub, BaseURL: "https://example.com/api/v3", GitBaseURL: "https://example.com"}
 	c := broker.Connection{ID: "c", ForgeID: f.ID, Status: broker.StatusOK}
 	client := broker.Client{ID: "client", TokenHash: [32]byte{1}, Connections: []broker.ID{c.ID}}
 	wantErr := func(err, want error) {
@@ -49,6 +49,12 @@ func contract(t *testing.T, s broker.Store) {
 	changed = f
 	changed.Kind = forgeauth.GitLab
 	wantErr(s.UpdateForge(ctx, changed), broker.ErrConflict)
+	changed = f
+	changed.GitBaseURL = "https://git.another.example.com"
+	wantErr(s.UpdateForge(ctx, changed), broker.ErrConflict)
+	if got, err := s.GetForge(ctx, f.ID); err != nil || got != f {
+		t.Fatalf("rejected update changed the forge: %v, %v", got, err)
+	}
 	f.Name = "safe rename"
 	wantErr(s.UpdateForge(ctx, f), nil)
 	gotSealed, err := s.GetCredential(ctx, c.ID)

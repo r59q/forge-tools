@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -284,4 +285,244 @@ func decodeAny(raw json.RawMessage) (any, error) {
 	var v any
 	err := json.Unmarshal(raw, &v)
 	return v, err
+}
+
+func TestEachStopsEarly(t *testing.T) {
+	var pages atomic.Int32
+	s := serve(t, "", func(w http.ResponseWriter, r *http.Request) {
+		pages.Add(1)
+		n, _ := strconv.Atoi(r.URL.Query().Get("page"))
+		w.Header().Set("Link", fmt.Sprintf(`</items?page=%d>; rel="next"`, n+1))
+		_, _ = fmt.Fprintf(w, `[%d, %d]`, 2*n, 2*n+1)
+	})
+	var got []int
+	err := Each(context.Background(), s, "/items?page=0", func(raw json.RawMessage) (bool, error) {
+		var n int
+		if err := json.Unmarshal(raw, &n); err != nil {
+			return false, err
+		}
+		got = append(got, n)
+		return n < 2, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fmt.Sprint(got) != "[0 1 2]" || pages.Load() != 2 {
+		t.Fatalf("Each saw %v after %d pages, want [0 1 2] after 2", got, pages.Load())
+	}
+}
+
+func TestEachErrors(t *testing.T) {
+	ctx := context.Background()
+	if err := Each(ctx, nil, "/x", nil); err == nil {
+		t.Error("nil session err = nil")
+	}
+	s := serve(t, "/c/mine", func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/c/mine/loop":
+			w.Header().Set("Link", `<loop>; rel="next"`)
+		case "/c/mine/away":
+			w.Header().Set("Link", `</c/other/items>; rel="next"`)
+		case "/c/mine/dots":
+			w.Header().Set("Link", `</c/mine/%2e%2e/other/items>; rel="next"`)
+		case "/c/mine/gone":
+			w.WriteHeader(http.StatusNotFound)
+		}
+		_, _ = w.Write([]byte(`[1]`))
+	})
+	all := func(json.RawMessage) (bool, error) { return true, nil }
+	for path, want := range map[string]string{"/loop": "loops", "/away": "pagination link", "/dots": "pagination link"} {
+		if err := Each(ctx, s, path, all); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("Each(%s) err = %v, want %q", path, err, want)
+		}
+	}
+	if err := Each(ctx, s, "/gone", all); !errors.Is(err, forgehttp.ErrNotFound) {
+		t.Errorf("Each(/gone) err = %v, want ErrNotFound", err)
+	}
+	want := errors.New("boom")
+	if err := Each(ctx, s, "/loop", func(json.RawMessage) (bool, error) { return true, want }); !errors.Is(err, want) {
+		t.Errorf("fn error = %v, want %v", err, want)
+	}
+}
+
+// closeTracker records whether response bodies are closed.
+type closeTracker struct {
+	base   http.RoundTripper
+	mu     sync.Mutex
+	open   int
+	opened int
+}
+
+func (c *closeTracker) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := c.base.RoundTrip(req)
+	if err != nil {
+		return nil, err
+	}
+	c.mu.Lock()
+	c.open++
+	c.opened++
+	c.mu.Unlock()
+	resp.Body = &trackedBody{ReadCloser: resp.Body, c: c}
+	return resp, nil
+}
+
+func (c *closeTracker) counts() (open, opened int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.open, c.opened
+}
+
+type trackedBody struct {
+	io.ReadCloser
+	c    *closeTracker
+	once sync.Once
+}
+
+func (b *trackedBody) Close() error {
+	b.once.Do(func() {
+		b.c.mu.Lock()
+		b.c.open--
+		b.c.mu.Unlock()
+	})
+	return b.ReadCloser.Close()
+}
+
+func TestOpenStreams(t *testing.T) {
+	var mu sync.Mutex
+	var accept, method string
+	s := serve(t, "/api/v1", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		accept, method = r.Header.Get("Accept"), r.Method
+		mu.Unlock()
+		if r.URL.Path == "/api/v1/moved" {
+			http.Redirect(w, r, "/api/v1/raw/file", http.StatusFound)
+			return
+		}
+		w.Header().Set("ETag", `"abc"`)
+		w.Header().Set("Content-Length", "5")
+		_, _ = w.Write([]byte("hello"))
+	})
+	h := http.Header{"Accept": {"application/vnd.github.raw+json"}}
+	resp, err := Open(context.Background(), s, "GET", "/moved", h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	mu.Lock()
+	if string(data) != "hello" || resp.Header.Get("ETag") != `"abc"` || accept != "application/vnd.github.raw+json" {
+		t.Errorf("body %q, ETag %q, Accept %q", data, resp.Header.Get("ETag"), accept)
+	}
+	mu.Unlock()
+	if h.Get("Accept") != "application/vnd.github.raw+json" || len(h) != 1 {
+		t.Errorf("Open changed the caller's headers: %v", h)
+	}
+
+	resp, err = Open(context.Background(), s, "HEAD", "/raw/file", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	mu.Lock()
+	defer mu.Unlock()
+	if method != "HEAD" || resp.ContentLength != 5 || resp.Header.Get("ETag") != `"abc"` {
+		t.Errorf("HEAD: method %q, length %d, ETag %q", method, resp.ContentLength, resp.Header.Get("ETag"))
+	}
+	if s.Client.CheckRedirect != nil {
+		t.Error("Open changed the session's client")
+	}
+}
+
+func TestOpenErrorClosesBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte("private-bytes"))
+	}))
+	defer srv.Close()
+	tr := &closeTracker{base: srv.Client().Transport}
+	s := &forgeauth.Session{Kind: forgeauth.Forgejo, BaseURL: srv.URL, Client: &http.Client{Transport: tr}}
+	for _, method := range []string{"GET", "HEAD"} {
+		resp, err := Open(context.Background(), s, method, "/raw/x?token=hunter2", nil)
+		if resp != nil || !errors.Is(err, forgehttp.ErrNotFound) {
+			t.Fatalf("%s: resp = %v, err = %v, want ErrNotFound", method, resp, err)
+		}
+		if msg := err.Error(); strings.Contains(msg, "hunter2") || strings.Contains(msg, "private-bytes") {
+			t.Errorf("%s: err = %q leaks the query or body", method, msg)
+		}
+	}
+	if open, opened := tr.counts(); open != 0 || opened != 2 {
+		t.Errorf("%d of %d bodies left open", open, opened)
+	}
+	if _, err := Open(context.Background(), nil, "GET", "/x", nil); err == nil {
+		t.Error("nil session err = nil")
+	}
+}
+
+func TestOpenRedirectStaysOnBase(t *testing.T) {
+	var hits atomic.Int32
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		_, _ = w.Write([]byte("elsewhere"))
+	}))
+	defer other.Close()
+	var outside atomic.Int32
+	var srvURL string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/c/mine/") {
+			outside.Add(1)
+		}
+		target := map[string]string{
+			"/c/mine/host":    other.URL + "/c/mine/x",
+			"/c/mine/sibling": "/c/other/x",
+			"/c/mine/like":    "/c/mine2/x",
+			"/c/mine/dots":    "/c/mine/%2e%2e/other/x",
+			"/c/mine/scheme":  strings.Replace(srvURL, "http://", "https://", 1) + "/c/mine/x",
+			"/c/mine/user":    strings.Replace(srvURL, "http://", "http://u:p@", 1) + "/c/mine/x",
+			"/c/mine/post":    "/c/mine/x",
+		}[r.URL.Path]
+		if target == "" {
+			_, _ = w.Write([]byte("ok"))
+			return
+		}
+		http.Redirect(w, r, target+"?secret=hunter2", http.StatusFound)
+	}))
+	defer srv.Close()
+	srvURL = srv.URL
+	tr := &closeTracker{base: srv.Client().Transport}
+	s := &forgeauth.Session{Kind: forgeauth.GitHub, BaseURL: srv.URL + "/c/mine", Client: &http.Client{Transport: tr}}
+	ctx := context.Background()
+	for _, path := range []string{"host", "sibling", "like", "dots", "scheme", "user"} {
+		resp, err := Open(ctx, s, "GET", "/"+path+"?q=hunter2", nil)
+		if resp != nil || err == nil || !strings.Contains(err.Error(), "leaves the source") || strings.Contains(err.Error(), "hunter2") {
+			t.Errorf("%s: resp = %v, err = %v, want a redacted redirect error", path, resp, err)
+		}
+	}
+	// A 302 turns a POST into a GET.
+	if resp, err := Open(ctx, s, "POST", "/post", nil); resp != nil || err == nil || !strings.Contains(err.Error(), "redirected") {
+		t.Errorf("POST: resp = %v, err = %v, want a method change error", resp, err)
+	}
+	if n := hits.Load(); n != 0 {
+		t.Errorf("reached the other server %d times", n)
+	}
+	if n := outside.Load(); n != 0 {
+		t.Errorf("followed a redirect outside the base %d times", n)
+	}
+	if open, _ := tr.counts(); open != 0 {
+		t.Errorf("%d redirect bodies left open", open)
+	}
+}
+
+func TestOpenRedirectLimit(t *testing.T) {
+	var hits atomic.Int32
+	s := serve(t, "", func(w http.ResponseWriter, r *http.Request) {
+		n := hits.Add(1)
+		http.Redirect(w, r, fmt.Sprintf("/r%d", n), http.StatusFound)
+	})
+	if _, err := Open(context.Background(), s, "GET", "/r0", nil); err == nil || !strings.Contains(err.Error(), "redirects") {
+		t.Fatalf("err = %v, want a redirect limit error", err)
+	}
+	if n := hits.Load(); n != maxRedirects {
+		t.Errorf("sent %d requests, want %d", n, maxRedirects)
+	}
 }

@@ -23,6 +23,10 @@ type Config struct {
 	Transport http.RoundTripper
 	// PublicURL is the proxy's public origin. See proxy.Config.PublicURL.
 	PublicURL string
+	// AllowGitPush enables pushes on the Git route. See proxy.Config.
+	AllowGitPush bool
+	// MaxGitPushBytes caps a push body. Zero uses the proxy default.
+	MaxGitPushBytes int64
 	// Logger receives request logs. Nil discards them.
 	Logger *slog.Logger
 }
@@ -49,7 +53,7 @@ func New(c Config) (*Server, error) {
 	h, err := proxy.New(proxy.Config{
 		Verifier: c.Broker, TokenIssuer: c.Broker, Connections: c.Broker, Registry: c.Registry,
 		Transport: &dropOn401{base: transport, drop: c.Broker.DropToken},
-		PublicURL: c.PublicURL,
+		PublicURL: c.PublicURL, AllowGitPush: c.AllowGitPush, MaxGitPushBytes: c.MaxGitPushBytes,
 	})
 	if err != nil {
 		return nil, err
@@ -103,12 +107,15 @@ func (s *Server) healthz(w http.ResponseWriter, r *http.Request) {
 
 type connectionKey struct{}
 
-// connectionID extracts the ID from /c/{id}/..., or "" if the path has none.
-// Only URL-safe ID characters are accepted, so logs stay clean.
+// connectionID extracts the ID from /c/{id}/... or /g/{id}/..., or "" if
+// the path has none. Only URL-safe ID characters are accepted, so logs stay
+// clean.
 func connectionID(escapedPath string) broker.ID {
 	rest, ok := strings.CutPrefix(escapedPath, "/c/")
 	if !ok {
-		return ""
+		if rest, ok = strings.CutPrefix(escapedPath, proxy.GitPrefix); !ok {
+			return ""
+		}
 	}
 	id, _, _ := strings.Cut(rest, "/")
 	for _, c := range id {

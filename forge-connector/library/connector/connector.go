@@ -56,6 +56,10 @@ type Connection struct {
 	Kind forgeauth.Kind
 	// Session sends forge API requests through the proxy.
 	Session *forgeauth.Session
+	// Git sends Git smart-HTTP requests through the proxy's Git route, such
+	// as a fetch from Git.URL("owner/name"). The proxy serves pushes only
+	// when it allows them.
+	Git *forgeauth.GitRemote
 }
 
 // New validates c and returns a Client. It does not contact the proxy.
@@ -104,10 +108,17 @@ func (c *Client) Connections(ctx context.Context) ([]Connection, error) {
 		if err != nil {
 			return nil, fmt.Errorf("connector: connection %s: %w", l.ID, err)
 		}
-		result = append(result, Connection{ID: l.ID, Name: l.Name, Kind: l.Kind, Session: session})
+		git, err := forgeauth.NewGitRemote(c.url.JoinPath(strings.Trim(proxy.GitPrefix, "/"), string(l.ID)).String(), c.creds, setBearer, nil)
+		if err != nil {
+			return nil, fmt.Errorf("connector: connection %s: %w", l.ID, err)
+		}
+		result = append(result, Connection{ID: l.ID, Name: l.Name, Kind: l.Kind, Session: session, Git: git})
 	}
 	return result, nil
 }
+
+// setBearer sends the client token to the proxy's Git route.
+func setBearer(h http.Header, token string) { h.Set("Authorization", "Bearer "+token) }
 
 // list reads GET /connections with the client token.
 func (c *Client) list(ctx context.Context) ([]broker.ClientConnection, error) {

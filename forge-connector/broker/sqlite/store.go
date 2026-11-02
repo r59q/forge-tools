@@ -208,7 +208,7 @@ func (s *Store) UpdateForge(ctx context.Context, f broker.Forge) error {
 		if f.Kind == "" || f.BaseURL == "" {
 			return broker.ErrInvalid
 		}
-		if old.Kind != f.Kind || old.BaseURL != f.BaseURL {
+		if old.Kind != f.Kind || old.BaseURL != f.BaseURL || old.GitBaseURL != f.GitBaseURL {
 			if err = unusedForge(ctx, tx, f.ID); err != nil {
 				return err
 			}

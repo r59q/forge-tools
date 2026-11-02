@@ -14,7 +14,7 @@ library/          Go module with core features
   brokerpb/       committed gRPC and REST bindings
   connector/      client that gives tools sessions for their connections
   proto/          documented API source
-  proxy/          authenticating HTTP handler for forge APIs
+  proxy/          authenticating HTTP handler for forge APIs and Git
 broker/           standalone gRPC and REST service with SQLite persistence
 proxy/            standalone HTTP service that serves the proxy handler
 ```
@@ -29,6 +29,9 @@ The [library](library/), the [broker service](broker/) and the
   `GET /connections`. The proxy verifies the client and
   fetches the forge token from the broker over gRPC, then forwards the request,
   so callers never hold the forge credential.
+- The proxy also serves Git smart HTTP at `/g/{connectionID}/{repo}.git/...`
+  for fetches and, when enabled, pushes. It only moves Git transport.
+  [forge-code](../forge-code/) uses it for its writes.
 
 Run the broker first, create a connection and a client for the proxy with
 `CanIssueTokens`, then start the proxy with that client's token.

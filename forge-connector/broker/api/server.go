@@ -126,7 +126,7 @@ func rpcError(err error) error {
 	return status.Error(code, code.String())
 }
 func forge(f broker.Forge) *pb.Forge {
-	return &pb.Forge{Id: string(f.ID), Kind: string(f.Kind), BaseUrl: f.BaseURL, Name: f.Name}
+	return &pb.Forge{Id: string(f.ID), Kind: string(f.Kind), BaseUrl: f.BaseURL, Name: f.Name, GitBaseUrl: f.GitBaseURL}
 }
 func connection(c broker.Connection) *pb.Connection {
 	return &pb.Connection{Id: string(c.ID), ForgeId: string(c.ForgeID), Name: c.Name, Identity: &pb.Identity{Id: c.Identity.ID, Login: c.Identity.Login, Name: c.Identity.Name, Email: c.Identity.Email}, Status: string(c.Status), CheckedAt: timestamppb.New(c.CheckedAt), CreatedAt: timestamppb.New(c.CreatedAt)}
@@ -142,7 +142,9 @@ func client(c broker.Client) *pb.Client {
 // CreateForge registers a validated endpoint for the owner.
 func (s *Server) CreateForge(ctx context.Context, r *pb.CreateForgeRequest) (*pb.Forge, error) {
 	return call(s, ctx, true, func(ctx context.Context, _ forgeauth.StaticToken) (*pb.Forge, error) {
-		f, err := s.manager.CreateForge(ctx, forgeauth.Kind(r.GetKind()), r.GetBaseUrl(), r.GetName())
+		f, err := s.manager.RegisterForge(ctx, broker.Forge{
+			Kind: forgeauth.Kind(r.GetKind()), BaseURL: r.GetBaseUrl(), Name: r.GetName(), GitBaseURL: r.GetGitBaseUrl(),
+		})
 		return forge(f), err
 	})
 }
@@ -265,7 +267,9 @@ func (s *Server) DeleteClient(ctx context.Context, r *pb.ClientRequest) (*emptyp
 func (s *Server) IssueToken(ctx context.Context, r *pb.IssueTokenRequest) (*pb.IssueTokenResponse, error) {
 	return call(s, ctx, false, func(ctx context.Context, token forgeauth.StaticToken) (*pb.IssueTokenResponse, error) {
 		issued, err := s.manager.IssueToken(ctx, token, broker.ID(r.GetConnectionId()))
-		return &pb.IssueTokenResponse{Kind: string(issued.Kind), BaseUrl: issued.BaseURL, Token: string(issued.Token)}, err
+		return &pb.IssueTokenResponse{
+			Kind: string(issued.Kind), BaseUrl: issued.BaseURL, GitBaseUrl: issued.GitBaseURL, Token: string(issued.Token),
+		}, err
 	})
 }
 

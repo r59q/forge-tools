@@ -4,6 +4,7 @@ package github
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -15,7 +16,10 @@ import (
 // use.
 type Provider struct{}
 
-var _ forgeauth.Provider = Provider{}
+var (
+	_ forgeauth.Provider         = Provider{}
+	_ forgeauth.GitAuthenticator = Provider{}
+)
 
 // Kind returns forgeauth.GitHub.
 func (Provider) Kind() forgeauth.Kind { return forgeauth.GitHub }
@@ -49,6 +53,9 @@ func (Provider) Whoami(ctx context.Context, s *forgeauth.Session) (forgeauth.Ide
 // SetToken calls SetToken.
 func (Provider) SetToken(h http.Header, token string) { SetToken(h, token) }
 
+// SetGitToken calls SetGitToken.
+func (Provider) SetGitToken(h http.Header, token string) { SetGitToken(h, token) }
+
 // TokenFromHeader calls TokenFromHeader.
 func (Provider) TokenFromHeader(h http.Header) (string, bool) { return TokenFromHeader(h) }
 
@@ -61,4 +68,14 @@ func SetToken(h http.Header, token string) {
 // "Authorization: token <token>" header, the two forms GitHub accepts.
 func TokenFromHeader(h http.Header) (string, bool) {
 	return forgeauth.AuthorizationToken(h, "Bearer", "token")
+}
+
+// gitUser is the user name sent with the token in Git requests.
+const gitUser = "x-access-token"
+
+// SetGitToken sets "Authorization: Basic" with the user x-access-token
+// and the token as password, the form GitHub documents for Git over HTTPS.
+// Bearer is not documented for Git.
+func SetGitToken(h http.Header, token string) {
+	h.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(gitUser+":"+token)))
 }

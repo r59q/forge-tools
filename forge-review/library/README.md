@@ -62,8 +62,10 @@ Nil anchors are general feedback. File anchors need a path and side with zero
 start/end. Line anchors use inclusive one-based start/end. Every line must
 exist in that side's hunk text or supplied complete context. Additions have no
 old side; deletions have no new side. Binary files allow file comments only.
-Malformed/overlapping hunks and ambiguous paths fail validation. Encoded `GIT
-binary patch` payloads are unsupported; binary-file markers are supported.
+Malformed/overlapping hunks and ambiguous paths fail validation. Quote Git
+header paths when spaces followed by `b/` make the old/new boundary ambiguous.
+Encoded `GIT binary patch` payloads are unsupported; binary-file markers are
+supported.
 Snapshots are limited to 16 MiB of patch plus context and 200,000 patch lines.
 
 ## Standalone lifecycle and storage

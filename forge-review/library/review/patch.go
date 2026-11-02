@@ -53,7 +53,8 @@ func headerPath(v string) (string, error) {
 }
 func gitPaths(v string) (string, string, error) {
 	// Git quotes paths containing controls or non-ASCII. Ordinary spaces remain
-	// unquoted, so split on the b/ prefix rather than on arbitrary whitespace.
+	// unquoted. A quoted path fixes the boundary; multiple possible boundaries
+	// between unquoted paths are rejected instead of guessing file identities.
 	var left, right string
 	if strings.HasPrefix(v, `"`) {
 		end := 1
@@ -72,12 +73,15 @@ func gitPaths(v string) (string, string, error) {
 		}
 		left = v[:end+1]
 		right = strings.TrimPrefix(v[end+1:], " ")
+	} else if n := strings.Index(v, ` "b/`); n >= 0 {
+		// Git quotes literal double quotes, so this is the destination's start.
+		left, right = v[:n], v[n+1:]
+		if strings.ContainsRune(left, '"') {
+			return "", "", ErrInvalid
+		}
 	} else {
 		n := strings.Index(v, " b/")
-		if n < 0 {
-			n = strings.Index(v, ` "b/`)
-		}
-		if n < 0 {
+		if n < 0 || n != strings.LastIndex(v, " b/") || strings.ContainsRune(v, '"') {
 			return "", "", ErrInvalid
 		}
 		left, right = v[:n], v[n+1:]

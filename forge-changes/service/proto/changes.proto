@@ -1,0 +1,237 @@
+syntax = "proto3";
+
+package forge.changes.v1;
+option go_package = "github.com/r59q/forge-tools/forge-changes/service/changespb";
+
+import "google/api/annotations.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+// Changes manages proposals through connector sessions. Every RPC requires
+// Authorization: Bearer <service token>. Repository paths are unescaped in
+// query/body fields. Reviews and inline comments are outside this service.
+service Changes {
+  // ListSources lists available connections and adapter capabilities.
+  rpc ListSources(google.protobuf.Empty) returns (ListSourcesResponse) {
+    option (google.api.http) = { get: "/v1/sources" };
+  }
+  // ListChanges filters proposals in a required repository across sources.
+  rpc ListChanges(ListChangesRequest) returns (ListChangesResponse) {
+    option (google.api.http) = { get: "/v1/changes" };
+  }
+  // GetChange reads one proposal on a required source.
+  rpc GetChange(ChangeRef) returns (ChangeRequest) {
+    option (google.api.http) = { get: "/v1/changes/{number}" };
+  }
+  // CreateChange proposes branches in the same repository.
+  rpc CreateChange(CreateChangeRequest) returns (ChangeRequest) {
+    option (google.api.http) = { post: "/v1/changes" body: "*" };
+  }
+  // UpdateChange changes metadata, closes or reopens a proposal.
+  rpc UpdateChange(UpdateChangeRequest) returns (ChangeRequest) {
+    option (google.api.http) = { patch: "/v1/changes/{number}" body: "*" };
+  }
+  // SetDraft marks a proposal draft or ready.
+  rpc SetDraft(SetDraftRequest) returns (ChangeRequest) {
+    option (google.api.http) = { put: "/v1/changes/{number}/draft" body: "*" };
+  }
+  // ListCommits reads commits; GitHub's 250-commit cap fails explicitly.
+  rpc ListCommits(ChangeRef) returns (ListCommitsResponse) {
+    option (google.api.http) = { get: "/v1/changes/{number}/commits" };
+  }
+  // ListFiles reads changed paths and available per-file patch hunks.
+  rpc ListFiles(ChangeRef) returns (Files) {
+    option (google.api.http) = { get: "/v1/changes/{number}/files" };
+  }
+  // GetDiff reads the native unified diff, limited to 16 MiB.
+  rpc GetDiff(ChangeRef) returns (Diff) {
+    option (google.api.http) = { get: "/v1/changes/{number}/diff" };
+  }
+  // ListComments reads general discussion, excluding review and system notes.
+  rpc ListComments(ChangeRef) returns (ListCommentsResponse) {
+    option (google.api.http) = { get: "/v1/changes/{number}/comments" };
+  }
+  // AddComment adds a general discussion comment.
+  rpc AddComment(AddCommentRequest) returns (Comment) {
+    option (google.api.http) = { post: "/v1/changes/{number}/comments" body: "*" };
+  }
+  // GetReadiness reports advisory forge conditions, including unknown values.
+  rpc GetReadiness(ChangeRef) returns (Readiness) {
+    option (google.api.http) = { get: "/v1/changes/{number}/readiness" };
+  }
+  // Merge asks the forge to enforce its rules and merge synchronously.
+  rpc Merge(MergeRequest) returns (MergeResult) {
+    option (google.api.http) = { post: "/v1/changes/{number}/merge" body: "*" };
+  }
+}
+
+// Source is a connector connection without credentials or internal URLs.
+message Source {
+  string id = 1;
+  string kind = 2;
+  Capabilities capabilities = 3;
+}
+// Capabilities describes adapter support, subject to forge permissions/policy.
+message Capabilities {
+  bool update_source_branch = 1;
+  bool draft_transition = 2;
+  repeated string merge_methods = 3;
+  bool expected_head = 4;
+}
+// ListSourcesResponse holds sources in configured order.
+message ListSourcesResponse { repeated Source sources = 1; }
+
+// ChangeRef identifies a proposal on one required source and repository.
+message ChangeRef {
+  string source = 1;
+  string repository = 2;
+  // number is the native pull number or GitLab iid, not the global ID.
+  int64 number = 3;
+}
+// ListChangesRequest selects proposals in a required repository.
+message ListChangesRequest {
+  // source may be empty to search all sources.
+  string source = 1;
+  string repository = 2;
+  // author is a username, or empty for any author.
+  string author = 3;
+  // state is open (default), closed, merged or all.
+  string state = 4;
+  // draft distinguishes filtering ready proposals from no filter.
+  optional bool draft = 5;
+}
+// ListChangesResponse holds proposals in source and forge order.
+message ListChangesResponse { repeated ChangeRequest changes = 1; }
+// CreateChangeRequest opens a proposal between branches in one repository.
+message CreateChangeRequest {
+  string source = 1;
+  string repository = 2;
+  string title = 3;
+  string description = 4;
+  string source_branch = 5;
+  string target_branch = 6;
+  bool draft = 7;
+}
+// UpdateChangeRequest leaves omitted fields unchanged; empty description clears.
+message UpdateChangeRequest {
+  string source = 1;
+  string repository = 2;
+  int64 number = 3;
+  optional string title = 4;
+  optional string description = 5;
+  // source_branch is explicitly unsupported by the current forge adapters.
+  optional string source_branch = 6;
+  optional string target_branch = 7;
+  // state accepts open (reopen) or closed, never merged.
+  optional string state = 8;
+}
+// SetDraftRequest sets draft or ready status on an open proposal.
+message SetDraftRequest {
+  string source = 1;
+  string repository = 2;
+  int64 number = 3;
+  bool draft = 4;
+}
+// User identifies a forge account.
+message User { string login = 1; string web_url = 2; }
+// Revision contains observed full commit IDs. Empty means unavailable.
+// GitLab target is the diff version's start_sha, not a freshly resolved branch.
+message Revision { string head = 1; string target = 2; string base = 3; }
+// ChangeRequest is the shared proposal model; merged is distinct from closed.
+message ChangeRequest {
+  ChangeRef ref = 1;
+  string kind = 2;
+  string id = 3;
+  string title = 4;
+  string description = 5;
+  User author = 6;
+  string source_repository = 7;
+  string source_branch = 8;
+  string target_branch = 9;
+  Revision revision = 10;
+  string state = 11;
+  bool draft = 12;
+  string web_url = 13;
+  google.protobuf.Timestamp created_at = 14;
+  google.protobuf.Timestamp updated_at = 15;
+  google.protobuf.Timestamp closed_at = 16;
+  google.protobuf.Timestamp merged_at = 17;
+}
+// Commit is one proposal commit and its full forge-reported message.
+message Commit {
+  string id = 1;
+  string message = 2;
+  string author_name = 3;
+  string author_email = 4;
+  google.protobuf.Timestamp created_at = 5;
+}
+// ListCommitsResponse holds commits in forge order.
+message ListCommitsResponse { repeated Commit commits = 1; }
+// ChangedFile holds paths and unified hunks without file headers.
+message ChangedFile {
+  // path is empty for deletions; old_path is empty for additions.
+  string path = 1;
+  string old_path = 2;
+  string status = 3;
+  string patch = 4;
+  // patch_unavailable includes binary files and upstream limits.
+  bool patch_unavailable = 5;
+}
+// Files pairs changed paths with a revision checked before and after reading.
+message Files {
+  Revision revision = 1;
+  repeated ChangedFile files = 2;
+  // completeness is complete, truncated or unknown.
+  string completeness = 3;
+}
+// Diff contains a raw unified diff, including file headers.
+message Diff {
+  Revision revision = 1;
+  string patch = 2;
+  // completeness is unknown because upstream diff limits may apply.
+  string completeness = 3;
+}
+// Comment is general discussion, not a review or inline comment.
+message Comment {
+  string id = 1;
+  User author = 2;
+  string body = 3;
+  string web_url = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp updated_at = 6;
+}
+// ListCommentsResponse holds general comments in forge order.
+message ListCommentsResponse { repeated Comment comments = 1; }
+// AddCommentRequest adds text; GitLab can execute quick actions in this text.
+message AddCommentRequest {
+  string source = 1;
+  string repository = 2;
+  int64 number = 3;
+  string body = 4;
+}
+// Condition exposes a known or unavailable forge condition.
+message Condition {
+  string name = 1;
+  // status is met, unmet or unknown.
+  string status = 2;
+  string detail = 3;
+}
+// Readiness is advisory; the forge enforces requirements during Merge.
+message Readiness {
+  Revision revision = 1;
+  // status is ready, blocked or unknown.
+  string status = 2;
+  repeated Condition conditions = 3;
+}
+// MergeRequest selects a supported method and optional atomic head guard.
+message MergeRequest {
+  string source = 1;
+  string repository = 2;
+  int64 number = 3;
+  // method defaults to merge, or default (project policy) on GitLab.
+  string method = 4;
+  // expected_head is a full lowercase commit ID, never a branch name.
+  string expected_head = 5;
+}
+// MergeResult confirms an immediate merge, never a scheduled auto-merge.
+message MergeResult { bool merged = 1; string commit = 2; }

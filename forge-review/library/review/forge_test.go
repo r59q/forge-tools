@@ -312,3 +312,57 @@ func TestForgejoMissingComparisonFilesIsUnsupported(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestNativeApprovalPublishesApprovedState(t *testing.T) {
+	for _, kind := range []forgeauth.Kind{forgeauth.GitHub, forgeauth.Forgejo} {
+		for _, body := range []string{"", "Looks good"} {
+			t.Run(string(kind)+"/"+body, func(t *testing.T) {
+				writes := 0
+				c := connected(t, kind, func(r *http.Request) string {
+					if r.Method == "POST" {
+						writes++
+						var input struct {
+							Event  string
+							Body   string
+							Commit string `json:"commit_id"`
+						}
+						if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+							t.Fatal(err)
+						}
+						if input.Body != body || input.Commit != headSHA {
+							t.Fatalf("submission: %+v", input)
+						}
+						approvedEvent := "APPROVE"
+						if kind == forgeauth.Forgejo {
+							approvedEvent = "APPROVED"
+						}
+						if input.Event != approvedEvent {
+							return `{"id":123,"state":"PENDING"}`
+						}
+						return `{"id":123,"state":"APPROVED"}`
+					}
+					if r.Header.Get("Accept") == "application/vnd.github.diff" || strings.HasSuffix(r.URL.Path, ".diff") {
+						return patch
+					}
+					return revisionJSON(kind, headSHA)
+				})
+				ctx := context.Background()
+				s, err := c.CreateSubject(ctx, Input{Kind: "change_request", Ref: Ref{Source: "source", Repository: "o/r", Number: 7}})
+				if err != nil {
+					t.Fatal(err)
+				}
+				result, err := c.SubmitNative(ctx, s.ID, "approved", body)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var published struct{ State string }
+				if err = json.Unmarshal(result.Data, &published); err != nil {
+					t.Fatal(err)
+				}
+				if writes != 1 || published.State != "APPROVED" {
+					t.Fatalf("writes=%d, state=%q", writes, published.State)
+				}
+			})
+		}
+	}
+}

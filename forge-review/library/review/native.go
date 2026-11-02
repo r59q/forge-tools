@@ -187,6 +187,9 @@ func (c *Client) SubmitNative(ctx context.Context, sid, status, body string) (Na
 		}
 	}
 	event := map[string]string{"commented": "COMMENT", "approved": "APPROVE", "changes_requested": "REQUEST_CHANGES"}[status]
+	if s.Kind == forgeauth.Forgejo && status == "approved" {
+		event = "APPROVED"
+	}
 	return sendNative(ctx, sub, s, "POST", path+"/reviews", "reviews", map[string]string{"commit_id": sub.Revision.Head, "event": event, "body": body})
 }
 

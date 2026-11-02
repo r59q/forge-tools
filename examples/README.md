@@ -1,12 +1,13 @@
 # Examples
 
 Run the forge-connector services with Docker Compose and use them with
-`curl` or Go.
+`curl`, Go, or the [JavaScript workspace explorer](workspaces/).
 
 ```text
 docker-compose.yml   broker, proxy and forge-code service from ghcr.io
 .env.example         secrets for docker-compose.yml
 go/                  Go programs using the libraries and the broker API
+workspaces/          simple Node.js code explorer using only workspaces and connector
 fullstack/           full stack, with connections set up in the management UI,
                      including the repositories and issues services
 ```

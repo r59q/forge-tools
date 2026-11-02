@@ -1,0 +1,50 @@
+# A code explorer using only forge-workspaces and forge-connector.
+services:
+  broker:
+    build:
+      context: ../..
+      dockerfile: forge-connector/broker/Dockerfile
+    environment:
+      FORGE_BROKER_KEY: ${FORGE_BROKER_KEY:?run node setup.mjs}
+      FORGE_BROKER_ADMIN_TOKEN: ${FORGE_BROKER_ADMIN_TOKEN:?run node setup.mjs}
+    volumes:
+      - broker-data:/data
+    ports:
+      - "127.0.0.1:8089:8080"
+  proxy:
+    build:
+      context: ../..
+      dockerfile: forge-connector/proxy/Dockerfile
+    environment:
+      FORGE_PROXY_BROKER_ADDR: broker:9090
+      FORGE_PROXY_TOKEN: ${FORGE_PROXY_TOKEN:?run node setup.mjs}
+  workspaces:
+    build:
+      context: ../..
+      dockerfile: forge-workspaces/service/Dockerfile
+    entrypoint: ["/bin/sh", "/example/seed.sh"]
+    environment:
+      FORGE_WORKSPACES_TOKEN: ${FORGE_WORKSPACES_TOKEN:?run node setup.mjs}
+      FORGE_WORKSPACES_CONNECTOR_URL: http://proxy:8081
+      FORGE_WORKSPACES_CONNECTOR_TOKEN: ${FORGE_WORKSPACES_CONNECTOR_TOKEN:?run node setup.mjs}
+    volumes:
+      - workspace-data:/data
+      - ./seed.sh:/example/seed.sh:ro
+      - ./demo:/example/demo:ro
+  explorer:
+    build: .
+    environment:
+      HOST: 0.0.0.0
+      WORKSPACES_URL: http://workspaces:8080
+      CONNECTOR_URL: http://proxy:8081
+      FORGE_WORKSPACES_TOKEN: ${FORGE_WORKSPACES_TOKEN:?run node setup.mjs}
+      FORGE_WORKSPACES_CONNECTOR_TOKEN: ${FORGE_WORKSPACES_CONNECTOR_TOKEN:?run node setup.mjs}
+    volumes:
+      - workspace-data:/data:ro
+    ports:
+      - "127.0.0.1:3030:3030"
+    depends_on:
+      - workspaces
+volumes:
+  broker-data:
+  workspace-data:

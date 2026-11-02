@@ -7,6 +7,9 @@ coding agents. Create from a local Git repository or an authenticated
 - [Library](library/): lifecycle, checkout, status, diff and cleanup protection.
 - [Service](service/): durable metadata and matching REST/gRPC APIs.
 
+Try the [JavaScript code explorer example](../examples/workspaces/) to browse
+and search independent checkouts using only workspaces and connector.
+
 Workspaces are host-local Git worktrees. Execution systems run processes in them;
 this tool does not execute commands for callers, commit, push or manage reviews.
 Worktrees share repository objects and are not security sandboxes.

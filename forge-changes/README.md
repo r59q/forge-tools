@@ -41,7 +41,10 @@ repository; omitting source searches that path on all connections. This
 initial API does not discover repositories or create cross-fork proposals;
 existing cross-fork proposals can be read and managed.
 
-States are `open`, `closed` and `merged`; filtering closed excludes merged.
+States are `open`, `closed`, `merged` and GitLab's temporary `locked` state;
+filtering closed excludes merged. Locked proposals remain readable through
+`Get` and `List` with state `all`, and readiness reports their state as unmet.
+`locked` is not a list filter or an update value.
 Titles preserve native draft prefixes. Draft transitions use default GitLab
 and Forgejo prefixes. Custom Forgejo prefixes may cause `ErrUnsupported`
 after the title update; callers should inspect the proposal before retrying.

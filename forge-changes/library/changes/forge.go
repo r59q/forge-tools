@@ -114,7 +114,11 @@ func decode(s Source, path string, raw json.RawMessage) (proposal, error) {
 	if w.Merged || !w.MergedAt.IsZero() || w.State == "merged" {
 		c.State = Merged
 	}
-	if c.Ref.Number <= 0 || (c.State != Open && c.State != Closed && c.State != Merged) {
+	validState := c.State == Open || c.State == Closed || c.State == Merged
+	if s.Session.Kind == forgeauth.GitLab && c.State == Locked {
+		validState = true
+	}
+	if c.Ref.Number <= 0 || !validState {
 		return proposal{}, fmt.Errorf("changes: invalid proposal response")
 	}
 	return proposal{c, w.NodeID, w.Mergeable, status, w.ChangedFiles}, nil

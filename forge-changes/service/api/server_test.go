@@ -30,7 +30,7 @@ const proposal = `{"id":1,"number":7,"title":"Proposal","body":"Description","st
 
 func setup(t *testing.T) (http.Handler, *grpc.ClientConn) {
 	t.Helper()
-	f := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return setupForge(t, forgeauth.GitHub, func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.Contains(r.URL.Path, "/denied/"):
 			http.Error(w, "private-upstream-sentinel", 403)
@@ -53,9 +53,14 @@ func setup(t *testing.T) (http.Handler, *grpc.ClientConn) {
 		default:
 			fmt.Fprint(w, proposal)
 		}
-	}))
+	})
+}
+
+func setupForge(t *testing.T, kind forgeauth.Kind, handler http.HandlerFunc) (http.Handler, *grpc.ClientConn) {
+	t.Helper()
+	f := httptest.NewServer(handler)
 	t.Cleanup(f.Close)
-	c, err := changes.New(changes.Source{ID: "connection", Session: &forgeauth.Session{Kind: forgeauth.GitHub, BaseURL: f.URL, Client: f.Client()}})
+	c, err := changes.New(changes.Source{ID: "connection", Session: &forgeauth.Session{Kind: kind, BaseURL: f.URL, Client: f.Client()}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,6 +86,62 @@ func setup(t *testing.T) (http.Handler, *grpc.ClientConn) {
 	}
 	t.Cleanup(func() { _ = conn.Close() })
 	return h, conn
+}
+
+func TestLockedProposalTransports(t *testing.T) {
+	const locked = `{"id":1,"iid":7,"title":"Merging","state":"locked","detailed_merge_status":"mergeable"}`
+	h, conn := setupForge(t, forgeauth.GitLab, func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/merge_requests") {
+			fmt.Fprint(w, "["+locked+"]")
+		} else {
+			fmt.Fprint(w, locked)
+		}
+	})
+	ctx := metadata.AppendToOutgoingContext(context.Background(), "authorization", "Bearer service")
+	r := &pb.ChangeRef{Source: "connection", Repository: "o/r", Number: 7}
+	query := "?source=connection&repository=o%2Fr"
+	for _, tt := range []struct {
+		method, path      string
+		request, response proto.Message
+	}{
+		{"GetChange", "/v1/changes/7" + query, r, &pb.ChangeRequest{}},
+		{"ListChanges", "/v1/changes" + query + "&state=all", &pb.ListChangesRequest{Source: r.Source, Repository: r.Repository, State: "all"}, &pb.ListChangesResponse{}},
+		{"GetReadiness", "/v1/changes/7/readiness" + query, r, &pb.Readiness{}},
+	} {
+		t.Run(tt.method, func(t *testing.T) {
+			if err := conn.Invoke(ctx, "/forge.changes.v1.Changes/"+tt.method, tt.request, tt.response); err != nil {
+				t.Fatal(err)
+			}
+			switch v := tt.response.(type) {
+			case *pb.ChangeRequest:
+				if v.State != "locked" {
+					t.Fatalf("state = %q", v.State)
+				}
+			case *pb.ListChangesResponse:
+				if len(v.Changes) != 1 || v.Changes[0].State != "locked" {
+					t.Fatalf("list = %v", v)
+				}
+			case *pb.Readiness:
+				if v.Status != "blocked" {
+					t.Fatalf("readiness = %v", v)
+				}
+			}
+			req := httptest.NewRequest("GET", tt.path, nil)
+			req.Header.Set("Authorization", "Bearer service")
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, req)
+			if w.Code != http.StatusOK {
+				t.Fatalf("REST %d: %s", w.Code, w.Body.String())
+			}
+			v := tt.response.ProtoReflect().New().Interface()
+			if err := protojson.Unmarshal(w.Body.Bytes(), v); err != nil {
+				t.Fatal(err)
+			}
+			if !proto.Equal(v, tt.response) {
+				t.Fatalf("REST %v != gRPC %v", v, tt.response)
+			}
+		})
+	}
 }
 
 func TestRESTAndGRPCParity(t *testing.T) {

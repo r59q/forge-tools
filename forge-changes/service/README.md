@@ -76,6 +76,9 @@ timestamps and strings for int64 numbers. Empty default fields are omitted.
 `group/sub/project`. List accepts an optional source; other operations require
 it. `state` is open (default), closed, merged or all. Omitting `draft` lists
 both draft and ready; `draft=false` selects ready proposals.
+Responses may also report GitLab's temporary `locked` state while merging.
+It appears in single-proposal reads and `state=all` listings; it is not an
+input filter or update value. Its readiness state condition is unmet.
 
 Writes put source and repository in the JSON body. Create also requires
 `title`, `sourceBranch` and `targetBranch`; `description` and `draft` are

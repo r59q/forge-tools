@@ -56,6 +56,9 @@ const (
 	Closed State = "closed"
 	// Merged proposals were incorporated into their target branch.
 	Merged State = "merged"
+	// Locked proposals are temporarily locked by GitLab while merging.
+	// This read-only state may appear in Get and List with State "all".
+	Locked State = "locked"
 )
 
 // User is the proposal or discussion author.
@@ -85,7 +88,7 @@ type ChangeRequest struct {
 	SourceBranch     string         // SourceBranch is the branch being proposed.
 	TargetBranch     string         // TargetBranch is the destination branch.
 	Revision         Revision       // Revision contains resolved commit IDs.
-	State            State          // State is open, closed or merged.
+	State            State          // State is open, closed, merged or temporarily locked.
 	Draft            bool           // Draft reports a work-in-progress proposal.
 	WebURL           string         // WebURL is the proposal's forge page.
 	CreatedAt        time.Time      // CreatedAt is when the proposal was opened.

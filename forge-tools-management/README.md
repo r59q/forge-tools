@@ -22,7 +22,7 @@ Projects:
 - [service](service/) provides the web interface, REST and gRPC. At startup
   it registers the proxy, repositories and issues service tokens in the
   connector, so every token comes from one configuration file.
-- [Setup example](../examples/management/) runs the whole stack from a
+- [Setup example](../examples/fullstack/) runs the whole stack from a
   generated `.env`.
 
 Each capability is optional; management starts with none. Failed listings

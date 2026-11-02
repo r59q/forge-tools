@@ -1,4 +1,4 @@
-# Management setup example
+# Full-stack example
 
 Runs the whole stack with Docker Compose: the
 [forge-connector](../../forge-connector/) broker and proxy, the
@@ -15,6 +15,11 @@ It needs Docker Compose and `openssl`. Run all commands from this folder.
 ./init-env.sh
 docker compose up --build -d
 ```
+
+For development, [scripts/fullstack.sh](../../scripts/fullstack.sh) does the
+same from anywhere: `start`, `stop`, or `clear` to also delete all data.
+[scripts/integration-test.sh](../../scripts/integration-test.sh) tests the
+running stack with a GitHub token in `FORGE_TEST_TOKEN`.
 
 `init-env.sh` creates `.env` with a random value for every secret. On an
 existing `.env` it adds only the missing secrets, so run it again after

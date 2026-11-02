@@ -12,3 +12,5 @@
 **/broker-data
 **/proxy-token
 **/review-data
+**/checkout-data
+**/workspace-data

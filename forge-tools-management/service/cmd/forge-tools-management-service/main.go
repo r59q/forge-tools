@@ -74,6 +74,9 @@ func parse(args []string, getenv func(string) string, help io.Writer) (settings,
 	issuesClient := serviceClient{name: "forge-issues"}
 	fs.StringVar(&issuesClient.file, "issues-connector-token-file", env("ISSUES_CONNECTOR_TOKEN_FILE", ""), "issues service client token file, registered in the broker")
 	fs.StringVar(&issuesClient.env, "issues-connector-token-env", env("ISSUES_CONNECTOR_TOKEN_ENV", ""), "issues service client token variable name")
+	checkoutsClient := serviceClient{name: "forge-checkouts"}
+	fs.StringVar(&checkoutsClient.file, "checkouts-connector-token-file", env("CHECKOUTS_CONNECTOR_TOKEN_FILE", ""), "checkouts service client token file, registered in the broker")
+	fs.StringVar(&checkoutsClient.env, "checkouts-connector-token-env", env("CHECKOUTS_CONNECTOR_TOKEN_ENV", ""), "checkouts service client token variable name")
 	var timeout string
 	fs.StringVar(&timeout, "request-timeout", env("REQUEST_TIMEOUT", "30s"), "maximum request duration")
 	if err := fs.Parse(args); err != nil {
@@ -129,7 +132,7 @@ func parse(args []string, getenv func(string) string, help io.Writer) (settings,
 	if s.connectorTokenFile != "" && s.connectorTokenEnv != "" {
 		return settings{}, errors.New("choose one connector admin token source")
 	}
-	explicit := proxy.file != "" || proxy.env != "" || repos.file != "" || repos.env != "" || issuesClient.file != "" || issuesClient.env != ""
+	explicit := proxy.file != "" || proxy.env != "" || repos.file != "" || repos.env != "" || issuesClient.file != "" || issuesClient.env != "" || checkoutsClient.file != "" || checkoutsClient.env != ""
 	if s.connectorAddress == "" && (s.connectorTokenFile != "" || s.connectorTokenEnv != "" || s.connectorInsecure || explicit) {
 		return settings{}, errors.New("connector settings require connector-address")
 	}
@@ -142,7 +145,7 @@ func parse(args []string, getenv func(string) string, help io.Writer) (settings,
 	for _, c := range []struct {
 		client     *serviceClient
 		defaultEnv string
-	}{{&proxy, "FORGE_MANAGEMENT_PROXY_TOKEN"}, {&repos, "FORGE_MANAGEMENT_REPOSITORIES_CONNECTOR_TOKEN"}, {&issuesClient, "FORGE_MANAGEMENT_ISSUES_CONNECTOR_TOKEN"}} {
+	}{{&proxy, "FORGE_MANAGEMENT_PROXY_TOKEN"}, {&repos, "FORGE_MANAGEMENT_REPOSITORIES_CONNECTOR_TOKEN"}, {&issuesClient, "FORGE_MANAGEMENT_ISSUES_CONNECTOR_TOKEN"}, {&checkoutsClient, "FORGE_MANAGEMENT_CHECKOUTS_CONNECTOR_TOKEN"}} {
 		if c.client.file != "" && c.client.env != "" {
 			return settings{}, fmt.Errorf("choose one %s client token source", c.client.name)
 		}
@@ -150,7 +153,7 @@ func parse(args []string, getenv func(string) string, help io.Writer) (settings,
 			c.client.env, c.client.optional = c.defaultEnv, true
 		}
 	}
-	s.clients = []serviceClient{proxy, repos, issuesClient}
+	s.clients = []serviceClient{proxy, repos, issuesClient, checkoutsClient}
 	return s, nil
 }
 

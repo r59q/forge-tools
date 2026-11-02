@@ -5,6 +5,7 @@ on:
     branches: [master]
     paths:
       - examples/go/**
+      - examples/checkouts/**
       - forge-connector/library/**
       - forge-repositories/library/**
       - forge-core/forgeapi/**
@@ -13,6 +14,7 @@ on:
   pull_request:
     paths:
       - examples/go/**
+      - examples/checkouts/**
       - forge-connector/library/**
       - forge-repositories/library/**
       - forge-core/forgeapi/**
@@ -28,3 +30,17 @@ jobs:
     uses: ./.github/workflows/reusable-go.yml
     with:
       dir: examples/go
+
+  checkout-explorer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Test the JavaScript example
+        run: >-
+          docker run --rm -v "$PWD/examples/checkouts:/example:ro" -w /example
+          node:24-alpine@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85 npm test
+      - name: Build the example image
+        run: docker build -f examples/checkouts/Dockerfile examples/checkouts

@@ -1,0 +1,51 @@
+# A code explorer using only forge-checkouts and forge-connector.
+services:
+  broker:
+    build:
+      context: ../..
+      dockerfile: forge-connector/broker/Dockerfile
+    environment:
+      FORGE_BROKER_KEY: ${FORGE_BROKER_KEY:?run node setup.mjs}
+      FORGE_BROKER_ADMIN_TOKEN: ${FORGE_BROKER_ADMIN_TOKEN:?run node setup.mjs}
+    volumes:
+      - broker-data:/data
+    ports:
+      - "127.0.0.1:8089:8080"
+  proxy:
+    build:
+      context: ../..
+      dockerfile: forge-connector/proxy/Dockerfile
+    environment:
+      FORGE_PROXY_BROKER_ADDR: broker:9090
+      FORGE_PROXY_TOKEN: ${FORGE_PROXY_TOKEN:?run node setup.mjs}
+  checkouts:
+    build:
+      context: ../..
+      dockerfile: forge-checkouts/service/Dockerfile
+    entrypoint: ["/bin/sh", "/example/seed.sh"]
+    environment:
+      FORGE_CHECKOUTS_TOKEN: ${FORGE_CHECKOUTS_TOKEN:?run node setup.mjs}
+      FORGE_CHECKOUTS_CONNECTOR_URL: http://proxy:8081
+      FORGE_CHECKOUTS_CONNECTOR_TOKEN: ${FORGE_CHECKOUTS_CONNECTOR_TOKEN:?run node setup.mjs}
+    volumes:
+      - checkouts-data:/data
+      - ./seed.sh:/example/seed.sh:ro
+      - ./demo:/example/demo:ro
+  explorer:
+    build: .
+    environment:
+      HOST: 0.0.0.0
+      CHECKOUTS_URL: http://checkouts:8080
+      CONNECTOR_URL: http://proxy:8081
+      FORGE_CHECKOUTS_TOKEN: ${FORGE_CHECKOUTS_TOKEN:?run node setup.mjs}
+      FORGE_CHECKOUTS_CONNECTOR_TOKEN: ${FORGE_CHECKOUTS_CONNECTOR_TOKEN:?run node setup.mjs}
+    volumes:
+      - checkouts-data:/data:ro
+    ports:
+      - "127.0.0.1:3030:3030"
+    depends_on:
+      - checkouts
+volumes:
+  broker-data:
+  checkouts-data:
+    name: ${FORGE_CHECKOUTS_DATA_VOLUME:-${COMPOSE_PROJECT_NAME}_checkouts-data}

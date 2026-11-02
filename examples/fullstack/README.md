@@ -3,7 +3,8 @@
 Runs the whole stack with Docker Compose: the
 [forge-connector](../../forge-connector/) broker and proxy, the
 [repositories service](../../forge-repositories/service/), the
-[issues service](../../forge-issues/service/) and the
+[issues service](../../forge-issues/service/), the
+[checkouts service](../../forge-checkouts/service/) and the
 [management interface](../../forge-tools-management/). You connect forges in
 the browser.
 
@@ -19,7 +20,8 @@ docker compose up --build -d
 For development, [scripts/fullstack.sh](../../scripts/fullstack.sh) does the
 same from anywhere: `start`, `stop`, or `clear` to also delete all data.
 [scripts/integration-test.sh](../../scripts/integration-test.sh) tests the
-running stack with a GitHub token in `FORGE_TEST_TOKEN`.
+running stack with a forge token in `FORGE_TEST_TOKEN`; see the script for
+options.
 
 `init-env.sh` creates `.env` with a random value for every secret. On an
 existing `.env` it adds only the missing secrets, so run it again after
@@ -35,8 +37,10 @@ updating this example. It never changes existing values.
 | `FORGE_REPOSITORIES_TOKEN` | Lets management call the repositories service. |
 | `FORGE_ISSUES_CONNECTOR_TOKEN` | Lets the issues service use connections through the proxy. |
 | `FORGE_ISSUES_TOKEN` | Lets management call the issues service. |
+| `FORGE_CHECKOUTS_CONNECTOR_TOKEN` | Lets checkouts fetch repositories through the proxy. |
+| `FORGE_CHECKOUTS_TOKEN` | Authenticates checkout REST/gRPC callers. |
 
-At startup, management registers the proxy, repositories and issues tokens
+At startup, management registers the proxy, repositories, issues and checkouts tokens
 in the broker. To rotate any secret except `FORGE_BROKER_KEY`, change it in
 `.env` and run `docker compose up -d` again.
 
@@ -64,7 +68,7 @@ tokens*. GitLab and Forgejo have personal access tokens in user settings.
 
 ## Notes
 
-- Only management is reachable from the host, on `127.0.0.1`. The other
+- Management and checkouts are reachable from the host, on `127.0.0.1`. The other
   services talk over the Compose network in plaintext; use TLS endpoints
   for remote access.
 - All operators see what the connected accounts can see. Management grants
@@ -73,9 +77,27 @@ tokens*. GitLab and Forgejo have personal access tokens in user settings.
   `Authorization: Bearer <management token>`; see the
   [service API reference](../../forge-tools-management/service/README.md#api).
 
+## Working copies
+
+The checkout API listens on `127.0.0.1:8088` (REST) and `127.0.0.1:9098`
+(gRPC). Send `Authorization: Bearer <FORGE_CHECKOUTS_TOKEN>` and create with
+`{"repository":{"source":"connection-id","path":"owner/repo"},"reference":"main"}`.
+See its [API and storage configuration](../../forge-checkouts/service/README.md).
+
+The `checkouts-data` volume preserves metadata, Git caches and checked-out code.
+Returned paths such as `/data/copies/<id>` refer to the checkouts container.
+An execution system must mount/access the same working files at the same paths.
+There is no execution endpoint or isolation inside this service.
+
+Existing `forge-workspaces` data can be reused by setting
+`FORGE_CHECKOUTS_DATA_VOLUME` to the old volume name and renaming the token keys
+in `.env`; see the [upgrade instructions](../../forge-checkouts/service/README.md#upgrade-from-forge-workspaces).
+
 ## Clean up
 
-`down -v` also deletes the broker volume with the stored forge tokens:
+`down -v` deletes the broker tokens and all checkout files, including retained
+checkouts and uncommitted work. Remove checkouts through their API first to
+apply cleanup protections:
 
 ```sh
 docker compose down -v

@@ -10,6 +10,7 @@ useful on its own.
 
 | Tool                                | Description                                  |
 | ----------------------------------- | -------------------------------------------- |
+| [forge-checkouts](forge-checkouts/) | Persistent working copies, status and diffs. |
 | [forge-code](forge-code/)             | Git content across forges: trees, files, diffs and commits. |
 | [forge-review](forge-review/)         | Fixed review snapshots, assignments and native or standalone feedback. |
 | [forge-changes](forge-changes/)       | Proposed code changes, discussion and merging across forges. |

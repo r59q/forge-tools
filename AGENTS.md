@@ -19,7 +19,7 @@ public.
 - `forge-core/`: shared libraries used by several tools.
 - `scripts/`: development scripts, e.g. `scripts/fullstack.sh` to start,
   stop and clear the full-stack example, and `scripts/integration-test.sh`
-  to test it against GitHub.
+  to test it against a forge.
 - Root config files, such as `.editorconfig`, are shared by all projects.
 
 ## Tools
@@ -90,7 +90,8 @@ public.
   add new services to it, and update it when a service's configuration,
   secrets or ports change.
 - `scripts/integration-test.sh` tests the full-stack example against
-  `r59q/test-repo` on every push to `master`. Extend it when services gain
+  test repositories on GitHub and a self-hosted Forgejo on every push to
+  `master`. Extend it when services gain
   features.
 
 ## Workflows

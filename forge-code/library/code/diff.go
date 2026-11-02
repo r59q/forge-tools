@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/r59q/forge-tools/forge-code/library/internal/linediff"
+	"github.com/r59q/forge-tools/forge-core/forgeapi/linediff"
 )
 
 // Compare defaults.

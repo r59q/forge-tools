@@ -59,6 +59,49 @@ func TestReadinessConditions(t *testing.T) {
 	}
 }
 
+func TestGitHubUnstableReadiness(t *testing.T) {
+	for _, tt := range []struct {
+		name, state, want string
+		mergeable, draft  bool
+	}{
+		{"non-passing optional checks", "open", "unknown", true, false},
+		{"conflicts", "open", "blocked", false, false},
+		{"draft", "open", "blocked", true, true},
+		{"closed", "closed", "blocked", true, false},
+		{"merged", "merged", "blocked", true, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			c, r := client(t, forgeauth.GitHub, func(w http.ResponseWriter, r *http.Request) {
+				v := fixture(forgeauth.GitHub, tt.state, "Unstable", head, tt.draft)
+				v["mergeable"] = tt.mergeable
+				v["mergeable_state"] = "unstable"
+				_ = json.NewEncoder(w).Encode(v)
+			})
+			v, err := c.Readiness(context.Background(), r)
+			if err != nil || v.Status != tt.want {
+				t.Fatalf("Readiness: %+v, %v", v, err)
+			}
+			conditions := make(map[string]Condition)
+			for _, condition := range v.Conditions {
+				conditions[condition.Name] = condition
+			}
+			if conditions["forge"] != (Condition{"forge", "unknown", "unstable"}) {
+				t.Errorf("forge condition = %+v", conditions["forge"])
+			}
+			if checks := conditions["checks"]; checks.Status != "unknown" || !strings.Contains(checks.Detail, "non-passing") {
+				t.Errorf("checks condition = %+v", checks)
+			}
+			if tt.want == "unknown" {
+				for _, condition := range v.Conditions {
+					if condition.Status == "unmet" {
+						t.Errorf("unexpected merge blocker: %+v", condition)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestMergedCannotReopenOrMerge(t *testing.T) {
 	for _, kind := range []forgeauth.Kind{forgeauth.GitHub, forgeauth.GitLab, forgeauth.Forgejo} {
 		t.Run(string(kind), func(t *testing.T) {

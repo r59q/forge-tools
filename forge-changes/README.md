@@ -70,7 +70,10 @@ An unavailable patch is not an empty change. Raw diffs over 16 MiB fail.
 
 Merge readiness is advisory and can be stale. Missing review/check conditions
 remain `unknown`. The forge enforces all its rules during the merge, without
-forge-review. No force merge, auto-merge or branch deletion is requested.
+forge-review. GitHub's [`unstable` status](https://docs.github.com/en/graphql/reference/pulls#mergestatestatus)
+retains the non-passing check signal with unknown merge requirements, since
+the failing checks may be optional. Readiness stays unknown unless another
+condition blocks merging. No force merge, auto-merge or branch deletion is requested.
 GitLab `default` preserves project settings, including squash policy;
 `squash` explicitly enables squashing. Other strategies are unsupported there.
 Expected-head checks are passed to the native merge operation, never emulated

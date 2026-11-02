@@ -202,7 +202,12 @@ func (c *Client) Readiness(ctx context.Context, r Ref) (Readiness, error) {
 	case "clean", "mergeable":
 		out.Status = "ready"
 		out.Conditions[5].Status = "met"
-	case "dirty", "blocked", "behind", "unstable", "draft", "not_open", "conflict", "need_rebase", "not_approved", "discussions_not_resolved", "ci_must_pass", "ci_still_running", "status_checks_must_pass", "requested_changes", "security_policy_violations", "draft_status", "broken_status", "commits_status", "merge_time", "locked_paths", "locked_lfs_files", "jira_association_missing", "title_regex":
+	case "unstable":
+		if v.change.Kind == forgeauth.GitHub {
+			// Non-passing checks may be optional; their requirements are unknown.
+			out.Conditions[4] = Condition{"checks", "unknown", "non-passing commit status; merge requirements not exposed"}
+		}
+	case "dirty", "blocked", "behind", "draft", "not_open", "conflict", "need_rebase", "not_approved", "discussions_not_resolved", "ci_must_pass", "ci_still_running", "status_checks_must_pass", "requested_changes", "security_policy_violations", "draft_status", "broken_status", "commits_status", "merge_time", "locked_paths", "locked_lfs_files", "jira_association_missing", "title_regex":
 		out.Status = "blocked"
 		out.Conditions[5].Status = "unmet"
 	}

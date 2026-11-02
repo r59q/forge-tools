@@ -60,12 +60,19 @@ func TestSettings(t *testing.T) {
 		}
 	}
 	s, err = parse([]string{"--connector-address=broker:9090", "--connector-insecure=true", "--proxy-token-file=/p"}, getenv, io.Discard)
-	if err != nil || s.connectorTokenEnv != "FORGE_MANAGEMENT_CONNECTOR_ADMIN_TOKEN" || !s.connectorInsecure || len(s.clients) != 3 {
+	if err != nil || s.connectorTokenEnv != "FORGE_MANAGEMENT_CONNECTOR_ADMIN_TOKEN" || !s.connectorInsecure || len(s.clients) != 4 {
 		t.Fatalf("connector settings: %+v %v", s, err)
 	}
 	if p, r, i := s.clients[0], s.clients[1], s.clients[2]; p.file != "/p" || p.optional || !p.canIssueTokens || r.env != "FORGE_MANAGEMENT_REPOSITORIES_CONNECTOR_TOKEN" || !r.optional || r.canIssueTokens ||
 		i.name != "forge-issues" || i.env != "FORGE_MANAGEMENT_ISSUES_CONNECTOR_TOKEN" || !i.optional || i.canIssueTokens {
 		t.Fatalf("client settings: %+v", s.clients)
+	}
+	if w := s.clients[3]; w.name != "forge-workspaces" || w.env != "FORGE_MANAGEMENT_WORKSPACES_CONNECTOR_TOKEN" || !w.optional || w.canIssueTokens {
+		t.Fatalf("workspace client: %+v", w)
+	}
+	s, err = parse([]string{"--connector-address=broker:9090", "--workspaces-connector-token-file=/w"}, getenv, io.Discard)
+	if err != nil || s.clients[3].file != "/w" || s.clients[3].optional {
+		t.Fatalf("workspace client: %+v %v", s.clients, err)
 	}
 	s, err = parse([]string{"--connector-address=broker:9090", "--issues-connector-token-file=/i"}, getenv, io.Discard)
 	if err != nil || s.clients[2].file != "/i" || s.clients[2].optional {
@@ -76,6 +83,8 @@ func TestSettings(t *testing.T) {
 		{"--connector-address=x", "--connector-admin-token-file=t", "--connector-admin-token-env=T"},
 		{"--connector-address=x", "--repositories-connector-token-file=t", "--repositories-connector-token-env=T"},
 		{"--connector-address=x", "--issues-connector-token-file=t", "--issues-connector-token-env=T"}, {"--issues-connector-token-env=T"},
+		{"--workspaces-connector-token-env=T"},
+		{"--connector-address=x", "--workspaces-connector-token-file=t", "--workspaces-connector-token-env=T"},
 	} {
 		if _, err := parse(args, getenv, io.Discard); err == nil {
 			t.Fatalf("accepted invalid connector flags: %v", args)

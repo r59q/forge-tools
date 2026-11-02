@@ -1,7 +1,6 @@
-# The full stack: forge-connector, forge-repositories, forge-issues and
-# management.
+# The full stack, including persistent repository working copies.
 # Build from the repository root through each project's Dockerfile.
-# Only management is reachable from the host; see README.md.
+# Management and workspaces bind to host loopback; see README.md.
 services:
   # Stores forge connections and their encrypted tokens.
   broker:
@@ -50,6 +49,21 @@ services:
       FORGE_ISSUES_CONNECTOR_URL: http://proxy:8081
       FORGE_ISSUES_CONNECTOR_TOKEN: ${FORGE_ISSUES_CONNECTOR_TOKEN:?set in .env}
 
+  workspaces:
+    build:
+      context: ../..
+      dockerfile: forge-workspaces/service/Dockerfile
+    restart: unless-stopped
+    environment:
+      FORGE_WORKSPACES_TOKEN: ${FORGE_WORKSPACES_TOKEN:?set in .env}
+      FORGE_WORKSPACES_CONNECTOR_URL: http://proxy:8081
+      FORGE_WORKSPACES_CONNECTOR_TOKEN: ${FORGE_WORKSPACES_CONNECTOR_TOKEN:?set in .env}
+    volumes:
+      - workspaces-data:/data
+    ports:
+      - "127.0.0.1:8088:8080"
+      - "127.0.0.1:9098:9090"
+
   management:
     build:
       context: ../..
@@ -61,12 +75,13 @@ services:
       FORGE_MANAGEMENT_CONNECTOR_INSECURE: "true"
       FORGE_MANAGEMENT_CONNECTOR_ADMIN_TOKEN: ${FORGE_BROKER_ADMIN_TOKEN:?set in .env}
       # Registered in the broker at startup, for the proxy, repositories and
-      # issues.
+      # issues and workspaces.
       FORGE_MANAGEMENT_PROXY_TOKEN: ${FORGE_PROXY_TOKEN:?set in .env}
       FORGE_MANAGEMENT_REPOSITORIES_CONNECTOR_TOKEN: ${FORGE_REPOSITORIES_CONNECTOR_TOKEN:?set in .env}
       FORGE_MANAGEMENT_REPOSITORIES_ADDRESS: repositories:9090
       FORGE_MANAGEMENT_REPOSITORIES_INSECURE: "true"
       FORGE_MANAGEMENT_REPOSITORIES_TOKEN: ${FORGE_REPOSITORIES_TOKEN:?set in .env}
+      FORGE_MANAGEMENT_WORKSPACES_CONNECTOR_TOKEN: ${FORGE_WORKSPACES_CONNECTOR_TOKEN:?set in .env}
       FORGE_MANAGEMENT_ISSUES_CONNECTOR_TOKEN: ${FORGE_ISSUES_CONNECTOR_TOKEN:?set in .env}
       FORGE_MANAGEMENT_ISSUES_ADDRESS: issues:9090
       FORGE_MANAGEMENT_ISSUES_INSECURE: "true"
@@ -77,3 +92,4 @@ services:
 
 volumes:
   broker-data:
+  workspaces-data:

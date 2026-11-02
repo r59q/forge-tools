@@ -26,3 +26,6 @@ coverage/
 
 # Standalone review data
 review-data/
+
+# Local workspace data
+workspace-data/

@@ -78,6 +78,7 @@ connection, including ones added later:
 | `--proxy-token-*` | `forge-connector-proxy`, may issue forge tokens |
 | `--repositories-connector-token-*` | `forge-repositories` |
 | `--issues-connector-token-*` | `forge-issues` |
+| `--workspaces-connector-token-*` | `forge-workspaces` |
 
 If the broker does not yet accept a token, management replaces the client of
 that name with one using the token, so changing a token and restarting
@@ -109,6 +110,8 @@ errors. Without a token setting, nothing is registered.
 | `--repositories-insecure` | `FORGE_MANAGEMENT_REPOSITORIES_INSECURE` | `false` |
 | `--issues-connector-token-file` | `FORGE_MANAGEMENT_ISSUES_CONNECTOR_TOKEN_FILE` | none |
 | `--issues-connector-token-env` | `FORGE_MANAGEMENT_ISSUES_CONNECTOR_TOKEN_ENV` | `FORGE_MANAGEMENT_ISSUES_CONNECTOR_TOKEN`, if set, when connected |
+| `--workspaces-connector-token-file` | `FORGE_MANAGEMENT_WORKSPACES_CONNECTOR_TOKEN_FILE` | none |
+| `--workspaces-connector-token-env` | `FORGE_MANAGEMENT_WORKSPACES_CONNECTOR_TOKEN_ENV` | `FORGE_MANAGEMENT_WORKSPACES_CONNECTOR_TOKEN`, if set, when connected |
 | `--issues-address` | `FORGE_MANAGEMENT_ISSUES_ADDRESS` | none |
 | `--issues-token-file` | `FORGE_MANAGEMENT_ISSUES_TOKEN_FILE` | none |
 | `--issues-token-env` | `FORGE_MANAGEMENT_ISSUES_TOKEN_ENV` | `FORGE_MANAGEMENT_ISSUES_TOKEN` when connected |

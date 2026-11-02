@@ -583,6 +583,8 @@ func TestLogsAndSecrets(t *testing.T) {
 	e := newEnv(t, options{tokenTTL: time.Minute, verifyTTL: time.Minute})
 	e.get(t, callerToken, "/user?private_token=query-secret")
 	e.get(t, "wrong", "/user")
+	// Wait for handlers to finish logging before reading the buffer.
+	e.proxy.Close()
 	logs := e.logs.String()
 	for _, secret := range []string{callerToken, proxyToken, forgeToken, "query-secret"} {
 		if strings.Contains(logs, secret) {
@@ -695,6 +697,8 @@ func TestGitRoute(t *testing.T) {
 	if code := e.git(t, http.MethodPost, "/g/"+connID+"/o/r.git/git-upload-pack", "application/x-git-upload-pack-request"); code != 200 {
 		t.Fatalf("refreshed status = %d", code)
 	}
+	// Git responses can be flushed before the handler writes its final log.
+	e.proxy.Close()
 	if logs := e.logs.String(); !strings.Contains(logs, "connection="+connID) || strings.Contains(logs, "service=") {
 		t.Errorf("logs = %s", logs)
 	}

@@ -244,7 +244,13 @@ func forgejoComparison(ctx context.Context, s *forgeauth.Session, repo string, o
 	}
 	var b strings.Builder
 	size := 0
+	// The comparison API repeats paths affected by multiple commits.
+	seen := make(map[string]bool, len(v.Files))
 	for _, f := range v.Files {
+		if seen[f.Filename] {
+			continue
+		}
+		seen[f.Filename] = true
 		if !filePath(f.Filename) {
 			return ErrInvalid
 		}

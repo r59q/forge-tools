@@ -27,5 +27,8 @@ coverage/
 # Standalone review data
 review-data/
 
-# Local workspace data
+# Local checkout data
+checkout-data/
+
+# Data from before the checkout rename
 workspace-data/

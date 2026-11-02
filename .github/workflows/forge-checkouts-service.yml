@@ -1,0 +1,53 @@
+name: forge-checkouts-service
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - forge-checkouts/service/**
+      - forge-checkouts/library/**
+      - forge-connector/library/**
+      - forge-core/forgeapi/**
+      - .dockerignore
+      - .github/workflows/forge-checkouts-service.yml
+      - .github/workflows/reusable-*.yml
+  pull_request:
+    paths:
+      - forge-checkouts/service/**
+      - forge-checkouts/library/**
+      - forge-connector/library/**
+      - forge-core/forgeapi/**
+      - .dockerignore
+      - .github/workflows/forge-checkouts-service.yml
+      - .github/workflows/reusable-*.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: ./.github/workflows/reusable-go.yml
+    with:
+      dir: forge-checkouts/service
+
+  # Pull requests build the image without pushing or registry access.
+  image:
+    if: github.event_name == 'pull_request'
+    needs: test
+    uses: ./.github/workflows/reusable-docker.yml
+    with:
+      image: forge-checkouts-service
+      dockerfile: forge-checkouts/service/Dockerfile
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+    needs: test
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/reusable-docker.yml
+    with:
+      image: forge-checkouts-service
+      dockerfile: forge-checkouts/service/Dockerfile
+      push: true

@@ -4,7 +4,7 @@ Runs the whole stack with Docker Compose: the
 [forge-connector](../../forge-connector/) broker and proxy, the
 [repositories service](../../forge-repositories/service/), the
 [issues service](../../forge-issues/service/), the
-[workspaces service](../../forge-workspaces/service/) and the
+[checkouts service](../../forge-checkouts/service/) and the
 [management interface](../../forge-tools-management/). You connect forges in
 the browser.
 
@@ -37,10 +37,10 @@ updating this example. It never changes existing values.
 | `FORGE_REPOSITORIES_TOKEN` | Lets management call the repositories service. |
 | `FORGE_ISSUES_CONNECTOR_TOKEN` | Lets the issues service use connections through the proxy. |
 | `FORGE_ISSUES_TOKEN` | Lets management call the issues service. |
-| `FORGE_WORKSPACES_CONNECTOR_TOKEN` | Lets workspaces fetch repositories through the proxy. |
-| `FORGE_WORKSPACES_TOKEN` | Authenticates workspace REST/gRPC callers. |
+| `FORGE_CHECKOUTS_CONNECTOR_TOKEN` | Lets checkouts fetch repositories through the proxy. |
+| `FORGE_CHECKOUTS_TOKEN` | Authenticates checkout REST/gRPC callers. |
 
-At startup, management registers the proxy, repositories, issues and workspaces tokens
+At startup, management registers the proxy, repositories, issues and checkouts tokens
 in the broker. To rotate any secret except `FORGE_BROKER_KEY`, change it in
 `.env` and run `docker compose up -d` again.
 
@@ -68,7 +68,7 @@ tokens*. GitLab and Forgejo have personal access tokens in user settings.
 
 ## Notes
 
-- Management and workspaces are reachable from the host, on `127.0.0.1`. The other
+- Management and checkouts are reachable from the host, on `127.0.0.1`. The other
   services talk over the Compose network in plaintext; use TLS endpoints
   for remote access.
 - All operators see what the connected accounts can see. Management grants
@@ -79,20 +79,24 @@ tokens*. GitLab and Forgejo have personal access tokens in user settings.
 
 ## Working copies
 
-The workspace API listens on `127.0.0.1:8088` (REST) and `127.0.0.1:9098`
-(gRPC). Send `Authorization: Bearer <FORGE_WORKSPACES_TOKEN>` and create with
+The checkout API listens on `127.0.0.1:8088` (REST) and `127.0.0.1:9098`
+(gRPC). Send `Authorization: Bearer <FORGE_CHECKOUTS_TOKEN>` and create with
 `{"repository":{"source":"connection-id","path":"owner/repo"},"reference":"main"}`.
-See its [API and storage configuration](../../forge-workspaces/service/README.md).
+See its [API and storage configuration](../../forge-checkouts/service/README.md).
 
-The `workspaces-data` volume preserves metadata, Git caches and checked-out code.
-Returned paths such as `/data/copies/<id>` refer to the workspaces container.
+The `checkouts-data` volume preserves metadata, Git caches and checked-out code.
+Returned paths such as `/data/copies/<id>` refer to the checkouts container.
 An execution system must mount/access the same working files at the same paths.
 There is no execution endpoint or isolation inside this service.
 
+Existing `forge-workspaces` data can be reused by setting
+`FORGE_CHECKOUTS_DATA_VOLUME` to the old volume name and renaming the token keys
+in `.env`; see the [upgrade instructions](../../forge-checkouts/service/README.md#upgrade-from-forge-workspaces).
+
 ## Clean up
 
-`down -v` deletes the broker tokens and all workspace files, including retained
-workspaces and uncommitted work. Remove workspaces through their API first to
+`down -v` deletes the broker tokens and all checkout files, including retained
+checkouts and uncommitted work. Remove checkouts through their API first to
 apply cleanup protections:
 
 ```sh

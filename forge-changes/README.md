@@ -40,6 +40,8 @@ Single-proposal reads and writes require all three. Listing requires a
 repository; omitting source searches that path on all connections. This
 initial API does not discover repositories or create cross-fork proposals;
 existing cross-fork proposals can be read and managed.
+Forgejo source branch names use `head.label`, preserving the original name
+after branch deletion; payloads without a label fall back to `head.ref`.
 
 States are `open`, `closed`, `merged` and GitLab's temporary `locked` state;
 filtering closed excludes merged. Locked proposals remain readable through

@@ -25,9 +25,10 @@ func (u wireUser) user() User {
 }
 
 type wireBranch struct {
-	Ref  string
-	SHA  string
-	Repo *struct {
+	Label string
+	Ref   string
+	SHA   string
+	Repo  *struct {
 		FullName string `json:"full_name"`
 	}
 }
@@ -84,6 +85,10 @@ func decode(s Source, path string, raw json.RawMessage) (proposal, error) {
 	c := ChangeRequest{Ref: Ref{s.ID, path, w.Number}, Kind: s.Session.Kind, ID: strconv.FormatInt(w.ID, 10), Title: w.Title, Description: w.Body,
 		Author: w.User.user(), SourceBranch: w.Head.Ref, TargetBranch: w.Base.Ref, Revision: Revision{w.Head.SHA, w.Base.SHA, w.MergeBase},
 		State: State(w.State), Draft: w.Draft, WebURL: w.HTMLURL, CreatedAt: w.CreatedAt, UpdatedAt: w.UpdatedAt, ClosedAt: w.ClosedAt, MergedAt: w.MergedAt}
+	if s.Session.Kind == forgeauth.Forgejo && w.Head.Label != "" {
+		// Forgejo keeps the original name in label when ref becomes a PR ref.
+		c.SourceBranch = w.Head.Label
+	}
 	if w.Head.Repo != nil {
 		c.SourceRepository = w.Head.Repo.FullName
 	}

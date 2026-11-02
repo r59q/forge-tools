@@ -299,3 +299,16 @@ func TestGitLabContextLineAndRenamedGitHubPath(t *testing.T) {
 		})
 	}
 }
+
+func TestForgejoMissingComparisonFilesIsUnsupported(t *testing.T) {
+	c := connected(t, forgeauth.Forgejo, func(r *http.Request) string {
+		if strings.Contains(r.URL.Path, "/commits/") {
+			return `{"sha":"` + headSHA + `"}`
+		}
+		return `{"commits":[],"total_commits":1}`
+	})
+	_, err := c.CreateSubject(context.Background(), Input{Kind: "comparison", Ref: Ref{Source: "source", Repository: "o/r"}, From: "main", To: "topic"})
+	if !errors.Is(err, ErrUnsupported) {
+		t.Fatal(err)
+	}
+}

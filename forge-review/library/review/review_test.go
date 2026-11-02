@@ -170,3 +170,21 @@ func TestUnsupportedLocalNativeOperations(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestReversedHunksAndUnavailableLines(t *testing.T) {
+	p := "--- a/a\n+++ b/a\n@@ -10 +10 @@\n-old\n+new\n@@ -1 +1 @@\n-x\n+y\n"
+	if _, err := parsePatch(p); !errors.Is(err, ErrInvalid) {
+		t.Fatal("accepted reversed hunks", err)
+	}
+	p = "--- a/a\n+++ b/a\n@@ -1 +1 @@\n-old\n+new\n@@ -10 +10 @@\n-x\n+y\n"
+	if err := ValidateAnchor(Subject{Patch: p}, &Anchor{Path: "a", Side: "new", Start: 1, End: 10}); !errors.Is(err, ErrInvalid) {
+		t.Fatal("accepted gap", err)
+	}
+	p = "diff --git a/a b/a\nBinary files a/a and b/a differ\n"
+	if err := ValidateAnchor(Subject{Patch: p}, &Anchor{Path: "a", Side: "new", Start: 1, End: 1}); !errors.Is(err, ErrInvalid) {
+		t.Fatal("accepted binary line", err)
+	}
+	if err := ValidateAnchor(Subject{Patch: p}, &Anchor{Path: "a", Side: "new"}); err != nil {
+		t.Fatal(err)
+	}
+}

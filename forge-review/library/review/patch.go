@@ -104,6 +104,7 @@ func parsePatch(p string) (patchData, error) {
 	var f *File
 	var old, new, oldLeft, newLeft int
 	var headers bool
+	var oldEnd, newEnd int
 	flush := func() error {
 		if oldLeft != 0 || newLeft != 0 {
 			return ErrInvalid
@@ -198,6 +199,7 @@ func parsePatch(p string) (patchData, error) {
 			}
 			f = &File{OldPath: a, Path: b}
 			headers = false
+			oldEnd, newEnd = 0, 0
 		case strings.HasPrefix(line, "--- "):
 			if headers {
 				if err := flush(); err != nil {
@@ -207,6 +209,7 @@ func parsePatch(p string) (patchData, error) {
 			}
 			if f == nil {
 				f = &File{}
+				oldEnd, newEnd = 0, 0
 			}
 			a, e := headerPath(line[4:])
 			if e != nil {
@@ -242,6 +245,17 @@ func parsePatch(p string) (patchData, error) {
 				}
 			}
 			old, oldLeft, new, newLeft = vals[0], vals[1], vals[2], vals[3]
+			oldStart, newStart := old, new
+			if oldLeft == 0 {
+				oldStart++
+			}
+			if newLeft == 0 {
+				newStart++
+			}
+			if oldStart < oldEnd || newStart < newEnd {
+				return d, ErrInvalid
+			}
+			oldEnd, newEnd = oldStart+oldLeft, newStart+newLeft
 			if oldLeft == 0 && newLeft == 0 {
 				return d, ErrInvalid
 			}

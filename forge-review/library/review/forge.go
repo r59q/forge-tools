@@ -239,6 +239,9 @@ func forgejoComparison(ctx context.Context, s *forgeauth.Session, repo string, o
 	if err := forgerest.Send(ctx, s, "GET", repo+"/compare/"+out.Revision.Base+".."+out.Revision.Head, nil, &v); err != nil {
 		return err
 	}
+	if v.Files == nil {
+		return ErrUnsupported
+	}
 	var b strings.Builder
 	size := 0
 	for _, f := range v.Files {

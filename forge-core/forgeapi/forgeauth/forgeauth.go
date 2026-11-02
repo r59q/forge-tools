@@ -11,6 +11,10 @@
 // A Session's client sends the token only to the session's own scheme and
 // host, also across redirects and for absolute URLs. Tokens never appear in
 // errors or formatted output.
+//
+// For Git over HTTPS, NewGitRemote opens a GitRemote, DefaultGitURL derives
+// the Git host from an API base URL, and providers implementing
+// GitAuthenticator supply the Git auth header.
 package forgeauth
 
 import (

@@ -13,6 +13,8 @@ Register the `forgeauth` providers you need, add forge API endpoints to a
 See the [setup example](broker/example_test.go).
 
 - `CreateForge`, `ListForges` and `DeleteForge` manage registered endpoints.
+  `RegisterForge` also takes an explicit `GitBaseURL`; otherwise it is
+  derived with `forgeauth.DefaultGitURL`, or left empty when it cannot be.
   Metadata reads use `ListConnections`, `GetConnection` and `ListClients`.
 - `CreateConnection` calls `Whoami` before storing a sealed forge token and
   identity. `TestConnection` refreshes identity, status and check time.
@@ -29,7 +31,7 @@ See the [setup example](broker/example_test.go).
 - `ClientConnections` lists the ID, name, forge kind and status of each
   connection in a client token's scope, without credentials or endpoints.
 - `IssueToken` also requires `CanIssueTokens`, then returns the forge kind,
-  API base URL and decrypted token. It uses the last check's status; call
+  API base URL, Git base URL and decrypted token. It uses the last check's status; call
   `TestConnection` to refresh it.
 
 A successful check sets `ok`. HTTP 401/403 sets `revoked`; other forge failures
@@ -48,7 +50,7 @@ that echo a submitted forge token are redacted from identity fields and errors.
 `Store.GetCredential` returns ciphertext; `Sealer.Open` decrypts it internally.
 `MemoryStore` is concurrency-safe and ephemeral. Persistent stores must preserve
 the interface's atomic writes, reference checks and defensive copies. A forge's
-kind and endpoint cannot change while connections reference it.
+kind, API endpoint and Git endpoint cannot change while connections reference it.
 
 `AESGCMSealer` uses AES-256-GCM with a fresh random nonce. The caller supplies
 and retains a 32-byte key separately from stored data; losing it loses access
@@ -62,7 +64,9 @@ Tools use `connector.New(connector.Config{URL, Credentials})` with the proxy
 URL and their broker client token. `Connections` returns each usable
 connection (status `ok`, supported kind) with its ID, name, kind and an open
 `forgeauth` session for `<proxy>/c/{id}`. Make forge API calls with the
-session; the proxy swaps in the forge credential. `Connections` asks the proxy
+session; the proxy swaps in the forge credential. `Connection.Git` is a
+`forgeauth.GitRemote` for `<proxy>/g/{id}`; its client sends the client token
+as a Bearer header, only to the proxy's origin. `Connections` asks the proxy
 each time, so new, deleted and revoked connections apply at once.
 
 ```go
@@ -109,6 +113,33 @@ invalid credentials, 403 denied scope, 404 unknown connection, 503 broker or
 connection unavailable, 504 broker deadline, and 502 invalid endpoint/token or
 forge transport failure. Dependency error messages are never logged or echoed.
 
+### Git route
+
+The handler also serves Git smart HTTP at
+`/g/{connectionID}/{repoPath}.git/{endpoint}`. It forwards to the broker's
+Git base URL for the connection and sets the provider's Git credential, so the
+provider must implement `forgeauth.GitAuthenticator`; otherwise it answers 502.
+Callers send the client token as `Authorization: Bearer`, or as the password
+of a Basic header, as Git clients do. [forge-code](../../forge-code/) pushes
+its commits and ref updates through it.
+
+- Only `GET info/refs?service=git-upload-pack` and `POST git-upload-pack` are
+  allowed, plus the `git-receive-pack` pair when `Config.AllowGitPush` is set.
+  The query must match exactly. Everything else, such as dumb HTTP, archives
+  and LFS, gets 404.
+- Repository paths use `[A-Za-z0-9._-]` segments, never all dots. Escapes,
+  encoded slashes and traversal get 400.
+- POST bodies need the matching `application/x-git-*-request` type (415
+  otherwise). They stream, capped at 16 MiB for fetches and
+  `Config.MaxGitPushBytes` (default 2 GiB) for pushes (413).
+- Only `Accept`, `Accept-Encoding`, `Content-Encoding`, `Git-Protocol` and
+  `User-Agent` reach the forge. Responses keep only content and caching
+  headers. `Set-Cookie` and trailers are dropped, and `WWW-Authenticate` is
+  replaced with the proxy's realm.
+- Redirects are never followed. A `Location` is kept only when it points to an
+  allowed route on the same Git origin, rewritten to the proxy.
+- The issued kind and API base URL must match the verified connection.
+
 ## Develop
 
 From this directory:
@@ -122,4 +153,5 @@ go test -race ./...
 ```
 
 Tests use `MemoryStore` and local `httptest` forges; no real credentials or
-external forge access are needed.
+external forge access are needed. When `git` is on PATH, a proxy test pushes
+and fetches through the handler to `git http-backend`; otherwise it is skipped.

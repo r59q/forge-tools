@@ -13,7 +13,8 @@ import (
 // ID identifies a forge, connection or client.
 type ID string
 
-// Forge describes a forge API endpoint. BaseURL must not contain credentials.
+// Forge describes a forge API endpoint and its Git host. URLs must not
+// contain credentials.
 type Forge struct {
 	// ID is the store's unique forge identifier.
 	ID ID
@@ -23,6 +24,11 @@ type Forge struct {
 	BaseURL string
 	// Name is an owner-defined label.
 	Name string
+	// GitBaseURL is the Git smart-HTTP base URL, such as https://github.com.
+	// Empty means unknown, and Git access is unavailable. Records stored
+	// before this field existed get forgeauth.DefaultGitURL when read
+	// through Manager.
+	GitBaseURL string
 }
 
 // Status is the result of checking a connection's credential.

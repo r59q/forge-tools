@@ -34,7 +34,10 @@ type Forge struct {
 	// base_url includes the API path prefix and cannot contain URL credentials.
 	BaseUrl string `protobuf:"bytes,3,opt,name=base_url,json=baseUrl,proto3" json:"base_url,omitempty"`
 	// name is an owner-defined label.
-	Name          string `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
+	Name string `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
+	// git_base_url is the Git smart-HTTP base URL, such as https://github.com.
+	// Empty when it is unknown; the proxy's Git route is then unavailable.
+	GitBaseUrl    string `protobuf:"bytes,5,opt,name=git_base_url,json=gitBaseUrl,proto3" json:"git_base_url,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -93,6 +96,13 @@ func (x *Forge) GetBaseUrl() string {
 func (x *Forge) GetName() string {
 	if x != nil {
 		return x.Name
+	}
+	return ""
+}
+
+func (x *Forge) GetGitBaseUrl() string {
+	if x != nil {
+		return x.GitBaseUrl
 	}
 	return ""
 }
@@ -360,7 +370,10 @@ type CreateForgeRequest struct {
 	// base_url is an HTTP(S) API URL without user info, query or fragment.
 	BaseUrl string `protobuf:"bytes,2,opt,name=base_url,json=baseUrl,proto3" json:"base_url,omitempty"`
 	// name is an owner-defined label.
-	Name          string `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Name string `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	// git_base_url optionally sets the Git smart-HTTP base URL, with the same
+	// rules as base_url. When empty, it is derived from base_url if possible.
+	GitBaseUrl    string `protobuf:"bytes,4,opt,name=git_base_url,json=gitBaseUrl,proto3" json:"git_base_url,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -412,6 +425,13 @@ func (x *CreateForgeRequest) GetBaseUrl() string {
 func (x *CreateForgeRequest) GetName() string {
 	if x != nil {
 		return x.Name
+	}
+	return ""
+}
+
+func (x *CreateForgeRequest) GetGitBaseUrl() string {
+	if x != nil {
+		return x.GitBaseUrl
 	}
 	return ""
 }
@@ -1005,7 +1025,9 @@ type IssueTokenResponse struct {
 	// base_url is the forge API endpoint for token.
 	BaseUrl string `protobuf:"bytes,2,opt,name=base_url,json=baseUrl,proto3" json:"base_url,omitempty"`
 	// token is the decrypted credential; never log this response.
-	Token         string `protobuf:"bytes,3,opt,name=token,proto3" json:"token,omitempty"`
+	Token string `protobuf:"bytes,3,opt,name=token,proto3" json:"token,omitempty"`
+	// git_base_url is the forge's Git smart-HTTP base URL, or empty if unknown.
+	GitBaseUrl    string `protobuf:"bytes,4,opt,name=git_base_url,json=gitBaseUrl,proto3" json:"git_base_url,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1057,6 +1079,13 @@ func (x *IssueTokenResponse) GetBaseUrl() string {
 func (x *IssueTokenResponse) GetToken() string {
 	if x != nil {
 		return x.Token
+	}
+	return ""
+}
+
+func (x *IssueTokenResponse) GetGitBaseUrl() string {
+	if x != nil {
+		return x.GitBaseUrl
 	}
 	return ""
 }
@@ -1231,12 +1260,14 @@ var File_broker_proto protoreflect.FileDescriptor
 
 const file_broker_proto_rawDesc = "" +
 	"\n" +
-	"\fbroker.proto\x12\x12forge.connector.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"Z\n" +
+	"\fbroker.proto\x12\x12forge.connector.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"|\n" +
 	"\x05Forge\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x19\n" +
 	"\bbase_url\x18\x03 \x01(\tR\abaseUrl\x12\x12\n" +
-	"\x04name\x18\x04 \x01(\tR\x04name\"Z\n" +
+	"\x04name\x18\x04 \x01(\tR\x04name\x12 \n" +
+	"\fgit_base_url\x18\x05 \x01(\tR\n" +
+	"gitBaseUrl\"Z\n" +
 	"\bIdentity\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05login\x18\x02 \x01(\tR\x05login\x12\x12\n" +
@@ -1258,11 +1289,13 @@ const file_broker_proto_rawDesc = "" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12%\n" +
 	"\x0econnection_ids\x18\x03 \x03(\tR\rconnectionIds\x12(\n" +
 	"\x10can_issue_tokens\x18\x04 \x01(\bR\x0ecanIssueTokens\x12'\n" +
-	"\x0fall_connections\x18\x05 \x01(\bR\x0eallConnections\"W\n" +
+	"\x0fall_connections\x18\x05 \x01(\bR\x0eallConnections\"y\n" +
 	"\x12CreateForgeRequest\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x19\n" +
 	"\bbase_url\x18\x02 \x01(\tR\abaseUrl\x12\x12\n" +
-	"\x04name\x18\x03 \x01(\tR\x04name\"\x1e\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x12 \n" +
+	"\fgit_base_url\x18\x04 \x01(\tR\n" +
+	"gitBaseUrl\"\x1e\n" +
 	"\fForgeRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"G\n" +
 	"\x12ListForgesResponse\x121\n" +
@@ -1296,11 +1329,13 @@ const file_broker_proto_rawDesc = "" +
 	"\x13ListClientsResponse\x124\n" +
 	"\aclients\x18\x01 \x03(\v2\x1a.forge.connector.v1.ClientR\aclients\"8\n" +
 	"\x11IssueTokenRequest\x12#\n" +
-	"\rconnection_id\x18\x01 \x01(\tR\fconnectionId\"Y\n" +
+	"\rconnection_id\x18\x01 \x01(\tR\fconnectionId\"{\n" +
 	"\x12IssueTokenResponse\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x19\n" +
 	"\bbase_url\x18\x02 \x01(\tR\abaseUrl\x12\x14\n" +
-	"\x05token\x18\x03 \x01(\tR\x05token\":\n" +
+	"\x05token\x18\x03 \x01(\tR\x05token\x12 \n" +
+	"\fgit_base_url\x18\x04 \x01(\tR\n" +
+	"gitBaseUrl\":\n" +
 	"\x13VerifyClientRequest\x12#\n" +
 	"\rconnection_id\x18\x01 \x01(\tR\fconnectionId\"b\n" +
 	"\x10ClientConnection\x12\x0e\n" +

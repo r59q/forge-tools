@@ -30,6 +30,7 @@ var providers = []forgeauth.Provider{github.Provider{}, gitlab.Provider{}, forge
 
 type fakeBroker struct {
 	conn          forgeauth.Connection
+	gitBase       string
 	connectionErr error
 	verifyErr     error
 	issueErr      error
@@ -63,7 +64,7 @@ func (b *fakeBroker) IssueToken(_ context.Context, id broker.ID) (broker.IssuedT
 	if b.issued != nil {
 		return *b.issued, b.issueErr
 	}
-	return broker.IssuedToken{Kind: b.conn.Kind, BaseURL: b.conn.BaseURL, Token: forgeToken}, b.issueErr
+	return broker.IssuedToken{Kind: b.conn.Kind, BaseURL: b.conn.BaseURL, GitBaseURL: b.gitBase, Token: forgeToken}, b.issueErr
 }
 
 func config(t *testing.T, b *fakeBroker) proxy.Config {

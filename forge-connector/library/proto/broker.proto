@@ -94,6 +94,9 @@ message Forge {
   string base_url = 3;
   // name is an owner-defined label.
   string name = 4;
+  // git_base_url is the Git smart-HTTP base URL, such as https://github.com.
+  // Empty when it is unknown; the proxy's Git route is then unavailable.
+  string git_base_url = 5;
 }
 // Identity is the last successfully authenticated forge user.
 message Identity {
@@ -144,6 +147,9 @@ message CreateForgeRequest {
   string base_url = 2;
   // name is an owner-defined label.
   string name = 3;
+  // git_base_url optionally sets the Git smart-HTTP base URL, with the same
+  // rules as base_url. When empty, it is derived from base_url if possible.
+  string git_base_url = 4;
 }
 // ForgeRequest identifies a forge.
 message ForgeRequest {
@@ -227,6 +233,8 @@ message IssueTokenResponse {
   string base_url = 2;
   // token is the decrypted credential; never log this response.
   string token = 3;
+  // git_base_url is the forge's Git smart-HTTP base URL, or empty if unknown.
+  string git_base_url = 4;
 }
 // VerifyClientRequest selects a connection to check against the bearer token.
 message VerifyClientRequest {

@@ -1,6 +1,7 @@
 package forgejo
 
 import (
+	"encoding/base64"
 	"net/http"
 	"testing"
 
@@ -43,5 +44,21 @@ func TestTokenFromHeader(t *testing.T) {
 func TestOpenNeedsBaseURL(t *testing.T) {
 	if _, err := (Provider{}).Open(t.Context(), forgeauth.Connection{}, forgeauth.StaticToken("t")); err == nil {
 		t.Error("Open() without BaseURL succeeded")
+	}
+}
+
+func TestSetGitToken(t *testing.T) {
+	var a forgeauth.GitAuthenticator = Provider{}
+	h := http.Header{}
+	a.SetGitToken(h, "tok-123")
+	if got := h.Get("Authorization"); got != "Basic "+base64.StdEncoding.EncodeToString([]byte("forge-tools:tok-123")) {
+		t.Fatalf("Authorization = %q", got)
+	}
+	r := &http.Request{Header: h}
+	if user, pass, ok := r.BasicAuth(); !ok || user != "forge-tools" || pass != "tok-123" {
+		t.Errorf("BasicAuth() = %q, %q, %v", user, pass, ok)
+	}
+	if len(h) != 1 {
+		t.Errorf("headers = %v, want only Authorization", h)
 	}
 }

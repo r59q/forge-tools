@@ -7,7 +7,9 @@ import (
 
 	"github.com/r59q/forge-tools/forge-connector/library/broker"
 	"github.com/r59q/forge-tools/forge-core/forgeapi/forgeauth"
+	"github.com/r59q/forge-tools/forge-core/forgeapi/forgeauth/forgejo"
 	"github.com/r59q/forge-tools/forge-core/forgeapi/forgeauth/github"
+	"github.com/r59q/forge-tools/forge-core/forgeapi/forgeauth/gitlab"
 )
 
 func TestAdminMetadata(t *testing.T) {
@@ -76,5 +78,59 @@ func TestAdminMetadata(t *testing.T) {
 	cancel()
 	if _, err := m.CreateForge(canceled, forgeauth.GitHub, "https://example.com", ""); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
+	}
+}
+
+func TestForgeGitBaseURL(t *testing.T) {
+	ctx := context.Background()
+	var store broker.MemoryStore
+	var reg forgeauth.Registry
+	for _, p := range []forgeauth.Provider{github.Provider{}, gitlab.Provider{}, forgejo.Provider{}} {
+		if err := reg.Register(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sealer, err := broker.NewAESGCMSealer(make([]byte, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := broker.NewManager(&store, sealer, &reg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		kind              forgeauth.Kind
+		base, git, wanted string
+	}{
+		{forgeauth.GitHub, "https://api.github.com", "", "https://github.com"},
+		{forgeauth.GitHub, "https://ghes.example/api/v3", "", "https://ghes.example"},
+		{forgeauth.GitHub, "https://example.com/api", "", ""},
+		{forgeauth.GitLab, "https://gitlab.example/sub/api/v4/", "", "https://gitlab.example/sub"},
+		{forgeauth.Forgejo, "http://codeberg.example/api/v1", "", "http://codeberg.example"},
+		{forgeauth.GitHub, "https://example.com/api", " https://git.example/root/ ", "https://git.example/root"},
+	} {
+		f, err := m.RegisterForge(ctx, broker.Forge{Kind: tc.kind, BaseURL: tc.base, GitBaseURL: tc.git})
+		if err != nil || f.GitBaseURL != tc.wanted {
+			t.Errorf("%s %s: GitBaseURL = %q, %v; want %q", tc.kind, tc.base, f.GitBaseURL, err, tc.wanted)
+		}
+	}
+	for _, git := range []string{"ftp://git.example", "https://user:secret@git.example", "https://git.example?x=1", "https://git.example#f", "git.example", "https://"} {
+		if _, err := m.RegisterForge(ctx, broker.Forge{Kind: forgeauth.GitHub, BaseURL: "https://api.github.com", GitBaseURL: git}); !errors.Is(err, broker.ErrInvalid) {
+			t.Errorf("git base %q: %v", git, err)
+		}
+	}
+	// Records stored before GitBaseURL existed get the default when read.
+	legacy := broker.Forge{ID: "legacy", Kind: forgeauth.GitHub, BaseURL: "https://api.github.com"}
+	if err := store.CreateForge(ctx, legacy); err != nil {
+		t.Fatal(err)
+	}
+	forges, err := m.ListForges(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range forges {
+		if f.ID == legacy.ID && f.GitBaseURL != "https://github.com" {
+			t.Fatalf("legacy forge = %+v", f)
+		}
 	}
 }

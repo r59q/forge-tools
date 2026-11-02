@@ -10,6 +10,7 @@ useful on its own.
 
 | Tool                                | Description                                  |
 | ----------------------------------- | -------------------------------------------- |
+| [forge-code](forge-code/)             | Git content across forges: trees, files, diffs and commits. |
 | [forge-issues](forge-issues/)         | Issues and comments across forges.            |
 | [forge-connector](forge-connector/)   | Forge connections and authentication for every tool. |
 | [forge-repositories](forge-repositories/) | Repositories, branches and tags across forges. |

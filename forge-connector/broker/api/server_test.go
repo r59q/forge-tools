@@ -221,7 +221,11 @@ func TestTransports(t *testing.T) {
 				}
 			}
 			f := &pb.Forge{}
-			invoke("CreateForge", &pb.CreateForgeRequest{Kind: "github", BaseUrl: forge.URL, Name: "local"}, f, adminToken, codes.OK)
+			invoke("CreateForge", &pb.CreateForgeRequest{Kind: "github", BaseUrl: forge.URL, GitBaseUrl: "ftp://git.example"}, f, adminToken, codes.InvalidArgument)
+			invoke("CreateForge", &pb.CreateForgeRequest{Kind: "github", BaseUrl: forge.URL, Name: "local", GitBaseUrl: forge.URL + "/git/"}, f, adminToken, codes.OK)
+			if f.GitBaseUrl != forge.URL+"/git" {
+				t.Fatalf("git base URL = %q", f.GitBaseUrl)
+			}
 			conn := &pb.Connection{}
 			invoke("CreateConnection", &pb.CreateConnectionRequest{ForgeId: f.Id, Credential: forgeToken}, conn, adminToken, codes.OK)
 			if conn.Id == "" || conn.Status != "ok" || conn.Identity.Login != "owner" || strings.Contains(conn.Identity.Name, forgeToken) {
@@ -302,7 +306,7 @@ func TestTransports(t *testing.T) {
 			invoke("VerifyClient", &pb.VerifyClientRequest{ConnectionId: conn.Id}, &pb.Client{}, emptyScope.Token, codes.PermissionDenied)
 			tokenReply := &pb.IssueTokenResponse{}
 			invoke("IssueToken", &pb.IssueTokenRequest{ConnectionId: conn.Id}, tokenReply, issued.Token, codes.OK)
-			if tokenReply.Token != forgeToken || tokenReply.Kind != "github" || tokenReply.BaseUrl != forge.URL {
+			if tokenReply.Token != forgeToken || tokenReply.Kind != "github" || tokenReply.BaseUrl != forge.URL || tokenReply.GitBaseUrl != forge.URL+"/git" {
 				t.Fatal("issued wrong credential")
 			}
 			invoke("RotateCredential", &pb.RotateCredentialRequest{Id: conn.Id, Credential: "rejected-" + forgeToken}, &pb.Connection{}, adminToken, codes.InvalidArgument)

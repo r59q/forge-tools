@@ -7,7 +7,8 @@
 //
 // Failed responses are *forgehttp.Error values. URLs in errors drop the
 // query string. A redirect that changes the method is an error, so a write
-// is never dropped silently.
+// is never dropped silently. Open streams a response body, and Each and
+// Pages read paged lists.
 package forgerest
 
 import (
@@ -25,7 +26,7 @@ import (
 	"github.com/r59q/forge-tools/forge-core/forgeapi/forgehttp"
 )
 
-// maxPages caps how many pages one Pages call follows.
+// maxPages caps how many pages one Each or Pages call follows.
 const maxPages = 1000
 
 // maxBody caps the size of one decoded response body.
@@ -89,45 +90,147 @@ func Do(ctx context.Context, s *forgeauth.Session, method, target string, body, 
 }
 
 // Pages reads a JSON array from path and every following page, and decodes
-// each element with decode. It follows Link "next" headers up to 1000
-// pages, only within the session's scheme, host and base path, so a forge
-// cannot point the listing elsewhere. A link that repeats is an error.
+// each element with decode. It follows Link "next" headers like Each.
 func Pages[T any](ctx context.Context, s *forgeauth.Session, path string, decode func(json.RawMessage) (T, error)) ([]T, error) {
+	var out []T
+	err := Each(ctx, s, path, func(raw json.RawMessage) (bool, error) {
+		v, err := decode(raw)
+		if err != nil {
+			return false, err
+		}
+		out = append(out, v)
+		return true, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// Each reads a JSON array from path and every following page, and calls fn
+// for each element in order. It stops without error when fn returns
+// more = false, and fetches no further pages. It follows Link "next"
+// headers up to 1000 pages, only within the session's scheme, host and
+// base path, so a forge cannot point the listing elsewhere. A link that
+// repeats is an error.
+func Each(ctx context.Context, s *forgeauth.Session, path string, fn func(json.RawMessage) (more bool, err error)) error {
 	if s == nil {
+		return errors.New("forgerest: no open session")
+	}
+	base, err := url.Parse(s.BaseURL)
+	if err != nil {
+		return err
+	}
+	seen := map[string]bool{}
+	next := s.URL(path)
+	for page := 0; next != ""; page++ {
+		if page == maxPages {
+			return fmt.Errorf("more than %d pages", maxPages)
+		}
+		seen[next] = true
+		var items []json.RawMessage
+		h, err := Do(ctx, s, http.MethodGet, next, nil, &items)
+		if err != nil {
+			return err
+		}
+		for _, raw := range items {
+			more, err := fn(raw)
+			if err != nil {
+				return err
+			}
+			if !more {
+				return nil
+			}
+		}
+		if next, err = nextPage(h, next, base); err != nil {
+			return err
+		}
+		if seen[next] {
+			return errors.New("pagination loops")
+		}
+	}
+	return nil
+}
+
+// Open sends one request and returns the response for the caller to read
+// and close, such as to stream a file. target is a path or an absolute
+// URL, resolved with Session.URL, and h holds extra request headers. A 4xx
+// or 5xx response is a *forgehttp.Error, and its body is closed.
+//
+// Open follows redirects only within the session's scheme, host and base
+// path, and never one that changes the method, so a forge cannot send the
+// request elsewhere. URLs in errors drop the query string.
+func Open(ctx context.Context, s *forgeauth.Session, method, target string, h http.Header) (*http.Response, error) {
+	if s == nil || s.Client == nil {
 		return nil, errors.New("forgerest: no open session")
 	}
 	base, err := url.Parse(s.BaseURL)
 	if err != nil {
 		return nil, err
 	}
-	var out []T
-	seen := map[string]bool{}
-	next := s.URL(path)
-	for page := 0; next != ""; page++ {
-		if page == maxPages {
-			return nil, fmt.Errorf("more than %d pages", maxPages)
-		}
-		seen[next] = true
-		var items []json.RawMessage
-		h, err := Do(ctx, s, http.MethodGet, next, nil, &items)
-		if err != nil {
-			return nil, err
-		}
-		for _, raw := range items {
-			v, err := decode(raw)
-			if err != nil {
-				return nil, err
-			}
-			out = append(out, v)
-		}
-		if next, err = nextPage(h, next, base); err != nil {
-			return nil, err
-		}
-		if seen[next] {
-			return nil, errors.New("pagination loops")
+	req, err := http.NewRequestWithContext(ctx, method, s.URL(target), nil)
+	if err != nil {
+		return nil, err
+	}
+	for k, vs := range h {
+		for _, v := range vs {
+			req.Header.Add(k, v)
 		}
 	}
-	return out, nil
+	c := *s.Client
+	c.CheckRedirect = stayOnBase(base, s.Client.CheckRedirect)
+	resp, err := c.Do(req)
+	if err != nil {
+		// The client has closed any redirect response.
+		var ue *url.Error
+		if errors.As(err, &ue) {
+			ue.URL = forgehttp.RedactURL(req.URL)
+		}
+		return nil, err
+	}
+	if err := forgehttp.CheckResponse(resp); err != nil {
+		resp.Body.Close()
+		return nil, err
+	}
+	return resp, nil
+}
+
+// maxRedirects matches net/http's default limit.
+const maxRedirects = 10
+
+// stayOnBase returns a CheckRedirect policy that refuses redirects outside
+// base or that change the method, then applies next, if any.
+func stayOnBase(base *url.URL, next func(*http.Request, []*http.Request) error) func(*http.Request, []*http.Request) error {
+	return func(req *http.Request, via []*http.Request) error {
+		switch {
+		case len(via) >= maxRedirects:
+			return fmt.Errorf("forgerest: stopped after %d redirects", maxRedirects)
+		case req.Method != via[0].Method:
+			return fmt.Errorf("forgerest: %s %s was redirected to %s %s", via[0].Method,
+				forgehttp.RedactURL(via[0].URL), req.Method, forgehttp.RedactURL(req.URL))
+		case !onBase(req.URL, base):
+			return fmt.Errorf("forgerest: redirect to %s leaves the source", forgehttp.RedactURL(req.URL))
+		}
+		if next != nil {
+			return next(req, via)
+		}
+		return nil
+	}
+}
+
+// onBase reports whether u has base's scheme and host and lies within its
+// path. Paths with "." or ".." segments, such as an encoded %2e%2e, are
+// refused, since a server may resolve them above base.
+func onBase(u, base *url.URL) bool {
+	if !strings.EqualFold(u.Scheme, base.Scheme) || !strings.EqualFold(u.Host, base.Host) || u.User != nil {
+		return false
+	}
+	for _, seg := range strings.Split(u.Path, "/") {
+		if seg == "." || seg == ".." {
+			return false
+		}
+	}
+	return within(u.Path, base.Path)
 }
 
 // nextPage returns the absolute "next" link in h, resolved against the
@@ -146,7 +249,7 @@ func nextPage(h http.Header, current string, base *url.URL) (string, error) {
 		return "", errors.New("malformed pagination link")
 	}
 	u := cur.ResolveReference(ref)
-	if !strings.EqualFold(u.Scheme, base.Scheme) || !strings.EqualFold(u.Host, base.Host) || !within(u.Path, base.Path) {
+	if !onBase(u, base) {
 		return "", errors.New("pagination link leaves the source")
 	}
 	return u.String(), nil

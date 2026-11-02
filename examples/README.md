@@ -4,7 +4,7 @@ Run the forge-connector services with Docker Compose and use them with
 `curl` or Go.
 
 ```text
-docker-compose.yml   broker and proxy from ghcr.io
+docker-compose.yml   broker, proxy and forge-code service from ghcr.io
 .env.example         secrets for docker-compose.yml
 go/                  Go programs using the libraries and the broker API
 management/          full stack, with connections set up in the management UI,
@@ -86,6 +86,62 @@ curl -i -H "Authorization: Bearer $CLIENT_TOKEN" "localhost:8081/c/$CONN/user/re
 
 `Link` headers in responses point back at the proxy.
 
+## Read and write code
+
+The [forge-code service](../forge-code/service/) reads trees, files and
+diffs, and pushes commits, on every connection its client may use. Writes
+push through the proxy's Git route, so turn pushes on, create a client for
+the service and start it. The forge token needs write access to contents for
+writes. The first line adds keys missing from a `.env` made from an older
+`.env.example`:
+
+```sh
+for k in FORGE_PROXY_ALLOW_GIT_PUSH FORGE_CODE_TOKEN FORGE_CODE_CONNECTOR_TOKEN; do grep -q "^$k=" .env || echo "$k=" >> .env; done
+sed -i "s|^FORGE_PROXY_ALLOW_GIT_PUSH=.*|FORGE_PROXY_ALLOW_GIT_PUSH=true|" .env
+CODE_CLIENT=$(broker localhost:8080/v1/clients \
+  -d "{\"name\":\"forge-code\",\"connectionIds\":[\"$CONN\"]}" | jq -r .token)
+sed -i "s|^FORGE_CODE_CONNECTOR_TOKEN=.*|FORGE_CODE_CONNECTOR_TOKEN=$CODE_CLIENT|" .env
+sed -i "s|^FORGE_CODE_TOKEN=.*|FORGE_CODE_TOKEN=$(openssl rand -hex 32)|" .env
+docker compose --profile proxy --profile code up -d
+. ./.env
+fc() { curl -fsS -H "Authorization: Bearer $FORGE_CODE_TOKEN" "$@"; }
+```
+
+Set `REPO` to one of your repositories, such as `octocat/hello`. Every call
+names the connection as `source`:
+
+```sh
+fc "localhost:8085/v1/tree?source=$CONN&repository=$REPO&revision=main"
+fc -o README.md "localhost:8085/v1/raw?source=$CONN&repository=$REPO&path=README.md"
+fc "localhost:8085/v1/compare?source=$CONN&repository=$REPO&base=main&head=my-branch&patches=true"
+```
+
+Commit to a new branch. `old` is the ref's expected value; 40 zeros means it
+must not exist yet. If the ref moved, the call fails with `409` and changes
+nothing. The commit is unsigned and runs the forge's hooks and CI like any
+push:
+
+```sh
+MAIN=$(fc "localhost:8085/v1/resolve?source=$CONN&repository=$REPO&revision=main" | jq -r .commit)
+fc -X POST localhost:8085/v1/commits -d "{\"source\":\"$CONN\",\"repository\":\"$REPO\",
+  \"parents\":[\"$MAIN\"],\"ref\":\"refs/heads/forge-code-demo\",
+  \"old\":\"0000000000000000000000000000000000000000\",\"message\":\"Try forge-code\",
+  \"author\":{\"name\":\"Mr Bean\",\"email\":\"bean@example.com\"},
+  \"changes\":[{\"path\":\"hello.txt\",\"content\":\"$(printf 'hello\n' | base64)\"}]}"
+```
+
+Delete the branch again with `UpdateRefs`, using the commit `id` from the
+response as `old`:
+
+```sh
+fc -X POST localhost:8085/v1/ref-updates -d "{\"source\":\"$CONN\",\"repository\":\"$REPO\",
+  \"updates\":[{\"name\":\"refs/heads/forge-code-demo\",\"old\":\"<id>\",
+  \"new\":\"0000000000000000000000000000000000000000\"}]}"
+```
+
+See the [service API reference](../forge-code/service/README.md#api) for
+all routes and error codes.
+
 ## Manage the broker
 
 ```sh
@@ -138,6 +194,6 @@ Test them with `go vet ./...` and `go test ./...`.
 ## Clean up
 
 ```sh
-docker compose --profile proxy down -v   # -v also deletes the broker database
+docker compose --profile proxy --profile code down -v   # -v also deletes the broker database
 rm .env
 ```

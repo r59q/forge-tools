@@ -1,5 +1,5 @@
-# Runs the published forge-connector images.
-# See README.md for the two-step setup.
+# Runs the published forge-connector and forge-code images.
+# See README.md for the setup steps.
 services:
   broker:
     image: ghcr.io/r59q/forge-connector-broker:latest
@@ -21,8 +21,25 @@ services:
     environment:
       FORGE_PROXY_BROKER_ADDR: broker:9090
       FORGE_PROXY_TOKEN: ${FORGE_PROXY_TOKEN:-}
+      # Opens the Git route for pushes, which forge-code writes need.
+      FORGE_PROXY_ALLOW_GIT_PUSH: ${FORGE_PROXY_ALLOW_GIT_PUSH:-false}
     ports:
       - "127.0.0.1:8081:8081"
+
+  # Reads and writes Git content of every connection its client may use,
+  # through the proxy. It never holds forge tokens.
+  code:
+    image: ghcr.io/r59q/forge-code-service:latest
+    profiles: [code] # needs a client token from the running broker
+    restart: unless-stopped
+    depends_on: [proxy]
+    environment:
+      FORGE_CODE_TOKEN: ${FORGE_CODE_TOKEN:-}
+      FORGE_CODE_CONNECTOR_URL: http://proxy:8081
+      FORGE_CODE_CONNECTOR_TOKEN: ${FORGE_CODE_CONNECTOR_TOKEN:-}
+    ports:
+      - "127.0.0.1:8085:8080" # REST
+      - "127.0.0.1:9095:9090" # gRPC
 
 volumes:
   broker-data:

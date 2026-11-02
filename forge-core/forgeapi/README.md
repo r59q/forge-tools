@@ -43,6 +43,22 @@ me, err := reg.Whoami(ctx, s) // GET /user
   appear in errors.
 - Nothing is registered by default. Register the providers you need.
 
+### Git over HTTPS
+
+```go
+base, err := forgeauth.DefaultGitURL(forgeauth.GitHub, "https://api.github.com")
+g, err := forgeauth.NewGitRemote(base, creds, github.SetGitToken, nil)
+repo, err := g.URL("octocat/Hello-World") // https://github.com/octocat/Hello-World.git
+```
+
+- `DefaultGitURL` derives the Git host from the API base: `api.github.com`
+  and `api.<x>.ghe.com` drop `api.`; `/api/v3`, `/api/v4` and `/api/v1`
+  are stripped. Other URLs are an error wrapping `ErrNoGitURL`.
+- Providers implement `GitAuthenticator`. `SetGitToken` sends Basic auth:
+  GitHub `x-access-token:T`, GitLab `oauth2:T`, Forgejo `forge-tools:T`.
+- A `GitRemote` client sends the token only to its own origin and follows
+  redirects only within its base URL, keeping the method.
+
 ## forgehttp
 
 - `CheckResponse` turns a 4xx or 5xx response into a `*forgehttp.Error`.
@@ -71,9 +87,14 @@ issues, err := forgerest.Pages(ctx, s, "/repos/mrbean/teddy/issues?per_page=100"
   skips decoding. `Do` also returns the response headers. A redirect that
   changes the method, as 301, 302 and 303 do for a write, is an error, so a
   write is never dropped silently.
-- `Pages` reads a JSON array and follows `Link` next pages, up to 1000,
+- `Each` reads a JSON array and follows `Link` next pages, up to 1000,
   only within the session's scheme, host and base path. A repeated link is
-  an error.
+  an error. The callback returns `more = false` to stop early. `Pages`
+  collects every element into a slice.
+- `Open` returns the response for the caller to stream and close, such as
+  a raw file; `HEAD` works too. Error responses are closed and returned as
+  `*forgehttp.Error`. Redirects are followed only within the session base
+  and never when they change the method.
 - `CleanPath` checks a repository path such as `owner/name` or
   `group/sub/project`. It rejects encoded or unsafe paths, so they are
   never double-encoded.

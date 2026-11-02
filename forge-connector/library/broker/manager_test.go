@@ -75,7 +75,7 @@ func setup(t *testing.T, provider forgeauth.Provider) *fixture {
 		})
 	}))
 	t.Cleanup(srv.Close)
-	f.forge = broker.Forge{ID: "forge", Kind: provider.Kind(), BaseURL: srv.URL, Name: "Test forge"}
+	f.forge = broker.Forge{ID: "forge", Kind: provider.Kind(), BaseURL: srv.URL, Name: "Test forge", GitBaseURL: srv.URL + "/git"}
 	if err := f.store.CreateForge(f.ctx, f.forge); err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func TestConnectionLifecycle(t *testing.T) {
 			}
 			_, clientToken := f.client(t, []broker.ID{conn.ID}, true)
 			issued, err := f.manager.IssueToken(f.ctx, clientToken, conn.ID)
-			if err != nil || issued.Kind != provider.Kind() || issued.BaseURL != f.forge.BaseURL || issued.Token != oldToken {
+			if err != nil || issued.Kind != provider.Kind() || issued.BaseURL != f.forge.BaseURL || issued.GitBaseURL != f.forge.GitBaseURL || issued.Token != oldToken {
 				t.Fatalf("IssueToken failed: %v", err)
 			}
 			rotated, err := f.manager.RotateCredential(f.ctx, conn.ID, newToken)

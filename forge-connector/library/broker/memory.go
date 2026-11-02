@@ -89,7 +89,7 @@ func (s *MemoryStore) UpdateForge(ctx context.Context, forge Forge) error {
 	if forge.Kind == "" || forge.BaseURL == "" {
 		return ErrInvalid
 	}
-	if old.Kind != forge.Kind || old.BaseURL != forge.BaseURL {
+	if old.Kind != forge.Kind || old.BaseURL != forge.BaseURL || old.GitBaseURL != forge.GitBaseURL {
 		for _, record := range s.connections {
 			if record.connection.ForgeID == forge.ID {
 				return ErrConflict

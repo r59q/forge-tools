@@ -23,11 +23,8 @@ func route(r *http.Request) (broker.ID, string, int) {
 	if !ok || id == "" {
 		return "", "", http.StatusNotFound
 	}
-	// Broker IDs are URL-safe opaque identifiers, never escaped path segments.
-	for _, c := range id {
-		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '_') {
-			return "", "", http.StatusBadRequest
-		}
+	if !validID(id) {
+		return "", "", http.StatusBadRequest
 	}
 	apiURL, err := url.Parse(apiPath)
 	if err != nil || strings.HasPrefix(apiPath, "/") || apiURL.IsAbs() || apiURL.Host != "" {

@@ -17,6 +17,21 @@ Requests go to `/c/{connectionID}/<forge API path>`. Send the client token as
 bodies and responses pass through unchanged, and pagination links are rewritten
 to point back at the proxy.
 
+Git smart HTTP goes to `/g/{connectionID}/{repoPath}.git`. The proxy sends it
+to the connection's Git base URL from the broker, with the forge's Git
+credential. Fetches always work; pushes only with `--allow-git-push`, which
+[forge-code](../../forge-code/) needs for its writes. Send the client token as
+a Bearer header or as the Basic password:
+
+```sh
+git -c "http.extraHeader=Authorization: Bearer $CLIENT_TOKEN" \
+  clone http://localhost:8081/g/my-connection/owner/repo.git
+```
+
+The route allows only the smart-HTTP upload-pack and receive-pack endpoints,
+streams capped bodies, never follows redirects and drops cookies and
+credentials. See the [library](../library/README.md#git-route) for the rules.
+
 `GET /connections` lists the connections the client token may use, so callers
 need no connection IDs in their own configuration:
 
@@ -49,7 +64,7 @@ The module uses relative replacements for `../library` and
 `../../forge-core/forgeapi`; keep that checkout layout. It does not import the
 broker service. Tests run a fake gRPC broker built from the generated
 `brokerpb` package against a local forge server. They cover the full request,
-connection listing, token and verification caches, token drop on a forge 401, broker outages, and a
+connection listing, the Git route, token and verification caches, token drop on a forge 401, broker outages, and a
 `forgeauth` session paging through results via the proxy.
 
 ## Run
@@ -79,6 +94,8 @@ printf '%s\n' "$PROXY_CLIENT_TOKEN" > proxy-token
 | `--broker-tls` | `FORGE_PROXY_BROKER_TLS` | `false` |
 | `--broker-ca-file` | `FORGE_PROXY_BROKER_CA_FILE` | system roots; implies TLS |
 | `--public-url` | `FORGE_PROXY_PUBLIC_URL` | derived from the request |
+| `--allow-git-push` | `FORGE_PROXY_ALLOW_GIT_PUSH` | `false` |
+| `--max-git-push-bytes` | `FORGE_PROXY_MAX_GIT_PUSH_BYTES` | `2147483648` (2 GiB) |
 
 Flags override environment settings. Choose one token source; `--token-env`
 names a variable rather than containing the token. The token is read through
@@ -118,7 +135,7 @@ Revoking a client therefore takes effect within `--verify-ttl`.
 gRPC health service is served on `--grpc-listen`. SIGINT and SIGTERM allow five
 seconds to drain requests.
 
-Each request logs the connection ID, method, path, status and duration. Query
+Each request, including Git requests, logs the connection ID, method, path, status and duration. Query
 strings, tokens and headers are never logged.
 
 ## Error mapping
@@ -126,9 +143,12 @@ strings, tokens and headers are never logged.
 | Status | Meaning |
 | --- | --- |
 | 401 | Missing or invalid client token |
-| 405 | `/connections` with a method other than `GET` |
+| 405 | `/connections` or a Git endpoint with the wrong method |
+| 413 | Git request body over its cap |
+| 415 | Git POST without the matching content type |
 | 403 | Client may not use the connection |
-| 404 | Unknown connection |
+| 404 | Unknown connection, or a Git route outside the allow-list |
+| 502 | Invalid endpoint or token, no Git base URL, or forge transport failure |
 | 503 | Broker unavailable or rejected the proxy's own token |
 | 504 | Broker call timed out |
 

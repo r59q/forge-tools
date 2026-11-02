@@ -1,6 +1,7 @@
 package github
 
 import (
+	"encoding/base64"
 	"net/http"
 	"testing"
 
@@ -50,5 +51,21 @@ func TestDefaultBaseURL(t *testing.T) {
 	}
 	if s.BaseURL != "https://api.github.com" {
 		t.Errorf("BaseURL = %q", s.BaseURL)
+	}
+}
+
+func TestSetGitToken(t *testing.T) {
+	var a forgeauth.GitAuthenticator = Provider{}
+	h := http.Header{}
+	a.SetGitToken(h, "tok-123")
+	if got := h.Get("Authorization"); got != "Basic "+base64.StdEncoding.EncodeToString([]byte("x-access-token:tok-123")) {
+		t.Fatalf("Authorization = %q", got)
+	}
+	r := &http.Request{Header: h}
+	if user, pass, ok := r.BasicAuth(); !ok || user != "x-access-token" || pass != "tok-123" {
+		t.Errorf("BasicAuth() = %q, %q, %v", user, pass, ok)
+	}
+	if len(h) != 1 {
+		t.Errorf("headers = %v, want only Authorization", h)
 	}
 }

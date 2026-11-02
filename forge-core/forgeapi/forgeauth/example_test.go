@@ -32,3 +32,23 @@ func ExampleRegistry() {
 	}
 	fmt.Println(me.Login)
 }
+
+func ExampleNewGitRemote() {
+	base, err := forgeauth.DefaultGitURL(forgeauth.GitHub, "https://api.github.com")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	g, err := forgeauth.NewGitRemote(base, forgeauth.EnvToken("GITHUB_TOKEN"), github.SetGitToken, nil)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	repo, err := g.URL("octocat/Hello-World")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println(repo)
+	// Output: https://github.com/octocat/Hello-World.git
+}

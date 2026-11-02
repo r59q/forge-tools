@@ -1,0 +1,104 @@
+syntax = "proto3";
+package forge.review.v1;
+option go_package = "github.com/r59q/forge-tools/forge-review/service/reviewpb";
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+
+// ReviewService captures immutable snapshots and manages feedback. Every RPC
+// requires Authorization: Bearer <service token>. Native RPCs publish as the
+// connector session user; standalone RPCs never publish to a forge.
+service ReviewService {
+  // CreateSubject captures a supplied patch, comparison or change request.
+  rpc CreateSubject(CreateSubjectRequest) returns (Subject) { option (google.api.http) = {post:"/v1/subjects" body:"*"}; }
+  // GetSubject reads the stored patch, paths, context and exact revisions.
+  rpc GetSubject(SubjectRequest) returns (Subject) { option (google.api.http) = {get:"/v1/subjects/{subject_id}"}; }
+  // RequestReview creates a standalone reviewer assignment.
+  rpc RequestReview(RequestReviewRequest) returns (Review) { option (google.api.http) = {post:"/v1/reviews" body:"*"}; }
+  // GetReview reads a standalone assignment and its threads.
+  rpc GetReview(ReviewRequest) returns (Review) { option (google.api.http) = {get:"/v1/reviews/{review_id}"}; }
+  // ListReviews filters standalone assignments and assessments.
+  rpc ListReviews(ListReviewsRequest) returns (ListReviewsResponse) { option (google.api.http) = {get:"/v1/reviews"}; }
+  // AddComment opens a validated thread on an unsubmitted review.
+  rpc AddComment(CommentRequest) returns (Review) { option (google.api.http) = {post:"/v1/reviews/{review_id}/threads" body:"*"}; }
+  // Reply appends to a standalone thread, even after submission.
+  rpc Reply(ReplyRequest) returns (Review) { option (google.api.http) = {post:"/v1/reviews/{review_id}/threads/{thread_id}/replies" body:"*"}; }
+  // Resolve resolves or reopens a standalone thread.
+  rpc Resolve(ResolveRequest) returns (Review) { option (google.api.http) = {put:"/v1/reviews/{review_id}/threads/{thread_id}/resolution" body:"*"}; }
+  // Submit records an assessment, without deciding merge permission.
+  rpc Submit(SubmitRequest) returns (Review) { option (google.api.http) = {post:"/v1/reviews/{review_id}/submission" body:"*"}; }
+  // GetCapabilities reports native adapter support for a source.
+  rpc GetCapabilities(SourceRequest) returns (Capabilities) { option (google.api.http) = {get:"/v1/sources/{source}/capabilities"}; }
+  // RequestNativeReview publishes assignments (GitLab replaces reviewer IDs).
+  rpc RequestNativeReview(NativeReviewersRequest) returns (NativeResponse) { option (google.api.http) = {post:"/v1/subjects/{subject_id}/native/reviewers" body:"*"}; }
+  // ListNative reads reviews, threads or reviewers, including other revisions.
+  rpc ListNative(NativeListRequest) returns (NativeResponse) { option (google.api.http) = {get:"/v1/subjects/{subject_id}/native/{resource}"}; }
+  // SubmitNative publishes feedback, approval or a request for changes.
+  rpc SubmitNative(NativeSubmitRequest) returns (NativeResponse) { option (google.api.http) = {post:"/v1/subjects/{subject_id}/native/submission" body:"*"}; }
+  // CommentNative publishes general, file or line feedback immediately.
+  rpc CommentNative(NativeCommentRequest) returns (NativeResponse) { option (google.api.http) = {post:"/v1/subjects/{subject_id}/native/threads" body:"*"}; }
+  // ReplyNative replies to a supported native thread at its original revision.
+  rpc ReplyNative(NativeReplyRequest) returns (NativeResponse) { option (google.api.http) = {post:"/v1/subjects/{subject_id}/native/threads/{thread_id}/replies" body:"*"}; }
+  // ResolveNative resolves/reopens a supported native diff discussion.
+  rpc ResolveNative(NativeResolveRequest) returns (NativeResponse) { option (google.api.http) = {put:"/v1/subjects/{subject_id}/native/threads/{thread_id}/resolution" body:"*"}; }
+}
+// Ref is a connector source, unescaped repository path and native request number.
+message Ref { string source=1; string repository=2; int64 number=3; }
+// Revision contains exact commit IDs. Empty base means the forge did not report it.
+message Revision { string base=1; string head=2; string target=3; }
+// FileContext is complete UTF-8 file text on one old/new side.
+message FileContext { string path=1; string side=2; string content=3; }
+// File lists a changed path. Empty old_path/path means added/deleted respectively.
+message File { string old_path=1; string path=2; bool binary=3; }
+// CreateSubjectRequest selects kind patch, comparison or change_request.
+// Only patch accepts patch/context; comparison requires from/to references.
+message CreateSubjectRequest { string kind=1; Ref ref=2; string from=3; string to=4; string patch=5; repeated FileContext context=6; }
+// Subject is a fixed content-addressed snapshot, with all available context.
+message Subject { string id=1; string kind=2; Ref ref=3; Revision revision=4; string patch=5; repeated FileContext context=6; repeated File files=7; string completeness=8; google.protobuf.Timestamp created_at=9; }
+// SubjectRequest names an immutable snapshot.
+message SubjectRequest { string subject_id=1; }
+// Anchor identifies an old/new file side and inclusive one-based range.
+// Zero start/end means file-level. Omit anchor for general feedback.
+message Anchor { string path=1; string side=2; int32 start=3; int32 end=4; }
+// Comment preserves the caller's author identity and creation time.
+message Comment { string id=1; string author=2; string body=3; google.protobuf.Timestamp created_at=4; }
+// Thread keeps its original anchor and snapshot through replies/resolution.
+message Thread { string id=1; string subject_id=2; Anchor anchor=3; repeated Comment comments=4; bool resolved=5; }
+// Review is a standalone assignment. Status is requested, commented, approved
+// or changes_requested. Storage is local; approval grants no merge permission.
+message Review { string id=1; string subject_id=2; string reviewer=3; string storage=4; string status=5; string body=6; repeated Thread threads=7; google.protobuf.Timestamp created_at=8; google.protobuf.Timestamp submitted_at=9; }
+// RequestReviewRequest creates one assignment for a caller-defined identity.
+message RequestReviewRequest { string subject_id=1; string reviewer=2; }
+// ReviewRequest names one local review.
+message ReviewRequest { string review_id=1; }
+// ListReviewsRequest filters local reviews; empty fields match all values.
+message ListReviewsRequest { string subject_id=1; string reviewer=2; string status=3; }
+// ListReviewsResponse holds matching standalone reviews ordered by ID.
+message ListReviewsResponse { repeated Review reviews=1; }
+// CommentRequest opens a thread; author and body are required.
+message CommentRequest { string review_id=1; string author=2; string body=3; Anchor anchor=4; }
+// ReplyRequest appends an authored reply.
+message ReplyRequest { string review_id=1; string thread_id=2; string author=3; string body=4; }
+// ResolveRequest resolves (true) or reopens (false) a thread.
+message ResolveRequest { string review_id=1; string thread_id=2; bool resolved=3; }
+// SubmitRequest accepts commented, approved or changes_requested.
+message SubmitRequest { string review_id=1; string status=2; string body=3; }
+// SourceRequest identifies a connector connection.
+message SourceRequest { string source=1; }
+// Capabilities describes adapter support, subject to permissions and version.
+message Capabilities { string kind=1; bool request_review=2; bool approve=3; bool request_changes=4; bool inline=5; bool ranges=6; bool file_comments=7; bool replies=8; bool resolve=9; }
+// NativeResponse retains the upstream JSON including IDs and revision fields.
+// data_json contains JSON text, not a normalized local review. Storage is native.
+message NativeResponse { string storage=1; string subject_id=2; string resource=3; string data_json=4; }
+// NativeReviewersRequest takes usernames on GitHub/Forgejo, numeric IDs on GitLab.
+message NativeReviewersRequest { string subject_id=1; repeated string reviewers=2; }
+// NativeListRequest selects reviews, threads or reviewers. Forgejo threads need
+// review_id. Results may refer to revisions other than this snapshot.
+message NativeListRequest { string subject_id=1; string resource=2; string review_id=3; }
+// NativeSubmitRequest publishes as the session user, never a supplied identity.
+message NativeSubmitRequest { string subject_id=1; string status=2; string body=3; }
+// NativeCommentRequest publishes immediately at a validated snapshot location.
+message NativeCommentRequest { string subject_id=1; string body=2; Anchor anchor=3; }
+// NativeReplyRequest identifies a GitHub root comment or GitLab discussion.
+message NativeReplyRequest { string subject_id=1; string thread_id=2; string body=3; }
+// NativeResolveRequest changes supported native discussion resolution.
+message NativeResolveRequest { string subject_id=1; string thread_id=2; bool resolved=3; }

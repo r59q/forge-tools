@@ -1,0 +1,53 @@
+name: forge-review-service
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - forge-review/service/**
+      - forge-review/library/**
+      - forge-connector/library/**
+      - forge-core/forgeapi/**
+      - .dockerignore
+      - .github/workflows/forge-review-service.yml
+      - .github/workflows/reusable-*.yml
+  pull_request:
+    paths:
+      - forge-review/service/**
+      - forge-review/library/**
+      - forge-connector/library/**
+      - forge-core/forgeapi/**
+      - .dockerignore
+      - .github/workflows/forge-review-service.yml
+      - .github/workflows/reusable-*.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: ./.github/workflows/reusable-go.yml
+    with:
+      dir: forge-review/service
+
+  # Pull requests build the image without pushing or registry access.
+  image:
+    if: github.event_name == 'pull_request'
+    needs: test
+    uses: ./.github/workflows/reusable-docker.yml
+    with:
+      image: forge-review-service
+      dockerfile: forge-review/service/Dockerfile
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+    needs: test
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/reusable-docker.yml
+    with:
+      image: forge-review-service
+      dockerfile: forge-review/service/Dockerfile
+      push: true

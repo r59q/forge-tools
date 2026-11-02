@@ -8,6 +8,7 @@ forgeauth/                  credentials, sessions, providers, registry
   github/ gitlab/ forgejo/  one provider per forge
 forgehttp/                  errors, Link pagination, rate limits
 forgerest/                  JSON requests, paged lists, path checks
+linediff/                   bounded line diffs and unified hunks
 ```
 
 Module: `github.com/r59q/forge-tools/forge-core/forgeapi`
@@ -99,6 +100,12 @@ issues, err := forgerest.Pages(ctx, s, "/repos/mrbean/teddy/issues?per_page=100"
   `group/sub/project`. It rejects encoded or unsafe paths, so they are
   never double-encoded.
 - URLs in errors drop the query string.
+
+## linediff
+
+`Hunks(old, new, context)` produces unified diff hunks and addition/deletion
+counts. Work is bounded; line endings and missing final newlines are preserved.
+Callers bound input sizes and add file headers. Used by forge-code and forge-review.
 
 ## Develop
 

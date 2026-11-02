@@ -28,7 +28,7 @@ cross-origin protection, and shutdown.
 
 ## Configure and run
 
-For a complete stack, use the [Compose example](../../examples/management/).
+For a complete stack, use the [Compose example](../../examples/fullstack/).
 
 Generate a management operator token and start without any connected tools:
 
@@ -216,7 +216,7 @@ docker run --rm -p 127.0.0.1:8083:8080 -p 127.0.0.1:9093:9090 \
 
 Export a generated `FORGE_MANAGEMENT_TOKEN` first, or mount a token file and
 set `FORGE_MANAGEMENT_TOKEN_FILE`. The image runs as non-root. See the
-[Compose example](../../examples/management/) for a complete setup.
+[Compose example](../../examples/fullstack/) for a complete setup.
 
 ## Regenerate
 

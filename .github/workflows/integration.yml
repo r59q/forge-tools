@@ -1,0 +1,32 @@
+name: integration
+
+# Runs the full-stack example against GitHub, using a token with access to
+# r59q/test-repo. It needs a secret, so it never runs on pull requests.
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fullstack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Start the stack
+        run: scripts/fullstack.sh start
+      - name: Test
+        env:
+          FORGE_TEST_TOKEN: ${{ secrets.GH_TEST_REPO_PAT }}
+        run: scripts/integration-test.sh
+      - name: Show logs
+        if: failure()
+        run: docker compose -f examples/fullstack/compose.yaml logs
+      - name: Clean up
+        if: always()
+        run: scripts/fullstack.sh clear

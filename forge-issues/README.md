@@ -44,7 +44,7 @@ to the library. The library only works with sessions; it never sees tokens or
 connection details.
 
 [forge-tools-management](../forge-tools-management/) lists issues in its web
-interface, and the [management example](../examples/management/) runs this
+interface, and the [full-stack example](../examples/fullstack/) runs this
 service with the rest of the stack.
 
 Build and test each module from its own directory; see its README for setup.

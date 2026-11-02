@@ -87,7 +87,7 @@ docker run -p 127.0.0.1:8082:8080 -p 127.0.0.1:9092:9090 \
 
 The image listens on all interfaces and runs as a non-root user. Pass tokens
 as environment variables or mounted files; never bake them into the image.
-The [management example](../../examples/management/) runs it with the
+The [full-stack example](../../examples/fullstack/) runs it with the
 connector in Docker Compose.
 
 ## API

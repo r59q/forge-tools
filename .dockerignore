@@ -11,3 +11,4 @@
 **/*.db-*
 **/broker-data
 **/proxy-token
+**/review-data

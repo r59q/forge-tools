@@ -23,3 +23,6 @@ go.work.sum
 node_modules/
 coverage/
 *.tsbuildinfo
+
+# Standalone review data
+review-data/

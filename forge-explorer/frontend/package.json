@@ -1,0 +1,37 @@
+{
+  "name": "@forge-tools/explorer",
+  "version": "0.1.0",
+  "description": "Framework-agnostic, source-aware worktree explorer",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=24"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/explorer.js"
+    },
+    "./styles.css": "./dist/styles.css"
+  },
+  "files": [
+    "dist",
+    "nudaui/LICENSE",
+    "nudaui/manifest.json",
+    "README.md",
+    "examples/embedding.ts",
+    "LICENSE"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --test test/*.test.mjs",
+    "test:browser": "playwright test",
+    "build": "node tools/build.mjs",
+    "nuda": "node tools/nuda.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1",
+    "esbuild": "0.25.11",
+    "typescript": "5.9.3"
+  }
+}

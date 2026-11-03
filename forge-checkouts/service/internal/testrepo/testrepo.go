@@ -32,10 +32,10 @@ func Git(t *testing.T, dir string, args ...string) string {
 }
 
 // New creates two commits, an annotated tag v1 and the branch main.
-func New(t *testing.T) string {
+func New(t *testing.T, initArgs ...string) string {
 	t.Helper()
 	dir := t.TempDir()
-	Git(t, dir, "init", "-b", "main")
+	Git(t, dir, append([]string{"init", "-b", "main"}, initArgs...)...)
 	for _, text := range []string{"original\n", "second\n"} {
 		if err := os.WriteFile(filepath.Join(dir, "file"), []byte(text), 0600); err != nil {
 			t.Fatal(err)

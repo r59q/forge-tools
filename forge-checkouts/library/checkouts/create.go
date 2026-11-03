@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -134,12 +133,6 @@ func (m *Manager) prepareSource(ctx context.Context, source checkoutSource, ref 
 
 	remote, err := m.resolve(ctx, source.repository.Source)
 	if err != nil {
-		return "", err
-	}
-	if err := os.MkdirAll(source.directory, 0700); err != nil {
-		return "", err
-	}
-	if _, err := git(ctx, "", "init", "--bare", "--", source.directory); err != nil {
 		return "", err
 	}
 	if err := fetch(ctx, remote, source.repository.Path, source.directory, ref); err != nil {

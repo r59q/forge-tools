@@ -51,6 +51,7 @@ resolves authorization again and fetches the requested ref. Git uses a temporary
 random loopback route which forwards fetches through the authenticated HTTP
 client. No forge credentials or temporary remote URLs are persisted or passed
 to Git. Existing copies remain usable when the connector is unavailable.
+New caches detect SHA-1 or SHA-256 from the remote refs before fetching.
 
 ## Storage and ownership
 

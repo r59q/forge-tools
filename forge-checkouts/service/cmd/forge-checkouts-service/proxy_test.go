@@ -69,8 +69,17 @@ func (b *brokerStub) ClientConnections(_ context.Context, token forgeauth.Static
 }
 
 func TestConnectedFetchThroughProxy(t *testing.T) {
+	for _, format := range []string{"sha1", "sha256"} {
+		t.Run(format, func(t *testing.T) {
+			testConnectedFetch(t, format)
+		})
+	}
+}
+
+func testConnectedFetch(t *testing.T, format string) {
+	t.Helper()
 	ctx := context.Background()
-	repo := testrepo.New(t)
+	repo := testrepo.New(t, "--object-format="+format)
 	root := t.TempDir()
 	bare := filepath.Join(root, "owner", "repo.git")
 	testrepo.Git(t, root, "clone", "--bare", repo, bare)
@@ -87,8 +96,9 @@ func TestConnectedFetchThroughProxy(t *testing.T) {
 	header := http.Header{}
 	github.SetGitToken(header, "forge-fixture-secret")
 	var requests atomic.Int64
+	var denyFetch atomic.Bool
 	forge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != header.Get("Authorization") {
+		if denyFetch.Load() || r.Header.Get("Authorization") != header.Get("Authorization") {
 			http.Error(w, "denied", http.StatusUnauthorized)
 			return
 		}
@@ -132,6 +142,21 @@ func TestConnectedFetchThroughProxy(t *testing.T) {
 	}
 
 	defer m.Close()
+	// A failed initial probe must remain removable before a cache exists.
+	denyFetch.Store(true)
+	if _, err := m.Create(ctx, checkouts.Input{Repository: checkouts.Repository{Source: "gh", Path: "owner/repo"}}); err == nil {
+		t.Fatal("accepted denied fetch")
+	}
+
+	failed, err := m.List(ctx)
+	if err != nil || len(failed) != 1 || failed[0].State != checkouts.Failed {
+		t.Fatal(failed, err)
+	}
+	if err := m.Remove(ctx, failed[0].ID, false); err != nil {
+		t.Fatal("cannot remove failed probe", err)
+	}
+
+	denyFetch.Store(false)
 	var created []checkouts.Checkout
 	first := testrepo.Git(t, repo, "rev-parse", "v1^{commit}")
 	for _, ref := range []string{"main", "v1", first, "HEAD"} {

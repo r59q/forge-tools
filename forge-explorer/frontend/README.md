@@ -8,6 +8,7 @@ From this directory, with Node 24+:
 ```sh
 npm ci
 npm run typecheck
+npm run lint
 npm test
 npm run build
 npm run test:package
@@ -20,6 +21,10 @@ against a local HTTP contract fixture; they do not build a backend. To exercise
 the same tests against the actual Go service, run `node forge-explorer/test-browser.mjs`
 from repository root (Go, curl, jq and frontend dependencies must be installed).
 `EXPLORER_CHROMIUM=/path/to/chromium` selects an existing browser executable.
+
+`src/model/` holds state with no DOM: navigation, history, tabs and location
+checks. `src/components/` holds views that render it. `npm run lint` applies the
+repository's shared [ESLint rules](../../eslint.rules.mjs).
 
 The build emits `dist/explorer.js`, public declarations in `dist/types`,
 `dist/styles.css`, and the standalone app in `dist/app`. `npm pack` produces the
@@ -57,6 +62,9 @@ resulting `r59q-explorer-0.1.0.tgz` in the host project. The service image inclu
 the standalone app and has its own [publishing pipeline](../service/README.md#asset-packaging).
 
 ## Embedding contract
+
+[examples/explorer-embed](../../examples/explorer-embed/) is a minimal host
+that installs the package and embeds one explorer.
 
 ```ts
 import { createExplorer, httpProvider } from '@r59q/explorer';

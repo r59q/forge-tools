@@ -1,0 +1,13 @@
+# The forge-explorer service, serving ./sample read-only as the source "sample".
+services:
+  explorer:
+    build:
+      context: ../..
+      dockerfile: forge-explorer/service/Dockerfile
+    environment:
+      FORGE_EXPLORER_TOKEN: ${FORGE_EXPLORER_TOKEN:?see README}
+      FORGE_EXPLORER_ROOTS: sample=/content
+    volumes:
+      - ./sample:/content:ro
+    ports:
+      - "127.0.0.1:8090:8080"

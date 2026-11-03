@@ -1,103 +1,101 @@
-import type { ContentProvider, Source } from "../types.js";
-import { button, element, resultSummary } from "./dom.js";
+import type { ContentProvider, Directory, Entry, Source } from "../types.js";
+import { button, focusSibling, h, resultSummary } from "./dom.js";
 
-/** A lazy directory disclosure tree with instance-owned cancellation and keyboard focus. */
-export function createTree(
-  provider: ContentProvider,
-  source: Source,
-  navigate: (path: string) => void,
-  signal: AbortSignal,
-): { node: HTMLElement; show: (path: string) => Promise<void> } {
-  const node = element("nav", "", "tree");
-  node.setAttribute("aria-label", "Files");
-  let current: AbortController | undefined;
-  node.addEventListener(
-    "keydown",
-    (event) => {
-      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
-      const controls = [
-        ...node.querySelectorAll<HTMLElement>("summary,button:not(:disabled)"),
-      ].filter((control) => control.getClientRects().length > 0);
-      const index = controls.indexOf(event.target as HTMLElement);
-      const target = controls[index + (event.key === "ArrowDown" ? 1 : -1)];
-      if (target) {
-        event.preventDefault();
-        target.focus();
-      }
-    },
-    { signal },
-  );
+/** Tree is a lazily loaded directory tree. Directories load when first opened. */
+export class Tree {
+  readonly node = h("nav", { class: "tree", "aria-label": "Files" });
+  #request?: AbortController;
 
-  async function fill(
-    parent: HTMLElement,
-    path: string,
-    request: AbortSignal,
-  ): Promise<void> {
-    parent.replaceChildren(element("p", "Loading directory…"));
+  constructor(
+    private readonly provider: ContentProvider,
+    private readonly source: Source,
+    private readonly navigate: (path: string) => unknown,
+    private readonly signal: AbortSignal,
+  ) {
+    this.node.addEventListener(
+      "keydown",
+      (event) => focusSibling(event, visibleControls(this.node)),
+      { signal },
+    );
+  }
+
+  /** show replaces the tree with the directory at path. */
+  async show(path: string): Promise<void> {
+    this.#request?.abort();
+    this.#request = new AbortController();
+
+    await this.#fill(this.node, path, AbortSignal.any([this.signal, this.#request.signal]));
+  }
+
+  async #fill(parent: HTMLElement, path: string, signal: AbortSignal): Promise<void> {
+    parent.replaceChildren(h("p", {}, "Loading directory…"));
     parent.setAttribute("aria-busy", "true");
+
     try {
-      const directory = await provider.browse(source, path, request);
-      if (request.aborted) return;
-      if (directory.source !== source.id)
-        throw new Error("Directory belongs to another source.");
-      const list = element("ul");
-      for (const entry of directory.entries) {
-        const item = element("li");
-        const label = entry.path.split("/").at(-1) ?? entry.path;
-        if (entry.kind === "directory") {
-          const details = element("details");
-          const summary = element("summary", label);
-          const children = element("div");
-          let loaded = false;
-          details.addEventListener(
-            "toggle",
-            () => {
-              if (details.open && !loaded) {
-                loaded = true;
-                void fill(children, entry.path, request);
-              }
-            },
-            { signal: request },
-          );
-          details.append(summary, children);
-          item.append(details);
-        } else {
-          const file = button(label, () => navigate(entry.path), "file");
-          file.disabled = entry.kind !== "file";
-          if (file.disabled)
-            file.title = "Unsupported entry (symlink or special file)";
-          item.append(file);
-        }
-        list.append(item);
-      }
-      parent.replaceChildren(list);
-      if (
-        !directory.entries.length ||
-        directory.state.skipped ||
-        directory.state.truncated
-      ) {
-        parent.append(
-          element(
-            "p",
-            resultSummary(directory.entries.length, directory.state),
-            "partial",
-          ),
-        );
-      }
+      const directory = await this.provider.browse(this.source, path, signal);
+      if (!signal.aborted) this.#showDirectory(parent, directory, signal);
     } catch (error) {
-      if (!request.aborted)
-        parent.replaceChildren(element("p", (error as Error).message, "error"));
+      if (!signal.aborted) {
+        parent.replaceChildren(h("p", { class: "error" }, (error as Error).message));
+      }
     } finally {
-      if (!request.aborted) parent.setAttribute("aria-busy", "false");
+      if (!signal.aborted) parent.setAttribute("aria-busy", "false");
     }
   }
-  return {
-    node,
-    async show(path) {
-      current?.abort();
-      current = new AbortController();
-      const request = AbortSignal.any([signal, current.signal]);
-      await fill(node, path, request);
-    },
-  };
+
+  #showDirectory(parent: HTMLElement, directory: Directory, signal: AbortSignal): void {
+    if (directory.source !== this.source.id) {
+      throw new Error("Directory belongs to another source.");
+    }
+
+    const items = directory.entries.map((entry) => h("li", {}, this.#entry(entry, signal)));
+    parent.replaceChildren(h("ul", {}, ...items));
+
+    const { entries, state } = directory;
+    if (!entries.length || state.skipped || state.truncated) {
+      parent.append(h("p", { class: "partial" }, resultSummary(entries.length, state)));
+    }
+  }
+
+  #entry(entry: Entry, signal: AbortSignal): HTMLElement {
+    const label = entry.path.split("/").at(-1) ?? entry.path;
+
+    if (entry.kind === "directory") return this.#directory(entry.path, label, signal);
+    return this.#file(entry, label);
+  }
+
+  #directory(path: string, label: string, signal: AbortSignal): HTMLElement {
+    const children = h("div");
+    const details = h("details", {}, h("summary", {}, label), children);
+    let loaded = false;
+
+    details.addEventListener(
+      "toggle",
+      () => {
+        if (!details.open || loaded) return;
+        loaded = true;
+        void this.#fill(children, path, signal);
+      },
+      { signal },
+    );
+
+    return details;
+  }
+
+  #file(entry: Entry, label: string): HTMLElement {
+    const supported = entry.kind === "file";
+
+    return button(label, () => this.navigate(entry.path), {
+      class: "file",
+      disabled: !supported,
+      title: supported ? undefined : "Unsupported entry (symlink or special file)",
+    });
+  }
+}
+
+// visibleControls lists the tree's focusable controls, skipping collapsed ones.
+function visibleControls(tree: HTMLElement): HTMLElement[] {
+  const controls = tree.querySelectorAll<HTMLElement>("summary,button:not(:disabled)");
+
+  return [...controls].filter((control) => control.getClientRects().length > 0);
 }

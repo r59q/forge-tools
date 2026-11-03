@@ -1,0 +1,39 @@
+:root {
+  color-scheme: light;
+  font-family: system-ui, sans-serif;
+  color: #1d2733;
+  background: #f4f6f9;
+}
+
+body {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 1rem 2rem;
+}
+
+nav {
+  display: flex;
+  gap: 1rem;
+}
+
+a {
+  color: #0b5cad;
+}
+
+/* The explorer renders in a shadow root; --explorer-* variables theme it.
+   Its code view is always dark, so keep the colors suited to a dark theme. */
+#files {
+  --explorer-accent: #ffc861;
+  display: block;
+}
+
+#status {
+  color: #4f5d6e;
+}

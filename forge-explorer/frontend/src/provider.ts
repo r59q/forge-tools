@@ -2,7 +2,6 @@ import type {
   ContentProvider,
   Directory,
   FileContent,
-  Query,
   SearchResults,
   Source,
 } from "./types.js";
@@ -17,93 +16,88 @@ export class ProviderError extends Error {
   }
 }
 
-/** Creates a REST provider. Supply a service token getter; tokens are never persisted.
- * The default base URL is same-origin. Custom fetch supports host authentication adapters.
+const INTERNAL = 13;
+
+const ERROR_MESSAGES: Record<number, string> = {
+  3: "Invalid request or range.",
+  5: "File or source no longer exists.",
+  7: "Path is outside the accessible root.",
+  8: "File exceeds the source limit.",
+  9: "Content changed. Reload to open the current version.",
+  12: "Unsupported content or operation.",
+  16: "Authentication required.",
+};
+
+type Request = <T>(route: string, signal: AbortSignal, body?: object) => Promise<T>;
+
+/** httpProvider creates a REST provider. Supply a service token getter; tokens are never persisted.
+ * The default base URL is same-origin. A custom fetch supports host authentication adapters.
  */
 export function httpProvider(
   baseURL = "",
   token: () => string = () => "",
   fetcher = fetch,
 ): ContentProvider {
-  const base = baseURL.replace(/\/$/, "");
-  async function request<T>(
-    route: string,
-    signal: AbortSignal,
-    body?: object,
-  ): Promise<T> {
-    const response = await fetcher(base + route, {
-      method: body ? "POST" : "GET",
-      signal,
-      credentials: "omit",
-      cache: "no-store",
-      redirect: "error",
-      headers: {
-        Authorization: `Bearer ${token()}`,
-        ...(body ? { "Content-Type": "application/json" } : {}),
-      },
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    if (!response.ok) {
-      const error = (await response.json().catch(() => ({}))) as {
-        code?: number;
-      };
-      const messages: Record<number, string> = {
-        3: "Invalid request or range.",
-        5: "File or source no longer exists.",
-        7: "Path is outside the accessible root.",
-        8: "File exceeds the source limit.",
-        9: "Content changed. Reload to open the current version.",
-        12: "Unsupported content or operation.",
-        16: "Authentication required.",
-      };
-      throw new ProviderError(
-        error.code ?? 13,
-        messages[error.code ?? 13] ?? `Request failed (${response.status}).`,
-      );
-    }
-    return (await response.json()) as T;
-  }
-  function route(
-    source: Source,
-    resource: string,
-    fields?: Record<string, string>,
-  ): string {
-    const query = new URLSearchParams({
-      sourceVersion: source.version,
-      ...fields,
-    });
-    return `/v1/explorer/sources/${encodeURIComponent(source.id)}/${resource}?${query}`;
-  }
+  const request = requester(baseURL.replace(/\/$/, ""), token, fetcher);
+
   return {
     async sources(signal) {
-      return (
-        await request<{ sources: Source[] }>("/v1/explorer/sources", signal)
-      ).sources;
+      const body = await request<{ sources: Source[] }>("/v1/explorer/sources", signal);
+      return body.sources;
     },
     async browse(source, path, signal) {
-      return (
-        await request<{ directory: Directory }>(
-          route(source, "tree", { path }),
-          signal,
-        )
-      ).directory;
+      const body = await request<{ directory: Directory }>(sourceRoute(source, "tree", { path }), signal);
+      return body.directory;
     },
     async read(source, path, expectedVersion, signal) {
-      return (
-        await request<{ file: FileContent }>(
-          route(source, "file", { path, expectedVersion }),
-          signal,
-        )
-      ).file;
+      const route = sourceRoute(source, "file", { path, expectedVersion });
+      const body = await request<{ file: FileContent }>(route, signal);
+      return body.file;
     },
-    async search(source: Source, query: Query, signal) {
-      return (
-        await request<{ results: SearchResults }>(
-          route(source, "search"),
-          signal,
-          { ...query, sourceVersion: source.version },
-        )
-      ).results;
+    async search(source, query, signal) {
+      const search = { ...query, sourceVersion: source.version };
+      const body = await request<{ results: SearchResults }>(sourceRoute(source, "search"), signal, search);
+      return body.results;
     },
   };
+}
+
+function requester(base: string, token: () => string, fetcher: typeof fetch): Request {
+  return async <T>(route: string, signal: AbortSignal, body?: object): Promise<T> => {
+    const response = await fetcher(base + route, requestInit(token(), signal, body));
+    if (!response.ok) throw await providerError(response);
+
+    return (await response.json()) as T;
+  };
+}
+
+// requestInit never sends cookies, caches or follows redirects.
+function requestInit(token: string, signal: AbortSignal, body?: object): RequestInit {
+  const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+  if (body) headers["Content-Type"] = "application/json";
+
+  return {
+    method: body ? "POST" : "GET",
+    signal,
+    credentials: "omit",
+    cache: "no-store",
+    redirect: "error",
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  };
+}
+
+async function providerError(response: Response): Promise<ProviderError> {
+  const error = (await response.json().catch(() => ({}))) as { code?: number };
+  const code = error.code ?? INTERNAL;
+  const message = ERROR_MESSAGES[code] ?? `Request failed (${response.status}).`;
+
+  return new ProviderError(code, message);
+}
+
+// sourceRoute builds a per-source URL bound to the source's current version.
+function sourceRoute(source: Source, resource: string, fields?: Record<string, string>): string {
+  const query = new URLSearchParams({ sourceVersion: source.version, ...fields });
+
+  return `/v1/explorer/sources/${encodeURIComponent(source.id)}/${resource}?${query}`;
 }

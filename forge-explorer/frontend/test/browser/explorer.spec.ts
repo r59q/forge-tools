@@ -197,6 +197,19 @@ test("code rendering stays bounded and keyboard navigation reaches later lines",
   const explorer = page.locator("#explorer");
   await explorer.getByRole("button", { name: "hello.go", exact: true }).click();
   await expect(explorer.locator(".code-line")).toHaveCount(200);
+  // Moving within a page keeps the rendered rows; crossing a page turns it.
+  const firstRow = explorer.locator('[data-line="1"]');
+  await firstRow.evaluate((row) => row.setAttribute("data-marker", "kept"));
+  await explorer.getByRole("button", { name: "Select line 1", exact: true }).press("ArrowDown");
+  await expect(
+    explorer.getByRole("button", { name: "Select line 2", exact: true }),
+  ).toBeFocused();
+  await expect(firstRow).toHaveAttribute("data-marker", "kept");
+  await page.keyboard.press("End");
+  await expect(
+    explorer.getByRole("button", { name: "Select line 1000", exact: true }),
+  ).toBeFocused();
+  await expect(explorer.getByText("Lines 801–1000 of 1000")).toBeVisible();
   await explorer.getByLabel("Go to line").fill("999");
   await explorer.getByLabel("Go to line").press("Enter");
   await expect(

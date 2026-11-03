@@ -1,39 +1,73 @@
-/** Create an element using textContent so repository strings cannot become markup. */
-export function element<K extends keyof HTMLElementTagNameMap>(
+/** Attributes for h. false and undefined omit the attribute; true sets it empty. */
+export type Attributes = Record<string, string | number | boolean | undefined>;
+
+/** h creates an element. Strings become text nodes, so repository text never becomes markup. */
+export function h<K extends keyof HTMLElementTagNameMap>(
   tag: K,
-  text = "",
-  className = "",
+  attributes: Attributes = {},
+  ...children: Array<Node | string>
 ): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
-  node.textContent = text;
-  node.className = className;
+
+  for (const [name, value] of Object.entries(attributes)) {
+    if (value === false || value === undefined) continue;
+    node.setAttribute(name, value === true ? "" : String(value));
+  }
+
+  node.append(...children);
   return node;
 }
 
-/** NudaUI Shine Sweep markup, with an explicit non-submit button type. */
+/** button creates a NudaUI Shine Sweep button. A promise from action is not awaited. */
 export function button(
   label: string,
-  action: () => void,
-  className = "",
+  action: () => unknown,
+  attributes: Attributes = {},
 ): HTMLButtonElement {
-  const node = element("button", "", `nuda-shine-sweep ${className}`);
-  node.type = "button";
-  node.append(element("span", label, "nuda-shine-sweep__label"));
-  node.addEventListener("click", action);
+  const className = `nuda-shine-sweep ${attributes.class ?? ""}`.trim();
+  const node = h(
+    "button",
+    { type: "button", ...attributes, class: className },
+    h("span", { class: "nuda-shine-sweep__label" }, label),
+  );
+
+  node.addEventListener("click", () => void action());
   return node;
 }
 
-/** Explain empty and partial-result states consistently. */
+const ARROW_STEPS: Record<string, number> = { ArrowDown: 1, ArrowUp: -1 };
+
+/** focusSibling moves focus between controls on ArrowUp and ArrowDown. */
+export function focusSibling(event: KeyboardEvent, controls: HTMLElement[]): void {
+  const step = ARROW_STEPS[event.key];
+  if (!step) return;
+
+  const index = controls.indexOf(event.target as HTMLElement);
+  const target = controls[index + step];
+  if (!target) return;
+
+  event.preventDefault();
+  target.focus();
+}
+
+/** resultSummary explains empty and partial results. */
 export function resultSummary(
   count: number,
   state: { skipped: number; truncated: boolean; canceled: boolean },
 ): string {
-  return (
-    `${count ? `${count} result${count === 1 ? "" : "s"}` : "No results"}.` +
-    (state.skipped
-      ? ` ${state.skipped} skipped (policy, unsupported content or read failures).`
-      : "") +
-    (state.truncated ? " Truncated at the configured limit." : "") +
-    (state.canceled ? " Canceled; results may be incomplete." : "")
-  );
+  const notes = [countText(count)];
+
+  if (state.skipped) {
+    notes.push(`${state.skipped} skipped (policy, unsupported content or read failures).`);
+  }
+  if (state.truncated) notes.push("Truncated at the configured limit.");
+  if (state.canceled) notes.push("Canceled; results may be incomplete.");
+
+  return notes.join(" ");
+}
+
+function countText(count: number): string {
+  if (count === 0) return "No results.";
+
+  return count === 1 ? "1 result." : `${count} results.`;
 }

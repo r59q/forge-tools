@@ -1,13 +1,15 @@
 # Examples
 
 Run the forge-connector services with Docker Compose and use them with
-`curl`, Go, or the [JavaScript checkout explorer](checkouts/).
+`curl`, Go, or the [JavaScript checkout explorer](checkouts/). See
+[explorer-embed/](explorer-embed/) to embed forge-explorer in your own page.
 
 ```text
 docker-compose.yml   broker, proxy and forge-code service from ghcr.io
 .env.example         secrets for docker-compose.yml
 go/                  Go programs using the libraries and the broker API
-checkouts/          simple Node.js code explorer using only checkouts and connector
+checkouts/           simple Node.js code explorer using only checkouts and connector
+explorer-embed/      host page embedding forge-explorer from its npm package
 fullstack/           full stack, with connections set up in the management UI,
                      including the repositories and issues services
 ```

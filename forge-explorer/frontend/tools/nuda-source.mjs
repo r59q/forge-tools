@@ -11,34 +11,47 @@ export function validateID(id) {
   return id;
 }
 
+const LANGUAGES = ["html", "css", "javascript"];
+const MAX_BLOCK_LENGTH = 256_000;
+
 export function validatePayload(id, payload) {
   validateID(id);
-  if (
-    payload?.id !== id ||
-    payload.schemaVersion !== "1.0" ||
-    payload.license !== "MIT" ||
-    !Array.isArray(payload.code) ||
-    payload.code.length < 1 ||
-    payload.code.length > 3
-  ) {
-    throw new Error("Malformed component payload");
-  }
-  const seen = new Set();
+  if (!isPayloadFor(id, payload)) throw new Error("Malformed component payload");
+
+  const languages = new Set();
   for (const block of payload.code) {
-    if (
-      !["html", "css", "javascript"].includes(block.language) ||
-      seen.has(block.language) ||
-      typeof block.code !== "string" ||
-      block.code.length > 256_000 ||
-      !block.code.trim()
-    ) {
+    if (!isCodeBlock(block) || languages.has(block.language)) {
       throw new Error("Malformed code block");
     }
-    seen.add(block.language);
+    languages.add(block.language);
   }
-  if (!seen.has("html") || !seen.has("css"))
+
+  if (!languages.has("html") || !languages.has("css")) {
     throw new Error("HTML and CSS required");
+  }
   return payload;
+}
+
+function isPayloadFor(id, payload) {
+  const code = payload?.code;
+
+  return (
+    payload?.id === id &&
+    payload.schemaVersion === "1.0" &&
+    payload.license === "MIT" &&
+    Array.isArray(code) &&
+    code.length >= 1 &&
+    code.length <= 3
+  );
+}
+
+function isCodeBlock(block) {
+  return (
+    LANGUAGES.includes(block.language) &&
+    typeof block.code === "string" &&
+    block.code.length <= MAX_BLOCK_LENGTH &&
+    block.code.trim() !== ""
+  );
 }
 
 // Read the official source registry without evaluating JSX or executing upstream scripts.

@@ -96,46 +96,16 @@ export async function stage(root, id, payload, provenance) {
 
 export async function apply(root, id, keepWorking = false) {
   validateID(id);
-  const directory = await safe(root, "nudaui", ".staging", id);
-  const plan = JSON.parse(
-    await readFile(await safe(directory, "plan.json"), "utf8"),
-  );
-  const payload = validatePayload(
-    id,
-    JSON.parse(await readFile(await safe(directory, "payload.json"), "utf8")),
-  );
-  if (digest(json(payload)) !== plan.payloadChecksum)
-    throw new Error("Staged payload changed; stage again");
-  const files = blocks(payload);
+  const { plan, payload } = await readStaged(root, id);
   const saved = await manifest(root);
   const previous = saved.components[id];
-  if (json(previous?.files ?? {}) !== json(plan.baseline))
-    throw new Error("Baseline changed; stage again");
-  const names = Object.keys(plan.local);
-  const local = await current(root, id, names);
-  if (json(local) !== json(plan.local))
-    throw new Error("Working files changed since inspection; stage again");
+  const local = await checkUnchanged(root, id, plan, previous);
   if (!plan.changed && previous) return { status: "unchanged" };
-  if (plan.conflicts.length && !keepWorking)
-    throw new Error(`Local changes conflict: ${plan.conflicts.join(", ")}`);
-  if (
-    Object.keys(previous?.files ?? {}).some(
-      (name) => !Object.hasOwn(files, name),
-    )
-  ) {
-    throw new Error(
-      "Upstream removed a block; reconcile it manually before updating",
-    );
-  }
-  for (const [name, value] of Object.entries(files)) {
-    const baseline = await safe(root, "nudaui", "baseline", id);
-    const working = await safe(root, "src", "components", "nuda", id);
-    await mkdir(baseline, { recursive: true });
-    await mkdir(working, { recursive: true });
-    await writeFile(await safe(baseline, name), value);
-    if (!keepWorking || local[name] === null)
-      await writeFile(await safe(working, name), value);
-  }
+
+  const files = blocks(payload);
+  checkApplicable(plan, previous, files, keepWorking);
+  await writeComponent(root, id, files, keepWorking, local);
+
   const raw = await safe(root, "nudaui", "baseline", id, "payload.json");
   await writeFile(raw, json(payload));
   saved.components[id] = {
@@ -145,9 +115,62 @@ export async function apply(root, id, keepWorking = false) {
     working: await current(root, id, Object.keys(files).sort()),
   };
   await writeFile(await safe(root, "nudaui", "manifest.json"), json(saved));
-  return {
-    status: keepWorking
-      ? "baseline updated; working code preserved"
-      : "applied",
-  };
+
+  const status = keepWorking ? "baseline updated; working code preserved" : "applied";
+  return { status };
+}
+
+async function readStaged(root, id) {
+  const directory = await safe(root, "nudaui", ".staging", id);
+  const readJSON = async (name) =>
+    JSON.parse(await readFile(await safe(directory, name), "utf8"));
+
+  const plan = await readJSON("plan.json");
+  const payload = validatePayload(id, await readJSON("payload.json"));
+  if (digest(json(payload)) !== plan.payloadChecksum) {
+    throw new Error("Staged payload changed; stage again");
+  }
+  return { plan, payload };
+}
+
+// checkUnchanged rejects a plan whose baseline or working files changed since
+// staging, and returns the working file digests.
+async function checkUnchanged(root, id, plan, previous) {
+  if (json(previous?.files ?? {}) !== json(plan.baseline)) {
+    throw new Error("Baseline changed; stage again");
+  }
+
+  const local = await current(root, id, Object.keys(plan.local));
+  if (json(local) !== json(plan.local)) {
+    throw new Error("Working files changed since inspection; stage again");
+  }
+  return local;
+}
+
+function checkApplicable(plan, previous, files, keepWorking) {
+  if (plan.conflicts.length && !keepWorking) {
+    throw new Error(`Local changes conflict: ${plan.conflicts.join(", ")}`);
+  }
+
+  const removed = Object.keys(previous?.files ?? {}).some(
+    (name) => !Object.hasOwn(files, name),
+  );
+  if (removed) {
+    throw new Error("Upstream removed a block; reconcile it manually before updating");
+  }
+}
+
+// writeComponent writes the baseline. It writes working files too, except
+// existing ones when keepWorking is set.
+async function writeComponent(root, id, files, keepWorking, local) {
+  const baseline = await safe(root, "nudaui", "baseline", id);
+  const working = await safe(root, "src", "components", "nuda", id);
+  await mkdir(baseline, { recursive: true });
+  await mkdir(working, { recursive: true });
+
+  for (const [name, value] of Object.entries(files)) {
+    await writeFile(await safe(baseline, name), value);
+    const keep = keepWorking && local[name] !== null;
+    if (!keep) await writeFile(await safe(working, name), value);
+  }
 }

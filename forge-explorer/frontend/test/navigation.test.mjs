@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { load } from "./modules.mjs";
-const { Navigation, wholeFile, validateRange } =
-  await load("src/navigation.ts");
+const { Navigation } = await load("src/model/navigation.ts");
+const { wholeFile, validateRange } = await load("src/model/location.ts");
 const source = { id: "old", version: "old-root" };
 const loc = (path = "a.go", version = "v1", side = "old") => ({
   source: side,
@@ -45,7 +45,7 @@ test("navigation, selection, tabs and history preserve origin and versions", asy
   assert.equal(model.location.path, "a.go");
   await model.back();
   await model.open("c.go");
-  assert.equal(model.index, model.history.length - 1);
+  assert.equal(model.history.canGoForward, false);
 });
 
 test("stale results and cross-source navigation never advance history", async () => {

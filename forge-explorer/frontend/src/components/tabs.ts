@@ -1,7 +1,17 @@
 import type { Location } from "../types.js";
-import { element } from "./dom.js";
+import { h } from "./dom.js";
 
-/** Scoped TypeScript adaptation of NudaUI animated-tabs. No document-wide queries or observers. */
+/** PANEL_ID is the id of the tab panel that shows the open file. */
+export const PANEL_ID = "file-panel";
+
+/** tabId returns the element id of the tab at index. */
+export function tabId(index: number): string {
+  return `file-tab-${index}`;
+}
+
+/** renderTabs is a scoped TypeScript adaptation of NudaUI animated-tabs.
+ * It uses no document-wide queries or observers.
+ */
 export function renderTabs(
   container: HTMLElement,
   locations: Location[],
@@ -9,41 +19,78 @@ export function renderTabs(
   open: (location: Location) => void,
   close: (path: string) => void,
 ): void {
-  const bar = element("div", "", "nuda-tabs__bar");
-  bar.setAttribute("role", "tablist");
-  bar.setAttribute("aria-label", "Open files");
-  const buttons: HTMLButtonElement[] = [];
-  locations.forEach((location, index) => {
-    const tab = element("button", location.path, "nuda-tabs__tab");
-    tab.type = "button";
-    tab.id = `file-tab-${index}`;
-    tab.setAttribute("role", "tab");
-    tab.setAttribute("aria-controls", "file-panel");
-    tab.setAttribute("aria-selected", String(location.path === active));
-    tab.classList.toggle("is-active", location.path === active);
-    tab.tabIndex = location.path === active ? 0 : -1;
-    tab.addEventListener("click", () => open(location));
-    tab.addEventListener("keydown", (event) => {
-      let target: number | undefined;
-      if (event.key === "ArrowRight") target = (index + 1) % locations.length;
-      if (event.key === "ArrowLeft")
-        target = (index - 1 + locations.length) % locations.length;
-      if (event.key === "Home") target = 0;
-      if (event.key === "End") target = locations.length - 1;
-      if (event.key === "Delete") {
-        event.preventDefault();
-        close(location.path);
-      }
-      if (target !== undefined) {
-        event.preventDefault();
-        buttons.forEach((button, index) => {
-          button.tabIndex = index === target ? 0 : -1;
-        });
-        buttons[target]?.focus();
-      }
-    });
-    buttons.push(tab);
-    bar.append(tab);
+  const tabs = locations.map((location, index) =>
+    createTab(location, index, location.path === active, open),
+  );
+  const bar = h(
+    "div",
+    { class: "nuda-tabs__bar", role: "tablist", "aria-label": "Open files" },
+    ...tabs,
+  );
+
+  bar.addEventListener("keydown", (event) => {
+    const index = tabs.indexOf(event.target as HTMLButtonElement);
+    const location = locations[index];
+    if (!location) return;
+
+    if (event.key === "Delete") {
+      event.preventDefault();
+      close(location.path);
+      return;
+    }
+    moveFocus(event, tabs, index);
   });
+
   container.replaceChildren(bar);
+}
+
+function createTab(
+  location: Location,
+  index: number,
+  active: boolean,
+  open: (location: Location) => void,
+): HTMLButtonElement {
+  const tab = h(
+    "button",
+    {
+      type: "button",
+      id: tabId(index),
+      class: active ? "nuda-tabs__tab is-active" : "nuda-tabs__tab",
+      role: "tab",
+      "aria-controls": PANEL_ID,
+      "aria-selected": String(active),
+      tabindex: active ? 0 : -1,
+    },
+    location.path,
+  );
+
+  tab.addEventListener("click", () => open(location));
+  return tab;
+}
+
+// moveFocus implements roving focus: only the focused tab is in the tab order.
+function moveFocus(event: KeyboardEvent, tabs: HTMLButtonElement[], index: number): void {
+  const target = keyTarget(event.key, index, tabs.length);
+  if (target === undefined) return;
+
+  event.preventDefault();
+  tabs.forEach((tab, tabIndex) => {
+    tab.tabIndex = tabIndex === target ? 0 : -1;
+  });
+  tabs[target]?.focus();
+}
+
+function keyTarget(key: string, index: number, count: number): number | undefined {
+  switch (key) {
+    case "ArrowRight":
+      return (index + 1) % count;
+    case "ArrowLeft":
+      return (index - 1 + count) % count;
+    case "Home":
+      return 0;
+    case "End":
+      return count - 1;
+    default:
+      return undefined;
+  }
 }

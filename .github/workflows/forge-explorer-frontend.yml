@@ -5,11 +5,13 @@ on:
     branches: [master]
     paths:
       - forge-explorer/frontend/**
+      - eslint.rules.mjs
       - .github/workflows/forge-explorer-frontend.yml
       - .github/workflows/reusable-explorer-frontend.yml
   pull_request:
     paths:
       - forge-explorer/frontend/**
+      - eslint.rules.mjs
       - .github/workflows/forge-explorer-frontend.yml
       - .github/workflows/reusable-explorer-frontend.yml
   workflow_dispatch:

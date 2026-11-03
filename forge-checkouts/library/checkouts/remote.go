@@ -57,26 +57,26 @@ func fetch(ctx context.Context, remote *forgeauth.GitRemote, repository, directo
 		<-done
 	}()
 
-	_, err = git(
-		ctx,
-		directory,
-		"-c",
-		"protocol.allow=never",
-		"-c",
-		"protocol.http.allow=always",
-		"-c",
-		"http.proxy=",
-		"-c",
-		"http.followRedirects=false",
-		"fetch",
-		"--no-tags",
-		"--no-recurse-submodules",
-		"--",
-		"http://"+listener.Addr().String()+prefix,
-		reference,
-	)
+	remoteURL := "http://" + listener.Addr().String() + prefix
+	if err := initCache(ctx, directory, remoteURL); err != nil {
+		return err
+	}
+
+	_, err = remoteGit(ctx, directory, "fetch", "--no-tags", "--no-recurse-submodules", "--", remoteURL, reference)
 
 	return err
+}
+
+// remoteGit permits only HTTP through the authenticated loopback bridge.
+func remoteGit(ctx context.Context, directory string, args ...string) (string, error) {
+	base := []string{
+		"-c", "protocol.allow=never",
+		"-c", "protocol.http.allow=always",
+		"-c", "http.proxy=",
+		"-c", "http.followRedirects=false",
+	}
+
+	return git(ctx, directory, append(base, args...)...)
 }
 
 // remoteEndpoint returns the HTTP(S) Git URL of repository on remote.

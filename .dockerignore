@@ -14,3 +14,8 @@
 **/review-data
 **/checkout-data
 **/workspace-data
+
+# Explorer importer staging and browser reports are not production assets.
+**/nudaui/.staging
+**/test-results
+**/playwright-report

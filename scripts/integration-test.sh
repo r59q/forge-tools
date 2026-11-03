@@ -36,6 +36,10 @@ until api -o /dev/null "$url/v1/connections" 2>/dev/null; do
   sleep 2
 done
 
+# Explorer uses its own configured sample root, independent of forge/checkout state.
+FORGE_EXPLORER_TEST_TOKEN=$(sed -n 's/^FORGE_EXPLORER_TOKEN=//p' "$(dirname "$0")/../examples/fullstack/.env") \
+  sh "$(dirname "$0")/explorer-integration-test.sh"
+
 # The forge token goes through stdin to keep it out of process arguments.
 conn=$(jq -n --arg f "$forge" --arg h "$host" --arg c "$FORGE_TEST_TOKEN" \
   '{forge: $f, host: $h, name: "integration-test-\($f)", credential: $c}' |

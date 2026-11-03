@@ -1,0 +1,77 @@
+name: forge-explorer-service
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - forge-explorer/service/**
+      - forge-explorer/library/**
+      - forge-explorer/frontend/**
+      - forge-explorer/test-browser.mjs
+      - scripts/explorer-integration-test.sh
+      - examples/fullstack/explorer-content/**
+      - .golangci.yml
+      - forge-core/forgeapi/**
+      - forge-core/servicekit/**
+      - .dockerignore
+      - .github/workflows/forge-explorer-service.yml
+      - buf.yaml
+      - buf.lock
+      - .github/workflows/reusable-*.yml
+  pull_request:
+    paths:
+      - forge-explorer/service/**
+      - forge-explorer/library/**
+      - forge-explorer/frontend/**
+      - forge-explorer/test-browser.mjs
+      - scripts/explorer-integration-test.sh
+      - examples/fullstack/explorer-content/**
+      - .golangci.yml
+      - forge-core/forgeapi/**
+      - forge-core/servicekit/**
+      - .dockerignore
+      - .github/workflows/forge-explorer-service.yml
+      - buf.yaml
+      - buf.lock
+      - .github/workflows/reusable-*.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: ./.github/workflows/reusable-go.yml
+    with:
+      dir: forge-explorer/service
+
+  proto:
+    uses: ./.github/workflows/reusable-proto.yml
+    with:
+      dir: forge-explorer/service
+
+  # Pull requests build the image without pushing or registry access.
+  image:
+    if: github.event_name == 'pull_request'
+    needs: [test, proto, browser]
+    uses: ./.github/workflows/reusable-docker.yml
+    with:
+      image: forge-explorer-service
+      dockerfile: forge-explorer/service/Dockerfile
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+    needs: [test, proto, browser]
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/reusable-docker.yml
+    with:
+      image: forge-explorer-service
+      dockerfile: forge-explorer/service/Dockerfile
+      push: true
+
+  browser:
+    uses: ./.github/workflows/reusable-explorer-frontend.yml
+    with:
+      backend: true

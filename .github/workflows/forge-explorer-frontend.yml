@@ -1,0 +1,22 @@
+name: forge-explorer-frontend
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - forge-explorer/frontend/**
+      - .github/workflows/forge-explorer-frontend.yml
+      - .github/workflows/reusable-explorer-frontend.yml
+  pull_request:
+    paths:
+      - forge-explorer/frontend/**
+      - .github/workflows/forge-explorer-frontend.yml
+      - .github/workflows/reusable-explorer-frontend.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: ./.github/workflows/reusable-explorer-frontend.yml

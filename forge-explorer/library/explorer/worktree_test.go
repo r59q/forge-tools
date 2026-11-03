@@ -3,6 +3,7 @@ package explorer
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -224,4 +225,21 @@ func TestConcurrentWrites(t *testing.T) {
 		}
 	}
 	wg.Wait()
+}
+
+func TestDirectoryAndDepthPartialResults(t *testing.T) {
+	w, dir := fixture(t)
+	for index := range 1002 {
+		put(t, dir, fmt.Sprintf("entry-%04d", index), "needle")
+	}
+	listing, err := w.Browse(t.Context(), ".")
+	if err != nil || !listing.State.Truncated || len(listing.Entries) != 1000 {
+		t.Fatalf("bounded listing: %d entries, %+v, %v", len(listing.Entries), listing.State, err)
+	}
+	w.source.Limits.Depth = 1
+	put(t, dir, "nested/file", "needle")
+	result, err := w.Search(t.Context(), Query{Text: "file", Files: true})
+	if err != nil || result.State.Skipped != 1 || len(result.Matches) != 0 {
+		t.Fatal(result, err)
+	}
 }

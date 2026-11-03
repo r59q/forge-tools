@@ -191,12 +191,20 @@ func TestLimitsUnsupportedAndStrictJSON(t *testing.T) {
 		if status.Code(err) != want {
 			t.Fatal(name, err)
 		}
+		responseCode, _ := h.request(t, "GET", "/v1/explorer/sources/local/file?sourceVersion="+version+"&path="+name, "", "test-only")
+		expected := http.StatusNotImplemented
+		if name == "large" {
+			expected = http.StatusTooManyRequests
+		}
+		if responseCode != expected {
+			t.Fatal(name, responseCode)
+		}
 	}
 	result, err := h.client.Search(authenticated(t), &pb.SearchRequest{Source: "local", SourceVersion: version, Text: "needle"})
 	if err != nil || result.Results.State.Skipped != 2 {
 		t.Fatal(result, err)
 	}
-	for _, body := range []string{`{"unknown":true}`, `{"text":"x","limit":201}`, strings.Repeat("x", 1<<20+1)} {
+	for _, body := range []string{`{"unknown":true}`, `{"sourceVersion":"` + version + `","text":"x","limit":201}`, strings.Repeat("x", 1<<20+1)} {
 		code, _ := h.request(t, "POST", "/v1/explorer/sources/local/search", body, "test-only")
 		if code == 200 {
 			t.Fatal("accepted invalid body")
@@ -210,5 +218,23 @@ func TestLimitsUnsupportedAndStrictJSON(t *testing.T) {
 	data, err := json.Marshal(h.root.Source())
 	if err != nil || strings.Contains(string(data), h.directory) {
 		t.Fatal(string(data), err)
+	}
+}
+
+func TestMetadataCannotInjectAuthentication(t *testing.T) {
+	h := setup(t)
+	handler, err := h.server.REST(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest("GET", "/v1/explorer/sources", nil)
+	request.Header.Set("Grpc-Metadata-Authorization", "Bearer test-only")
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatal(recorder.Code)
+	}
+	if _, err := New([]*explorer.Worktree{h.root, h.root}, forgeauth.StaticToken("test-only"), time.Second); err == nil {
+		t.Fatal("duplicate source accepted")
 	}
 }

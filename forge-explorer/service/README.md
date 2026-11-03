@@ -89,3 +89,9 @@ The nonroot runtime has neither Node nor Git. Mount content read-only and set
 fetch NudaUI; its selected source and license are committed. Go checks never
 build frontend assets. The [cross-project browser test](../test-browser.mjs)
 explicitly composes both projects and is separate from their independent checks.
+
+The [service workflow](../../.github/workflows/forge-explorer-service.yml) builds
+Linux amd64/arm64 images on pull requests without pushing. After its Go, protobuf
+and browser checks pass on `master`, it publishes
+`ghcr.io/r59q/forge-explorer-service` with `latest` and commit SHA tags. This
+publishes the service and bundled standalone app, not the frontend npm package.

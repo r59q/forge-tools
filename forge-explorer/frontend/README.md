@@ -25,6 +25,13 @@ The build emits `dist/explorer.js`, public declarations in `dist/types`,
 consumable package. The service serves `dist/app` as static files; Go checks need
 no frontend build. Normal builds, tests and runtime never contact NudaUI.
 
+The [frontend workflow](../../.github/workflows/forge-explorer-frontend.yml)
+runs type checks, unit tests, production builds and browser tests on pull requests
+and changes to `master`. It does not publish to an npm registry. To consume a
+local build, run `npm pack` after building, then install the resulting
+`forge-tools-explorer-0.1.0.tgz` in the host project. The service image includes
+the standalone app and has its own [publishing pipeline](../service/README.md#asset-packaging).
+
 ## Embedding contract
 
 ```ts

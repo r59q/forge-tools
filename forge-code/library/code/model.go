@@ -44,12 +44,14 @@ func (o OID) Valid() bool {
 	if len(o) != 40 && len(o) != 64 {
 		return false
 	}
+
 	for i := 0; i < len(o); i++ {
 		c := o[i]
 		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -58,11 +60,13 @@ func (o OID) zero() bool {
 	if !o.Valid() {
 		return false
 	}
+
 	for i := 0; i < len(o); i++ {
 		if o[i] != '0' {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -93,6 +97,7 @@ func (m FileMode) valid() bool {
 	case ModeTree, ModeFile, ModeExec, ModeSymlink, ModeSubmodule:
 		return true
 	}
+
 	return false
 }
 
@@ -103,6 +108,7 @@ func ParseFileMode(s string) (FileMode, error) {
 	if err != nil || len(s) > 6 || !FileMode(n).valid() {
 		return 0, fmt.Errorf("%w: file mode %q", ErrInvalid, s)
 	}
+
 	return FileMode(n), nil
 }
 
@@ -129,6 +135,7 @@ func typeOf(m FileMode) ObjectType {
 	case ModeSubmodule:
 		return ObjectCommit
 	}
+
 	return ObjectBlob
 }
 
@@ -442,6 +449,7 @@ func (l Limits) withDefaults() (Limits, error) {
 	if l.MaxWriteBytes == 0 {
 		l.MaxWriteBytes = defaultMaxWriteBytes
 	}
+
 	return l, nil
 }
 

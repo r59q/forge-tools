@@ -15,10 +15,12 @@ func route(r *http.Request) (broker.ID, string, int) {
 		u.Fragment != "" || r.Method == http.MethodConnect || !safePath(u.EscapedPath()) {
 		return "", "", http.StatusBadRequest
 	}
+
 	path, ok := strings.CutPrefix(u.EscapedPath(), "/c/")
 	if !ok {
 		return "", "", http.StatusNotFound
 	}
+
 	id, apiPath, ok := strings.Cut(path, "/")
 	if !ok || id == "" {
 		return "", "", http.StatusNotFound
@@ -26,10 +28,12 @@ func route(r *http.Request) (broker.ID, string, int) {
 	if !validID(id) {
 		return "", "", http.StatusBadRequest
 	}
+
 	apiURL, err := url.Parse(apiPath)
 	if err != nil || strings.HasPrefix(apiPath, "/") || apiURL.IsAbs() || apiURL.Host != "" {
 		return "", "", http.StatusBadRequest
 	}
+
 	return broker.ID(id), apiPath, 0
 }
 
@@ -41,23 +45,28 @@ func safePath(path string) bool {
 		if strings.Contains(path, "\\") || strings.HasPrefix(path, "//") {
 			return false
 		}
+
 		for i := range path {
 			if path[i] < ' ' || path[i] == 0x7f {
 				return false
 			}
 		}
+
 		for _, part := range strings.Split(path, "/") {
 			if part == "." || part == ".." {
 				return false
 			}
 		}
+
 		if !strings.Contains(path, "%") {
 			return true
 		}
+
 		decoded, err := url.PathUnescape(path)
 		if err != nil {
 			return false
 		}
+
 		path = decoded
 	}
 }
@@ -69,6 +78,7 @@ func baseURL(raw string) (*url.URL, bool) {
 		u.Fragment != "" || !safePath(u.EscapedPath()) {
 		return nil, false
 	}
+
 	return u, true
 }
 
@@ -77,6 +87,7 @@ func targetURL(base *url.URL, apiPath string, incoming *url.URL) *url.URL {
 	u.RawPath = strings.TrimRight(base.EscapedPath(), "/") + "/" + apiPath
 	u.Path, _ = url.PathUnescape(u.RawPath)
 	u.RawQuery, u.ForceQuery = incoming.RawQuery, incoming.ForceQuery
+
 	return &u
 }
 
@@ -89,6 +100,7 @@ func rewriteHeaders(h http.Header, base, target *url.URL, proxyBase string) {
 			h.Add("Link", link.String())
 		}
 	}
+
 	locations := h.Values("Location")
 	h.Del("Location")
 	if len(locations) == 1 {
@@ -103,15 +115,18 @@ func rewriteURL(raw string, base, target *url.URL, proxyBase string) (string, bo
 	if err != nil || u.User != nil || u.Opaque != "" || !safePath(u.EscapedPath()) {
 		return "", false
 	}
+
 	u = target.ResolveReference(u)
 	if !sameOrigin(u, base) {
 		return "", false
 	}
+
 	basePath := strings.TrimRight(base.EscapedPath(), "/")
 	path := u.EscapedPath()
 	if path != basePath && !strings.HasPrefix(path, basePath+"/") {
 		return "", false
 	}
+
 	// Use absolute proxy URLs so forgeauth.Session.NewRequest can consume them
 	// directly without appending its own /c/{id} prefix again.
 	proxy, _ := url.Parse(proxyBase)
@@ -119,10 +134,12 @@ func rewriteURL(raw string, base, target *url.URL, proxyBase string) (string, bo
 	if suffix == "" {
 		suffix = "/"
 	}
+
 	proxy.RawPath = proxy.EscapedPath() + suffix
 	proxy.Path, _ = url.PathUnescape(proxy.RawPath)
 	proxy.RawQuery, proxy.ForceQuery = u.RawQuery, u.ForceQuery
 	proxy.Fragment, proxy.RawFragment = u.Fragment, u.RawFragment
+
 	return proxy.String(), true
 }
 
@@ -134,6 +151,7 @@ func sameOrigin(a, b *url.URL) bool {
 		if u.Scheme == "https" {
 			return "443"
 		}
+
 		return "80"
 	}
 	return a.Scheme == b.Scheme && strings.EqualFold(a.Hostname(), b.Hostname()) && port(a) == port(b)

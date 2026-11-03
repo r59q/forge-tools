@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/r59q/forge-tools/forge-core/forgeapi/internal/repopath"
 )
 
 // GitRemote is an authenticated Git smart-HTTP endpoint: a forge's Git
@@ -27,10 +29,12 @@ func (g *GitRemote) URL(repoPath string) (string, error) {
 	if g == nil || g.BaseURL == "" {
 		return "", errors.New("forgeauth: no Git remote")
 	}
-	p, ok := cleanRepoPath(repoPath)
+
+	p, ok := repopath.Clean(repoPath)
 	if !ok {
 		return "", errors.New("forgeauth: invalid repository path")
 	}
+
 	return strings.TrimRight(g.BaseURL, "/") + "/" + p + ".git", nil
 }
 
@@ -48,6 +52,7 @@ func NewGitRemote(baseURL string, creds Credentials, setToken func(h http.Header
 	if setToken == nil {
 		return nil, errors.New("forgeauth: nil setToken")
 	}
+
 	u, err := parseBaseURL(strings.TrimSpace(baseURL))
 	if err != nil {
 		return nil, err
@@ -55,6 +60,7 @@ func NewGitRemote(baseURL string, creds Credentials, setToken func(h http.Header
 	if rt == nil {
 		rt = http.DefaultTransport
 	}
+
 	return &GitRemote{
 		BaseURL: strings.TrimRight(u.String(), "/"),
 		Client: &http.Client{
@@ -84,6 +90,7 @@ func gitRedirect(base *url.URL) func(*http.Request, []*http.Request) error {
 				inside = false
 			}
 		}
+
 		switch {
 		case len(via) >= maxRedirects:
 			return fmt.Errorf("forgeauth: stopped after %d redirects", maxRedirects)
@@ -92,29 +99,9 @@ func gitRedirect(base *url.URL) func(*http.Request, []*http.Request) error {
 		case !inside:
 			return fmt.Errorf("forgeauth: redirect to %s leaves the Git remote", redact(u))
 		}
+
 		return nil
 	}
-}
-
-// cleanRepoPath checks a repository path with the rules of
-// forgerest.CleanPath, which this package cannot import.
-func cleanRepoPath(path string) (string, bool) {
-	p := strings.Trim(strings.TrimSpace(path), "/")
-	segments := strings.Split(p, "/")
-	if len(segments) < 2 {
-		return "", false
-	}
-	for _, seg := range segments {
-		if seg == "" || seg == "." || seg == ".." || strings.ContainsAny(seg, `%?#\`) {
-			return "", false
-		}
-		for _, r := range seg {
-			if r <= ' ' || r == 0x7f {
-				return "", false
-			}
-		}
-	}
-	return p, true
 }
 
 // GitAuthenticator is implemented by providers that can authenticate Git
@@ -143,10 +130,12 @@ func DefaultGitURL(kind Kind, apiBase string) (string, error) {
 			return "", err
 		}
 	}
+
 	u, err := parseBaseURL(apiBase)
 	if err != nil {
 		return "", err
 	}
+
 	path := strings.TrimRight(u.Path, "/")
 	host := strings.ToLower(u.Hostname())
 	var suffix string
@@ -158,6 +147,7 @@ func DefaultGitURL(kind Kind, apiBase string) (string, error) {
 				if port := u.Port(); port != "" {
 					g.Host += ":" + port
 				}
+
 				return g.String(), nil
 			}
 		}
@@ -169,10 +159,13 @@ func DefaultGitURL(kind Kind, apiBase string) (string, error) {
 	default:
 		return "", fmt.Errorf("forgeauth: unknown kind %q", kind)
 	}
+
 	if !strings.HasSuffix(path, suffix) {
 		return "", fmt.Errorf("%w: cannot derive it from %q", ErrNoGitURL, redact(u))
 	}
+
 	g := url.URL{Scheme: u.Scheme, Host: u.Host, Path: strings.TrimSuffix(path, suffix)}
+
 	return g.String(), nil
 }
 
@@ -181,13 +174,16 @@ func gitHubHost(host string) (string, bool) {
 	if host == "api.github.com" {
 		return "github.com", true
 	}
+
 	sub, ok := strings.CutPrefix(host, "api.")
 	if !ok {
 		return "", false
 	}
+
 	name, ok := strings.CutSuffix(sub, ".ghe.com")
 	if !ok || name == "" || strings.Contains(name, ".") {
 		return "", false
 	}
+
 	return sub, true
 }

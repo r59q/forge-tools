@@ -1,0 +1,16 @@
+# Regenerates brokerpb/ from proto/ with the root buf.yaml. Run buf generate here.
+version: v2
+
+inputs:
+  - directory: proto
+
+plugins:
+  - local: [go, run, google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.10]
+    out: .
+    opt: module=github.com/r59q/forge-tools/forge-connector/library
+  - local: [go, run, google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1]
+    out: .
+    opt: module=github.com/r59q/forge-tools/forge-connector/library
+  - local: [go, run, github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway@v2.27.3]
+    out: .
+    opt: module=github.com/r59q/forge-tools/forge-connector/library

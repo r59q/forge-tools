@@ -40,6 +40,7 @@ func newFake(t *testing.T, prefix string) *fakeForge {
 	f := &fakeForge{prefix: prefix, routes: map[string]any{}}
 	f.srv = httptest.NewServer(http.HandlerFunc(f.serve))
 	t.Cleanup(f.srv.Close)
+
 	return f
 }
 
@@ -66,6 +67,7 @@ func (f *fakeForge) session(kind forgeauth.Kind) *forgeauth.Session {
 func (f *fakeForge) requests() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
 	return append([]string(nil), f.seen...)
 }
 
@@ -74,6 +76,7 @@ func (f *fakeForge) requests() []string {
 func (f *fakeForge) sent() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
 	return append([]string(nil), f.bodies...)
 }
 
@@ -89,6 +92,7 @@ func (f *fakeForge) serve(w http.ResponseWriter, r *http.Request) {
 		canon, _ := json.Marshal(body)
 		f.bodies = append(f.bodies, string(canon))
 	}
+
 	f.mu.Unlock()
 	if fn, isFn := v.(func(*http.Request) any); isFn {
 		v = fn(r)
@@ -97,23 +101,29 @@ func (f *fakeForge) serve(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(code)
 		return
 	}
+
 	if rp, isReply := v.(reply); isReply {
 		if rp.location != "" {
 			w.Header().Set("Location", f.prefix+rp.location)
 		}
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(rp.code)
 		if rp.body != nil {
 			_ = json.NewEncoder(w).Encode(rp.body)
 		}
+
 		return
 	}
+
 	if !ok || v == nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
 		_, _ = w.Write([]byte(`{"message":"Not Found"}`))
+
 		return
 	}
+
 	if pages, isPages := v.([][]any); isPages {
 		n, _ := strconv.Atoi(r.URL.Query().Get("page"))
 		if n < 1 {
@@ -126,12 +136,15 @@ func (f *fakeForge) serve(w http.ResponseWriter, r *http.Request) {
 			next.RawQuery = q.Encode()
 			w.Header().Set("Link", fmt.Sprintf(`<%s%s>; rel="next"`, f.srv.URL, next.RequestURI()))
 		}
+
 		v = pages[n-1]
 	}
+
 	w.Header().Set("Content-Type", "application/json")
 	if r.Method == http.MethodPost {
 		w.WriteHeader(http.StatusCreated)
 	}
+
 	_ = json.NewEncoder(w).Encode(v)
 }
 
@@ -144,6 +157,7 @@ func newClient(t *testing.T, sources ...Source) *Client {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return c
 }
 
@@ -154,6 +168,7 @@ func date(s string) time.Time {
 	if err != nil {
 		panic(err)
 	}
+
 	return t
 }
 
@@ -173,53 +188,94 @@ func hasRequest(t *testing.T, f *fakeForge, prefix string, parts ...string) {
 		if !strings.HasPrefix(r, prefix) {
 			continue
 		}
+
 		ok := true
 		for _, p := range parts {
 			ok = ok && strings.Contains(r, p)
 		}
+
 		if ok {
 			return
 		}
 	}
+
 	t.Errorf("no request %s with %v in %v", prefix, parts, f.requests())
 }
 
 func githubIssueJSON() obj {
 	return obj{
-		"id": 1001, "number": 7, "title": "Bear is lost", "body": "Find him", "state": "closed",
-		"user":      obj{"login": "mrbean", "html_url": "https://github.com/mrbean"},
-		"assignees": []any{obj{"login": "irma", "html_url": "https://github.com/irma"}},
-		"labels":    []any{obj{"name": "bug"}, "urgent"},
-		"milestone": obj{"title": "v1"}, "comments": 3, "locked": true,
+		"id":             1001,
+		"number":         7,
+		"title":          "Bear is lost",
+		"body":           "Find him",
+		"state":          "closed",
+		"user":           obj{"login": "mrbean", "html_url": "https://github.com/mrbean"},
+		"assignees":      []any{obj{"login": "irma", "html_url": "https://github.com/irma"}},
+		"labels":         []any{obj{"name": "bug"}, "urgent"},
+		"milestone":      obj{"title": "v1"},
+		"comments":       3,
+		"locked":         true,
 		"html_url":       "https://github.com/mrbean/teddy/issues/7",
 		"repository_url": "https://api.github.com/repos/mrbean/teddy",
-		"created_at":     "2024-01-02T03:04:05Z", "updated_at": "2024-02-03T04:05:06Z",
-		"closed_at": "2024-03-04T05:06:07Z",
+		"created_at":     "2024-01-02T03:04:05Z",
+		"updated_at":     "2024-02-03T04:05:06Z",
+		"closed_at":      "2024-03-04T05:06:07Z",
 	}
 }
 
 func TestGitHub(t *testing.T) {
 	f := newFake(t, "")
-	pr := obj{"id": 2, "number": 8, "title": "PR", "state": "open", "pull_request": obj{"url": "x"}, "html_url": "https://github.com/mrbean/teddy/pull/8"}
-	open := obj{"id": 3, "number": 9, "title": "Open", "state": "open", "labels": []any{obj{"name": "bug"}, obj{"name": "urgent"}},
-		"closed_at": nil, "milestone": nil, "body": nil, "html_url": "https://github.com/mrbean/teddy/issues/9"}
+	pr := obj{
+		"id":           2,
+		"number":       8,
+		"title":        "PR",
+		"state":        "open",
+		"pull_request": obj{"url": "x"},
+		"html_url":     "https://github.com/mrbean/teddy/pull/8",
+	}
+	open := obj{
+		"id":        3,
+		"number":    9,
+		"title":     "Open",
+		"state":     "open",
+		"labels":    []any{obj{"name": "bug"}, obj{"name": "urgent"}},
+		"closed_at": nil,
+		"milestone": nil,
+		"body":      nil,
+		"html_url":  "https://github.com/mrbean/teddy/issues/9",
+	}
 	f.on("GET", "/repos/mrbean/teddy/issues", [][]any{{githubIssueJSON(), pr}, {open}})
 	f.on("GET", "/repos/mrbean/teddy/issues/7", githubIssueJSON())
 	f.on("GET", "/repos/mrbean/teddy/issues/8", pr)
-	f.on("GET", "/issues", []any{obj{"id": 4, "number": 1, "title": "Elsewhere", "state": "open",
-		"repository": obj{"full_name": "acme/rocket"}, "html_url": "https://github.com/acme/rocket/issues/1"}, pr})
+	f.on("GET", "/issues", []any{obj{
+		"id":         4,
+		"number":     1,
+		"title":      "Elsewhere",
+		"state":      "open",
+		"repository": obj{"full_name": "acme/rocket"},
+		"html_url":   "https://github.com/acme/rocket/issues/1",
+	}, pr})
 	c := newClient(t, Source{ID: "gh", Session: f.session(forgeauth.GitHub)})
 	ctx := context.Background()
 
 	want := Issue{
 		Source:     SourceInfo{ID: "gh", Kind: forgeauth.GitHub, Host: "github.com"},
-		Repository: "mrbean/teddy", ID: "1001", Number: 7, Title: "Bear is lost", Body: "Find him",
-		State: Closed, Author: User{Login: "mrbean", WebURL: "https://github.com/mrbean"},
-		Assignees: []User{{Login: "irma", WebURL: "https://github.com/irma"}},
-		Labels:    []string{"bug", "urgent"}, Milestone: "v1", Comments: 3, Locked: true,
-		WebURL:    "https://github.com/mrbean/teddy/issues/7",
-		CreatedAt: date("2024-01-02T03:04:05Z"), UpdatedAt: date("2024-02-03T04:05:06Z"),
-		ClosedAt: date("2024-03-04T05:06:07Z"),
+		Repository: "mrbean/teddy",
+		ID:         "1001",
+		Number:     7,
+		Title:      "Bear is lost",
+		Body:       "Find him",
+		State:      Closed,
+		Author:     User{Login: "mrbean", WebURL: "https://github.com/mrbean"},
+		Assignees:  []User{{Login: "irma", WebURL: "https://github.com/irma"}},
+		Labels:     []string{"bug", "urgent"},
+		Milestone:  "v1",
+		Comments:   3,
+		Locked:     true,
+		WebURL:     "https://github.com/mrbean/teddy/issues/7",
+		CreatedAt:  date("2024-01-02T03:04:05Z"),
+		UpdatedAt:  date("2024-02-03T04:05:06Z"),
+		ClosedAt:   date("2024-03-04T05:06:07Z"),
 	}
 
 	list, err := c.List(ctx, ListOptions{Repository: "mrbean/teddy", State: StateAll, Labels: []string{"bug", "urgent"}})
@@ -229,6 +285,7 @@ func TestGitHub(t *testing.T) {
 	if len(list) != 2 || list[1].Number != 9 || list[1].State != Open || !list[1].ClosedAt.IsZero() || list[1].Body != "" {
 		t.Fatalf("List = %+v, want issues 7 and 9 without the pull request", list)
 	}
+
 	sameIssue(t, "List[0]", list[0], want)
 	hasRequest(t, f, "GET /repos/mrbean/teddy/issues?", "state=all", "labels=bug%2Curgent", "per_page=100")
 
@@ -236,6 +293,7 @@ func TestGitHub(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	sameIssue(t, "Get", got, want)
 	if got.Ref() != (Ref{Source: "gh", Repository: "mrbean/teddy", Number: 7}) {
 		t.Errorf("Ref = %+v", got.Ref())
@@ -251,10 +309,12 @@ func TestGitHub(t *testing.T) {
 	if len(mine) != 1 || mine[0].Repository != "acme/rocket" {
 		t.Fatalf("List(account) = %+v", mine)
 	}
+
 	hasRequest(t, f, "GET /issues?", "filter=assigned", "state=open", "per_page=100")
 	if _, err := c.List(ctx, ListOptions{Scope: Created, State: StateClosed}); err != nil {
 		t.Fatal(err)
 	}
+
 	hasRequest(t, f, "GET /issues?", "filter=created", "state=closed")
 }
 
@@ -265,16 +325,31 @@ func TestGitHubWrites(t *testing.T) {
 	f.on("POST", "/repos/mrbean/teddy/issues", githubIssueJSON())
 	f.on("PATCH", "/repos/mrbean/teddy/issues/7", githubIssueJSON())
 	f.on("GET", "/repos/mrbean/teddy/issues/7/comments", [][]any{
-		{obj{"id": 11, "body": "first", "user": obj{"login": "irma", "html_url": "https://github.com/irma"},
-			"html_url": "https://github.com/mrbean/teddy/issues/7#issuecomment-11", "created_at": "2024-05-01T00:00:00Z", "updated_at": "2024-05-02T00:00:00Z"}},
+		{obj{
+			"id":         11,
+			"body":       "first",
+			"user":       obj{"login": "irma", "html_url": "https://github.com/irma"},
+			"html_url":   "https://github.com/mrbean/teddy/issues/7#issuecomment-11",
+			"created_at": "2024-05-01T00:00:00Z",
+			"updated_at": "2024-05-02T00:00:00Z",
+		}},
 		{obj{"id": 12, "body": "second"}},
 	})
-	f.on("POST", "/repos/mrbean/teddy/issues/7/comments", obj{"id": 13, "body": "hi", "html_url": "https://github.com/mrbean/teddy/issues/7#issuecomment-13"})
+	f.on("POST", "/repos/mrbean/teddy/issues/7/comments", obj{
+		"id":       13,
+		"body":     "hi",
+		"html_url": "https://github.com/mrbean/teddy/issues/7#issuecomment-13",
+	})
 	c := newClient(t, Source{ID: "gh", Session: f.session(forgeauth.GitHub)})
 	ctx := context.Background()
 	ref := Ref{Source: "gh", Repository: "mrbean/teddy", Number: 7}
 
-	iss, err := c.Create(ctx, RepositoryRef{Source: "gh", Repository: "mrbean/teddy"}, NewIssue{Title: "Bear", Body: "Lost", Labels: []string{"bug"}, Assignees: []string{"irma"}})
+	iss, err := c.Create(ctx, RepositoryRef{Source: "gh", Repository: "mrbean/teddy"}, NewIssue{
+		Title:     "Bear",
+		Body:      "Lost",
+		Labels:    []string{"bug"},
+		Assignees: []string{"irma"},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -284,12 +359,19 @@ func TestGitHubWrites(t *testing.T) {
 	if _, err := c.Create(ctx, RepositoryRef{Source: "gh", Repository: "mrbean/teddy"}, NewIssue{Title: "Plain"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.Update(ctx, ref, Update{Title: ptr("New"), Body: ptr(""), State: ptr(Closed), Labels: &[]string{}, Assignees: ptr([]string(nil))}); err != nil {
+	if _, err := c.Update(ctx, ref, Update{
+		Title:     ptr("New"),
+		Body:      ptr(""),
+		State:     ptr(Closed),
+		Labels:    &[]string{},
+		Assignees: ptr([]string(nil)),
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := c.Update(ctx, ref, Update{State: ptr(Open), Labels: &[]string{"a", "b"}}); err != nil {
 		t.Fatal(err)
 	}
+
 	wantBodies := []string{
 		`{"assignees":["irma"],"body":"Lost","labels":["bug"],"title":"Bear"}`,
 		`{"body":"","title":"Plain"}`,
@@ -304,12 +386,19 @@ func TestGitHubWrites(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantFirst := Comment{ID: "11", Author: User{Login: "irma", WebURL: "https://github.com/irma"}, Body: "first",
+
+	wantFirst := Comment{
+		ID:        "11",
+		Author:    User{Login: "irma", WebURL: "https://github.com/irma"},
+		Body:      "first",
 		WebURL:    "https://github.com/mrbean/teddy/issues/7#issuecomment-11",
-		CreatedAt: date("2024-05-01T00:00:00Z"), UpdatedAt: date("2024-05-02T00:00:00Z")}
+		CreatedAt: date("2024-05-01T00:00:00Z"),
+		UpdatedAt: date("2024-05-02T00:00:00Z"),
+	}
 	if len(comments) != 2 || comments[0] != wantFirst || comments[1].Body != "second" {
 		t.Fatalf("Comments = %+v", comments)
 	}
+
 	hasRequest(t, f, "GET /repos/mrbean/teddy/issues/7/comments?", "per_page=100")
 
 	cm, err := c.AddComment(ctx, ref, "hi")
@@ -364,11 +453,13 @@ func TestGitHubTransferredIssue(t *testing.T) {
 	if _, err := c.AddComment(ctx, ref, "hi"); err != nil {
 		t.Fatal(err)
 	}
+
 	for _, r := range f.requests() {
 		if !strings.HasPrefix(r, "GET") && strings.Contains(r, "/mrbean/") {
 			t.Errorf("wrote to the old path: %s", r)
 		}
 	}
+
 	hasRequest(t, f, "PATCH /repos/new/teddy/issues/9?")
 }
 
@@ -394,8 +485,13 @@ func TestGone(t *testing.T) {
 	if list, err := c.List(ctx, ListOptions{Repository: "a/b"}); err != nil || len(list) != 1 || list[0].Source.ID != "gl" {
 		t.Errorf("List = %+v, %v, want only the GitLab issue", list, err)
 	}
+
 	var fe *forgehttp.Error
-	if _, err := c.Get(ctx, Ref{Source: "gh", Repository: "a/b", Number: 1}); !errors.Is(err, forgehttp.ErrNotFound) || !errors.As(err, &fe) || fe.StatusCode != http.StatusGone {
+	if _, err := c.Get(ctx, Ref{
+		Source:     "gh",
+		Repository: "a/b",
+		Number:     1,
+	}); !errors.Is(err, forgehttp.ErrNotFound) || !errors.As(err, &fe) || fe.StatusCode != http.StatusGone {
 		t.Errorf("Get(gh) err = %v, want a 410 wrapping ErrNotFound", err)
 	}
 	if _, err := c.List(ctx, ListOptions{Source: "gh", Repository: "a/b"}); !errors.Is(err, forgehttp.ErrNotFound) {
@@ -408,28 +504,56 @@ func TestGone(t *testing.T) {
 
 func gitlabIssueJSON() obj {
 	return obj{
-		"id": 501, "iid": 3, "project_id": 42, "title": "Lost bear", "description": "Find him", "state": "opened",
-		"author":    obj{"username": "mrbean", "web_url": "https://gitlab.example/mrbean"},
-		"assignees": []any{obj{"username": "irma", "web_url": "https://gitlab.example/irma"}},
-		"labels":    []any{"bug", "urgent"}, "milestone": obj{"title": "v2"},
-		"user_notes_count": 4, "discussion_locked": true,
-		"web_url":    "https://gitlab.example/group/sub/project/-/issues/3",
-		"references": obj{"short": "#3", "relative": "#3", "full": "group/sub/project#3"},
-		"created_at": "2025-01-02T03:04:05.123Z", "updated_at": "2025-02-03T04:05:06Z", "closed_at": nil,
+		"id":                501,
+		"iid":               3,
+		"project_id":        42,
+		"title":             "Lost bear",
+		"description":       "Find him",
+		"state":             "opened",
+		"author":            obj{"username": "mrbean", "web_url": "https://gitlab.example/mrbean"},
+		"assignees":         []any{obj{"username": "irma", "web_url": "https://gitlab.example/irma"}},
+		"labels":            []any{"bug", "urgent"},
+		"milestone":         obj{"title": "v2"},
+		"user_notes_count":  4,
+		"discussion_locked": true,
+		"web_url":           "https://gitlab.example/group/sub/project/-/issues/3",
+		"references":        obj{"short": "#3", "relative": "#3", "full": "group/sub/project#3"},
+		"created_at":        "2025-01-02T03:04:05.123Z",
+		"updated_at":        "2025-02-03T04:05:06Z",
+		"closed_at":         nil,
 	}
 }
 
 func TestGitLab(t *testing.T) {
 	f := newFake(t, "/api/v4")
-	closed := obj{"id": 502, "iid": 4, "title": "Done", "state": "closed", "discussion_locked": nil, "labels": []any{},
-		"web_url": "https://gitlab.example/group/sub/project/-/issues/4", "closed_at": "2025-03-01T00:00:00Z"}
+	closed := obj{
+		"id":                502,
+		"iid":               4,
+		"title":             "Done",
+		"state":             "closed",
+		"discussion_locked": nil,
+		"labels":            []any{},
+		"web_url":           "https://gitlab.example/group/sub/project/-/issues/4",
+		"closed_at":         "2025-03-01T00:00:00Z",
+	}
 	f.on("GET", "/projects/group%2Fsub%2Fproject/issues", [][]any{{gitlabIssueJSON()}, {closed}})
 	f.on("GET", "/projects/group%2Fsub%2Fproject/issues/3", gitlabIssueJSON())
-	f.on("GET", "/issues", []any{obj{"id": 9, "iid": 1, "title": "Mine", "state": "opened",
-		"web_url": "https://gitlab.example/other/thing/-/issues/1"}})
+	f.on("GET", "/issues", []any{obj{
+		"id":      9,
+		"iid":     1,
+		"title":   "Mine",
+		"state":   "opened",
+		"web_url": "https://gitlab.example/other/thing/-/issues/1",
+	}})
 	f.on("GET", "/projects/group%2Fsub%2Fproject/issues/3/notes", [][]any{
-		{obj{"id": 71, "body": "first", "system": false, "author": obj{"username": "irma", "web_url": "https://gitlab.example/irma"},
-			"created_at": "2025-04-01T00:00:00Z", "updated_at": "2025-04-02T00:00:00Z"},
+		{obj{
+			"id":         71,
+			"body":       "first",
+			"system":     false,
+			"author":     obj{"username": "irma", "web_url": "https://gitlab.example/irma"},
+			"created_at": "2025-04-01T00:00:00Z",
+			"updated_at": "2025-04-02T00:00:00Z",
+		},
 			obj{"id": 72, "body": "changed the description", "system": true}},
 		{obj{"id": 73, "body": "second"}},
 	})
@@ -438,12 +562,21 @@ func TestGitLab(t *testing.T) {
 
 	want := Issue{
 		Source:     SourceInfo{ID: "gl", Kind: forgeauth.GitLab, Host: "gitlab.example"},
-		Repository: "group/sub/project", ID: "501", Number: 3, Title: "Lost bear", Body: "Find him",
-		State: Open, Author: User{Login: "mrbean", WebURL: "https://gitlab.example/mrbean"},
-		Assignees: []User{{Login: "irma", WebURL: "https://gitlab.example/irma"}},
-		Labels:    []string{"bug", "urgent"}, Milestone: "v2", Comments: 4, Locked: true,
-		WebURL:    "https://gitlab.example/group/sub/project/-/issues/3",
-		CreatedAt: date("2025-01-02T03:04:05.123Z"), UpdatedAt: date("2025-02-03T04:05:06Z"),
+		Repository: "group/sub/project",
+		ID:         "501",
+		Number:     3,
+		Title:      "Lost bear",
+		Body:       "Find him",
+		State:      Open,
+		Author:     User{Login: "mrbean", WebURL: "https://gitlab.example/mrbean"},
+		Assignees:  []User{{Login: "irma", WebURL: "https://gitlab.example/irma"}},
+		Labels:     []string{"bug", "urgent"},
+		Milestone:  "v2",
+		Comments:   4,
+		Locked:     true,
+		WebURL:     "https://gitlab.example/group/sub/project/-/issues/3",
+		CreatedAt:  date("2025-01-02T03:04:05.123Z"),
+		UpdatedAt:  date("2025-02-03T04:05:06Z"),
 	}
 
 	list, err := c.List(ctx, ListOptions{Repository: "/group/sub/project/", State: StateAll})
@@ -453,22 +586,26 @@ func TestGitLab(t *testing.T) {
 	if len(list) != 2 || list[1].State != Closed || list[1].Locked || list[1].ClosedAt.IsZero() || list[1].Repository != "group/sub/project" {
 		t.Fatalf("List = %+v", list)
 	}
+
 	sameIssue(t, "List[0]", list[0], want)
 	for _, r := range f.requests() {
 		if strings.Contains(r, "state=") || strings.Contains(r, "%252F") {
 			t.Errorf("request %s: state all must be omitted and paths encoded once", r)
 		}
 	}
+
 	got, err := c.Get(ctx, Ref{Repository: "group/sub/project", Number: 3})
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	sameIssue(t, "Get", got, want)
 
 	for state, q := range map[StateFilter]string{"": "state=opened", StateOpen: "state=opened", StateClosed: "state=closed"} {
 		if _, err := c.List(ctx, ListOptions{Repository: "group/sub/project", State: state, Labels: []string{"bug"}}); err != nil {
 			t.Fatal(err)
 		}
+
 		hasRequest(t, f, "GET /api/v4/projects/group%2Fsub%2Fproject/issues?", q, "labels=bug", "per_page=100")
 	}
 
@@ -479,22 +616,31 @@ func TestGitLab(t *testing.T) {
 	if len(mine) != 1 || mine[0].Repository != "other/thing" {
 		t.Fatalf("List(account) = %+v, want the path from web_url", mine)
 	}
+
 	hasRequest(t, f, "GET /api/v4/issues?", "scope=assigned_to_me", "state=opened")
 	if _, err := c.List(ctx, ListOptions{Scope: Created}); err != nil {
 		t.Fatal(err)
 	}
+
 	hasRequest(t, f, "GET /api/v4/issues?", "scope=created_by_me")
 
 	comments, err := c.Comments(ctx, Ref{Source: "gl", Repository: "group/sub/project", Number: 3})
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantFirst := Comment{ID: "71", Author: User{Login: "irma", WebURL: "https://gitlab.example/irma"}, Body: "first",
+
+	wantFirst := Comment{
+		ID:        "71",
+		Author:    User{Login: "irma", WebURL: "https://gitlab.example/irma"},
+		Body:      "first",
 		WebURL:    "https://gitlab.example/group/sub/project/-/issues/3#note_71",
-		CreatedAt: date("2025-04-01T00:00:00Z"), UpdatedAt: date("2025-04-02T00:00:00Z")}
+		CreatedAt: date("2025-04-01T00:00:00Z"),
+		UpdatedAt: date("2025-04-02T00:00:00Z"),
+	}
 	if len(comments) != 2 || comments[0] != wantFirst || comments[1].ID != "73" {
 		t.Fatalf("Comments = %+v, want notes 71 and 73 without the system note", comments)
 	}
+
 	hasRequest(t, f, "GET /api/v4/projects/group%2Fsub%2Fproject/issues/3/notes?", "sort=asc", "order_by=created_at", "per_page=100")
 }
 
@@ -514,6 +660,7 @@ func TestGitLabSpecialLabels(t *testing.T) {
 	if err != nil || len(list) != 1 || list[0].Number != 1 {
 		t.Fatalf("List(None) = %+v, %v, want issue 1", list, err)
 	}
+
 	list, err = c.List(ctx, ListOptions{Repository: "a/b", Labels: []string{"ANY", "bug"}})
 	if err != nil || len(list) != 1 || list[0].Number != 3 {
 		t.Fatalf("List(Any, bug) = %+v, %v, want issue 3", list, err)
@@ -521,6 +668,7 @@ func TestGitLabSpecialLabels(t *testing.T) {
 	if _, err := c.List(ctx, ListOptions{Labels: []string{"none"}}); err != nil {
 		t.Fatal(err)
 	}
+
 	reqs := f.requests()
 	if strings.Contains(reqs[0], "labels=") || !strings.Contains(reqs[1], "labels=bug&") || strings.Contains(reqs[2], "labels=") {
 		t.Errorf("requests = %v, want None and Any left out", reqs)
@@ -540,21 +688,34 @@ func TestGitLabWrites(t *testing.T) {
 		case "bob":
 			return []any{obj{"id": 6, "username": "bob"}}
 		}
+
 		return []any{}
 	})
 	c := newClient(t, Source{ID: "gl", Session: f.session(forgeauth.GitLab)})
 	ctx := context.Background()
 	ref := Ref{Source: "gl", Repository: "group/sub/project", Number: 3}
 
-	if _, err := c.Create(ctx, RepositoryRef{Source: "gl", Repository: "group/sub/project"}, NewIssue{Title: "Bear", Body: "Lost", Labels: []string{"bug", "urgent"}, Assignees: []string{"irma", "bob"}}); err != nil {
+	if _, err := c.Create(ctx, RepositoryRef{Source: "gl", Repository: "group/sub/project"}, NewIssue{
+		Title:     "Bear",
+		Body:      "Lost",
+		Labels:    []string{"bug", "urgent"},
+		Assignees: []string{"irma", "bob"},
+	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.Update(ctx, ref, Update{Title: ptr("New"), Body: ptr("B"), State: ptr(Closed), Labels: &[]string{}, Assignees: &[]string{}}); err != nil {
+	if _, err := c.Update(ctx, ref, Update{
+		Title:     ptr("New"),
+		Body:      ptr("B"),
+		State:     ptr(Closed),
+		Labels:    &[]string{},
+		Assignees: &[]string{},
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := c.Update(ctx, ref, Update{State: ptr(Open), Labels: &[]string{"a"}, Assignees: &[]string{"bob"}}); err != nil {
 		t.Fatal(err)
 	}
+
 	wantBodies := []string{
 		`{"assignee_ids":[5,6],"description":"Lost","labels":"bug,urgent","title":"Bear"}`,
 		`{"assignee_ids":[0],"description":"B","labels":"","state_event":"close","title":"New"}`,
@@ -563,10 +724,15 @@ func TestGitLabWrites(t *testing.T) {
 	if got := f.sent(); !slices.Equal(got, wantBodies) {
 		t.Errorf("bodies =\n%v\nwant\n%v", got, wantBodies)
 	}
+
 	hasRequest(t, f, "GET /api/v4/users?", "username=irma")
 
 	n := len(f.sent())
-	if _, err := c.Create(ctx, RepositoryRef{Source: "gl", Repository: "group/sub/project"}, NewIssue{Title: "x", Assignees: []string{"ghost"}}); !errors.Is(err, ErrInvalid) {
+	if _, err := c.Create(
+		ctx,
+		RepositoryRef{Source: "gl", Repository: "group/sub/project"},
+		NewIssue{Title: "x", Assignees: []string{"ghost"}},
+	); !errors.Is(err, ErrInvalid) {
 		t.Errorf("Create(unknown login) err = %v, want ErrInvalid", err)
 	}
 	if _, err := c.Update(ctx, ref, Update{Assignees: &[]string{"ghost"}}); !errors.Is(err, ErrInvalid) {
@@ -595,41 +761,83 @@ func TestGitLabWrites(t *testing.T) {
 
 func forgejoIssueJSON() obj {
 	return obj{
-		"id": 901, "number": 5, "title": "Weeds", "body": "Pull them", "state": "open",
+		"id":        901,
+		"number":    5,
+		"title":     "Weeds",
+		"body":      "Pull them",
+		"state":     "open",
 		"user":      obj{"login": "mrbean", "html_url": "https://codeberg.example/mrbean"},
 		"assignees": nil,
 		"labels":    []any{obj{"id": 1, "name": "garden"}, obj{"id": 2, "name": "Chore"}},
-		"milestone": obj{"title": "spring"}, "comments": 2, "is_locked": true,
-		"html_url":     "https://codeberg.example/mrbean/garden/issues/5",
-		"repository":   obj{"id": 9, "name": "garden", "owner": "mrbean", "full_name": "mrbean/garden"},
+		"milestone": obj{"title": "spring"},
+		"comments":  2,
+		"is_locked": true,
+		"html_url":  "https://codeberg.example/mrbean/garden/issues/5",
+		"repository": obj{
+			"id":        9,
+			"name":      "garden",
+			"owner":     "mrbean",
+			"full_name": "mrbean/garden",
+		},
 		"pull_request": nil,
-		"created_at":   "2023-01-02T03:04:05+01:00", "updated_at": "2023-02-03T04:05:06Z", "closed_at": nil,
+		"created_at":   "2023-01-02T03:04:05+01:00",
+		"updated_at":   "2023-02-03T04:05:06Z",
+		"closed_at":    nil,
 	}
 }
 
 func TestForgejo(t *testing.T) {
 	f := newFake(t, "/api/v1")
-	onlyGarden := obj{"id": 902, "number": 6, "title": "Any match", "state": "open", "labels": []any{obj{"name": "garden"}},
-		"html_url": "https://codeberg.example/mrbean/garden/issues/6", "repository": obj{"full_name": "mrbean/garden"}}
-	pr := obj{"id": 903, "number": 7, "title": "PR", "state": "open", "pull_request": obj{"merged": false}}
+	onlyGarden := obj{
+		"id":         902,
+		"number":     6,
+		"title":      "Any match",
+		"state":      "open",
+		"labels":     []any{obj{"name": "garden"}},
+		"html_url":   "https://codeberg.example/mrbean/garden/issues/6",
+		"repository": obj{"full_name": "mrbean/garden"},
+	}
+	pr := obj{
+		"id":           903,
+		"number":       7,
+		"title":        "PR",
+		"state":        "open",
+		"pull_request": obj{"merged": false},
+	}
 	f.on("GET", "/repos/mrbean/garden/issues", [][]any{{forgejoIssueJSON(), pr}, {onlyGarden}})
 	f.on("GET", "/repos/mrbean/garden/issues/5", forgejoIssueJSON())
 	f.on("GET", "/repos/mrbean/garden/issues/7", pr)
 	f.on("GET", "/repos/issues/search", []any{onlyGarden})
 	f.on("GET", "/repos/mrbean/garden/issues/5/comments", []any{
-		obj{"id": 31, "body": "first", "user": obj{"login": "irma", "html_url": "https://codeberg.example/irma"},
-			"html_url": "https://codeberg.example/mrbean/garden/issues/5#issuecomment-31", "created_at": "2023-03-01T00:00:00Z", "updated_at": "2023-03-01T00:00:00Z"},
+		obj{
+			"id":         31,
+			"body":       "first",
+			"user":       obj{"login": "irma", "html_url": "https://codeberg.example/irma"},
+			"html_url":   "https://codeberg.example/mrbean/garden/issues/5#issuecomment-31",
+			"created_at": "2023-03-01T00:00:00Z",
+			"updated_at": "2023-03-01T00:00:00Z",
+		},
 	})
 	c := newClient(t, Source{ID: "fj", Session: f.session(forgeauth.Forgejo)})
 	ctx := context.Background()
 
 	want := Issue{
 		Source:     SourceInfo{ID: "fj", Kind: forgeauth.Forgejo, Host: "codeberg.example"},
-		Repository: "mrbean/garden", ID: "901", Number: 5, Title: "Weeds", Body: "Pull them",
-		State: Open, Author: User{Login: "mrbean", WebURL: "https://codeberg.example/mrbean"},
-		Assignees: []User{}, Labels: []string{"garden", "Chore"}, Milestone: "spring", Comments: 2, Locked: true,
-		WebURL:    "https://codeberg.example/mrbean/garden/issues/5",
-		CreatedAt: date("2023-01-02T03:04:05+01:00"), UpdatedAt: date("2023-02-03T04:05:06Z"),
+		Repository: "mrbean/garden",
+		ID:         "901",
+		Number:     5,
+		Title:      "Weeds",
+		Body:       "Pull them",
+		State:      Open,
+		Author:     User{Login: "mrbean", WebURL: "https://codeberg.example/mrbean"},
+		Assignees:  []User{},
+		Labels:     []string{"garden", "Chore"},
+		Milestone:  "spring",
+		Comments:   2,
+		Locked:     true,
+		WebURL:     "https://codeberg.example/mrbean/garden/issues/5",
+		CreatedAt:  date("2023-01-02T03:04:05+01:00"),
+		UpdatedAt:  date("2023-02-03T04:05:06Z"),
 	}
 
 	// The repository list sends no labels, so the client keeps only full matches.
@@ -640,6 +848,7 @@ func TestForgejo(t *testing.T) {
 	if len(list) != 1 {
 		t.Fatalf("List = %+v, want only issue 5", list)
 	}
+
 	sameIssue(t, "List[0]", list[0], want)
 	hasRequest(t, f, "GET /api/v1/repos/mrbean/garden/issues?", "type=issues", "state=open", "limit=50")
 	for _, r := range f.requests() {
@@ -647,15 +856,18 @@ func TestForgejo(t *testing.T) {
 			t.Errorf("request %s: the repository list must filter labels on the client", r)
 		}
 	}
+
 	if list, err := c.List(ctx, ListOptions{Labels: []string{"garden", "chore"}}); err != nil || len(list) != 0 {
 		t.Fatalf("List(account, labels) = %+v, %v, want none", list, err)
 	}
+
 	hasRequest(t, f, "GET /api/v1/repos/issues/search?", "labels=garden%2Cchore")
 
 	got, err := c.Get(ctx, Ref{Repository: "mrbean/garden", Number: 5})
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	sameIssue(t, "Get", got, want)
 	if _, err := c.Get(ctx, Ref{Repository: "mrbean/garden", Number: 7}); !errors.Is(err, forgehttp.ErrNotFound) {
 		t.Errorf("Get(pull request) err = %v, want ErrNotFound", err)
@@ -668,10 +880,12 @@ func TestForgejo(t *testing.T) {
 	if len(mine) != 1 || mine[0].Number != 6 {
 		t.Fatalf("List(account) = %+v", mine)
 	}
+
 	hasRequest(t, f, "GET /api/v1/repos/issues/search?", "type=issues", "assigned=true", "state=all", "limit=50")
 	if _, err := c.List(ctx, ListOptions{Scope: Created}); err != nil {
 		t.Fatal(err)
 	}
+
 	hasRequest(t, f, "GET /api/v1/repos/issues/search?", "created=true")
 	for _, r := range f.requests() {
 		if strings.Contains(r, "created=true") && strings.Contains(r, "assigned=") {
@@ -686,7 +900,8 @@ func TestForgejo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(comments) != 1 || comments[0].Author.Login != "irma" || comments[0].WebURL != "https://codeberg.example/mrbean/garden/issues/5#issuecomment-31" {
+	if len(comments) != 1 ||
+		comments[0].Author.Login != "irma" || comments[0].WebURL != "https://codeberg.example/mrbean/garden/issues/5#issuecomment-31" {
 		t.Fatalf("Comments = %+v", comments)
 	}
 }
@@ -707,9 +922,15 @@ func TestForgejoWrites(t *testing.T) {
 	repo := RepositoryRef{Source: "fj", Repository: "mrbean/garden"}
 
 	// Create sends label IDs with the issue; mrbean is not an organization.
-	if _, err := c.Create(ctx, repo, NewIssue{Title: "Weeds", Body: "B", Labels: []string{"bug", "nope"}, Assignees: []string{"irma"}}); err != nil {
+	if _, err := c.Create(ctx, repo, NewIssue{
+		Title:     "Weeds",
+		Body:      "B",
+		Labels:    []string{"bug", "nope"},
+		Assignees: []string{"irma"},
+	}); err != nil {
 		t.Fatal(err)
 	}
+
 	hasRequest(t, f, "GET /api/v1/repos/mrbean/garden/labels?", "limit=50")
 	hasRequest(t, f, "GET /api/v1/orgs/mrbean/labels?")
 	iss, err := c.Update(ctx, ref, Update{Labels: &[]string{"bug"}})
@@ -719,9 +940,15 @@ func TestForgejoWrites(t *testing.T) {
 	if !slices.Equal(iss.Labels, []string{"bug"}) {
 		t.Errorf("Update labels = %v, want those set", iss.Labels)
 	}
-	if _, err := c.Update(ctx, ref, Update{Title: ptr("T"), State: ptr(Closed), Labels: &[]string{}, Assignees: &[]string{"irma"}}); err != nil {
+	if _, err := c.Update(ctx, ref, Update{
+		Title:     ptr("T"),
+		State:     ptr(Closed),
+		Labels:    &[]string{},
+		Assignees: &[]string{"irma"},
+	}); err != nil {
 		t.Fatal(err)
 	}
+
 	wantBodies := []string{
 		`{"assignees":["irma"],"body":"B","labels":[3],"title":"Weeds"}`,
 		`{"labels":[3]}`,
@@ -730,6 +957,7 @@ func TestForgejoWrites(t *testing.T) {
 	if got := f.sent(); !slices.Equal(got, wantBodies) {
 		t.Errorf("bodies =\n%v\nwant\n%v", got, wantBodies)
 	}
+
 	writes := func() []string {
 		var out []string
 		for _, r := range f.requests() {
@@ -737,6 +965,7 @@ func TestForgejoWrites(t *testing.T) {
 				out = append(out, r)
 			}
 		}
+
 		return out
 	}
 	wantWrites := []string{
@@ -748,6 +977,7 @@ func TestForgejoWrites(t *testing.T) {
 	if !slices.Equal(writes(), wantWrites) {
 		t.Errorf("writes =\n%v\nwant\n%v", writes(), wantWrites)
 	}
+
 	hasRequest(t, f, "GET /api/v1/users/irma?")
 
 	// Organization labels count too.
@@ -769,6 +999,7 @@ func TestForgejoWrites(t *testing.T) {
 	if _, err := c.Update(ctx, ref, Update{Labels: &[]string{"bug"}, Assignees: &[]string{"ghost"}}); !errors.Is(err, ErrInvalid) {
 		t.Errorf("Update(unknown login) err = %v, want ErrInvalid", err)
 	}
+
 	// A rejected PATCH leaves the labels alone.
 	f.on("PATCH", "/repos/mrbean/garden/issues/5", http.StatusPreconditionFailed)
 	if _, err := c.Update(ctx, ref, Update{State: ptr(Closed), Labels: &[]string{"bug"}}); err == nil {
@@ -777,6 +1008,7 @@ func TestForgejoWrites(t *testing.T) {
 	if w := writes(); len(w) != n+1 || !strings.HasPrefix(w[n], "PATCH") {
 		t.Errorf("writes after failures = %v, want only the PATCH", w[n:])
 	}
+
 	// Labels that fail after the PATCH say the issue was updated.
 	f.on("PATCH", "/repos/mrbean/garden/issues/5", forgejoIssueJSON())
 	f.on("PUT", "/repos/mrbean/garden/issues/5/labels", http.StatusForbidden)
@@ -788,14 +1020,32 @@ func TestForgejoWrites(t *testing.T) {
 
 func TestAcrossSources(t *testing.T) {
 	gh := newFake(t, "")
-	gh.on("GET", "/repos/mrbean/teddy/issues", []any{obj{"number": 1, "title": "gh", "state": "open", "html_url": "https://github.com/mrbean/teddy/issues/1"}})
+	gh.on("GET", "/repos/mrbean/teddy/issues", []any{obj{
+		"number":   1,
+		"title":    "gh",
+		"state":    "open",
+		"html_url": "https://github.com/mrbean/teddy/issues/1",
+	}})
 	gh.on("GET", "/repos/mrbean/teddy/issues/1", obj{"number": 1, "state": "open", "html_url": "https://github.com/mrbean/teddy/issues/1"})
 	gh.on("GET", "/issues", []any{obj{"number": 5, "repository": obj{"full_name": "a/b"}}})
 	gl := newFake(t, "/api/v4")
-	gl.on("GET", "/projects/mrbean%2Fteddy/issues", []any{obj{"iid": 2, "title": "gl", "state": "opened", "web_url": "https://gitlab.com/mrbean/teddy/-/issues/2"}})
+	gl.on("GET", "/projects/mrbean%2Fteddy/issues", []any{obj{
+		"iid":     2,
+		"title":   "gl",
+		"state":   "opened",
+		"web_url": "https://gitlab.com/mrbean/teddy/-/issues/2",
+	}})
 	gl.on("GET", "/projects/mrbean%2Fteddy/issues/1", obj{"iid": 1, "state": "opened", "references": obj{"full": "mrbean/teddy#1"}})
-	gl.on("GET", "/projects/group%2Fsub%2Fproject/issues", []any{obj{"iid": 3, "state": "opened", "references": obj{"full": "group/sub/project#3"}}})
-	gl.on("GET", "/projects/group%2Fsub%2Fproject/issues/3", obj{"iid": 3, "state": "opened", "references": obj{"full": "group/sub/project#3"}})
+	gl.on("GET", "/projects/group%2Fsub%2Fproject/issues", []any{obj{
+		"iid":        3,
+		"state":      "opened",
+		"references": obj{"full": "group/sub/project#3"},
+	}})
+	gl.on("GET", "/projects/group%2Fsub%2Fproject/issues/3", obj{
+		"iid":        3,
+		"state":      "opened",
+		"references": obj{"full": "group/sub/project#3"},
+	})
 	gl.on("GET", "/issues", []any{obj{"iid": 6, "references": obj{"full": "c/d#6"}}})
 	fj := newFake(t, "/api/v1")
 	fj.on("GET", "/repos/issues/search", []any{})
@@ -811,6 +1061,7 @@ func TestAcrossSources(t *testing.T) {
 		for _, i := range list {
 			out = append(out, fmt.Sprintf("%s:%s#%d", i.Source.ID, i.Repository, i.Number))
 		}
+
 		return strings.Join(out, " ")
 	}
 
@@ -840,6 +1091,7 @@ func TestAcrossSources(t *testing.T) {
 	if _, err := c.Get(ctx, Ref{Source: "gh", Repository: "group/sub/project", Number: 3}); !errors.Is(err, forgehttp.ErrNotFound) {
 		t.Errorf("Get(nested on GitHub) err = %v", err)
 	}
+
 	for _, r := range append(gh.requests(), fj.requests()...) {
 		if strings.Contains(r, "group") {
 			t.Errorf("asked for a nested path: %s", r)
@@ -866,8 +1118,13 @@ func TestAcrossSources(t *testing.T) {
 	if _, err := c.Get(ctx, Ref{Repository: "mrbean/teddy", Number: 99}); !errors.Is(err, forgehttp.ErrNotFound) {
 		t.Errorf("Get(missing) err = %v", err)
 	}
+
 	var fe *forgehttp.Error
-	if _, err := c.Get(ctx, Ref{Source: "gh", Repository: "mrbean/teddy", Number: 99}); !errors.As(err, &fe) || fe.StatusCode != http.StatusNotFound {
+	if _, err := c.Get(ctx, Ref{
+		Source:     "gh",
+		Repository: "mrbean/teddy",
+		Number:     99,
+	}); !errors.As(err, &fe) || fe.StatusCode != http.StatusNotFound {
 		t.Errorf("Get(gh missing) err = %v, want a *forgehttp.Error", err)
 	}
 }
@@ -907,6 +1164,7 @@ func TestProxyBasePath(t *testing.T) {
 	if err != nil || len(list) != 2 || list[1].Repository != "mrbean/teddy" {
 		t.Fatalf("List = %+v, %v", list, err)
 	}
+
 	got, err := c.Get(ctx, Ref{Repository: "mrbean/teddy", Number: 2})
 	if err != nil || got.Source.Host != "github.com" {
 		t.Fatalf("Get = %+v, %v", got, err)
@@ -914,6 +1172,7 @@ func TestProxyBasePath(t *testing.T) {
 	if _, err := c.AddComment(ctx, got.Ref(), "hi"); err != nil {
 		t.Fatal(err)
 	}
+
 	for _, r := range f.requests() {
 		if !strings.Contains(r, " /c/gh-mrbean/repos/") {
 			t.Errorf("request %s left the proxy connection", r)
@@ -927,7 +1186,11 @@ func TestPaginationStaysOnSource(t *testing.T) {
 		_, _ = w.Write([]byte(`[]`))
 	}))
 	defer srv.Close()
-	c := newClient(t, Source{ID: "gh", Session: &forgeauth.Session{Kind: forgeauth.GitHub, BaseURL: srv.URL + "/c/mine", Client: srv.Client()}})
+	c := newClient(t, Source{ID: "gh", Session: &forgeauth.Session{
+		Kind:    forgeauth.GitHub,
+		BaseURL: srv.URL + "/c/mine",
+		Client:  srv.Client(),
+	}})
 	if _, err := c.List(context.Background(), ListOptions{}); err == nil || !strings.Contains(err.Error(), "leaves the source") {
 		t.Fatalf("List err = %v, want a pagination error", err)
 	}
@@ -953,23 +1216,50 @@ func TestValidation(t *testing.T) {
 	}
 
 	calls := map[string]func() error{
-		"get number 0":      func() error { _, err := c.Get(ctx, Ref{Repository: "a/b"}); return err },
-		"get number -1":     func() error { _, err := c.Get(ctx, Ref{Repository: "a/b", Number: -1}); return err },
-		"list bad state":    func() error { _, err := c.List(ctx, ListOptions{State: "opened"}); return err },
-		"list bad scope":    func() error { _, err := c.List(ctx, ListOptions{Scope: "mentioned"}); return err },
-		"list scope + repo": func() error { _, err := c.List(ctx, ListOptions{Repository: "a/b", Scope: Created}); return err },
-		"list empty label":  func() error { _, err := c.List(ctx, ListOptions{Labels: []string{" "}}); return err },
-		"list comma label":  func() error { _, err := c.List(ctx, ListOptions{Labels: []string{"a,b"}}); return err },
+		"get number 0": func() error {
+			_, err := c.Get(ctx, Ref{Repository: "a/b"})
+			return err
+		},
+		"get number -1": func() error {
+			_, err := c.Get(ctx, Ref{Repository: "a/b", Number: -1})
+			return err
+		},
+		"list bad state": func() error {
+			_, err := c.List(ctx, ListOptions{State: "opened"})
+			return err
+		},
+		"list bad scope": func() error {
+			_, err := c.List(ctx, ListOptions{Scope: "mentioned"})
+			return err
+		},
+		"list scope + repo": func() error {
+			_, err := c.List(ctx, ListOptions{Repository: "a/b", Scope: Created})
+			return err
+		},
+		"list empty label": func() error {
+			_, err := c.List(ctx, ListOptions{Labels: []string{" "}})
+			return err
+		},
+		"list comma label": func() error {
+			_, err := c.List(ctx, ListOptions{Labels: []string{"a,b"}})
+			return err
+		},
 		"create no source": func() error {
 			_, err := c.Create(ctx, RepositoryRef{Repository: "a/b"}, NewIssue{Title: "x"})
 			return err
 		},
-		"create no title": func() error { _, err := c.Create(ctx, repo, NewIssue{Title: " "}); return err },
+		"create no title": func() error {
+			_, err := c.Create(ctx, repo, NewIssue{Title: " "})
+			return err
+		},
 		"create bad path": func() error {
 			_, err := c.Create(ctx, RepositoryRef{Source: "gh", Repository: "a"}, NewIssue{Title: "x"})
 			return err
 		},
-		"create bad label": func() error { _, err := c.Create(ctx, repo, NewIssue{Title: "x", Labels: []string{""}}); return err },
+		"create bad label": func() error {
+			_, err := c.Create(ctx, repo, NewIssue{Title: "x", Labels: []string{""}})
+			return err
+		},
 		"create bad login": func() error {
 			_, err := c.Create(ctx, repo, NewIssue{Title: "x", Assignees: []string{"a,b"}})
 			return err
@@ -978,31 +1268,62 @@ func TestValidation(t *testing.T) {
 			_, err := c.Update(ctx, Ref{Repository: "a/b", Number: 1}, Update{Title: ptr("x")})
 			return err
 		},
-		"update empty":       func() error { _, err := c.Update(ctx, ref, Update{}); return err },
-		"update empty title": func() error { _, err := c.Update(ctx, ref, Update{Title: ptr("")}); return err },
-		"update bad state":   func() error { _, err := c.Update(ctx, ref, Update{State: ptr(State("opened"))}); return err },
-		"update bad label":   func() error { _, err := c.Update(ctx, ref, Update{Labels: &[]string{"a,b"}}); return err },
-		"update bad login":   func() error { _, err := c.Update(ctx, ref, Update{Assignees: &[]string{" "}}); return err },
+		"update empty": func() error {
+			_, err := c.Update(ctx, ref, Update{})
+			return err
+		},
+		"update empty title": func() error {
+			_, err := c.Update(ctx, ref, Update{Title: ptr("")})
+			return err
+		},
+		"update bad state": func() error {
+			_, err := c.Update(ctx, ref, Update{State: ptr(State("opened"))})
+			return err
+		},
+		"update bad label": func() error {
+			_, err := c.Update(ctx, ref, Update{Labels: &[]string{"a,b"}})
+			return err
+		},
+		"update bad login": func() error {
+			_, err := c.Update(ctx, ref, Update{Assignees: &[]string{" "}})
+			return err
+		},
 		"update number 0": func() error {
 			_, err := c.Update(ctx, Ref{Source: "gh", Repository: "a/b"}, Update{Title: ptr("x")})
 			return err
 		},
-		"comment no source": func() error { _, err := c.AddComment(ctx, Ref{Repository: "a/b", Number: 1}, "x"); return err },
-		"comment empty":     func() error { _, err := c.AddComment(ctx, ref, " \n"); return err },
-		"comments bad path": func() error { _, err := c.Comments(ctx, Ref{Repository: "a", Number: 1}); return err },
+		"comment no source": func() error {
+			_, err := c.AddComment(ctx, Ref{Repository: "a/b", Number: 1}, "x")
+			return err
+		},
+		"comment empty": func() error {
+			_, err := c.AddComment(ctx, ref, " \n")
+			return err
+		},
+		"comments bad path": func() error {
+			_, err := c.Comments(ctx, Ref{Repository: "a", Number: 1})
+			return err
+		},
 	}
 	for name, call := range calls {
 		if err := call(); !errors.Is(err, ErrInvalid) {
 			t.Errorf("%s: err = %v, want ErrInvalid", name, err)
 		}
 	}
+
 	if n := len(f.requests()); n != 0 {
 		t.Errorf("invalid arguments sent %d requests: %v", n, f.requests())
 	}
 
 	unknown := map[string]func() error{
-		"list": func() error { _, err := c.List(ctx, ListOptions{Source: "nope"}); return err },
-		"get":  func() error { _, err := c.Get(ctx, Ref{Source: "nope", Repository: "a/b", Number: 1}); return err },
+		"list": func() error {
+			_, err := c.List(ctx, ListOptions{Source: "nope"})
+			return err
+		},
+		"get": func() error {
+			_, err := c.Get(ctx, Ref{Source: "nope", Repository: "a/b", Number: 1})
+			return err
+		},
 		"create": func() error {
 			_, err := c.Create(ctx, RepositoryRef{Source: "nope", Repository: "a/b"}, NewIssue{Title: "x"})
 			return err
@@ -1021,7 +1342,12 @@ func TestValidation(t *testing.T) {
 			t.Errorf("%s: err = %v, want ErrUnknownSource", name, err)
 		}
 	}
-	if _, err := c.Create(ctx, RepositoryRef{Source: "gh", Repository: "a/b/c"}, NewIssue{Title: "x"}); !errors.Is(err, forgehttp.ErrNotFound) {
+
+	if _, err := c.Create(
+		ctx,
+		RepositoryRef{Source: "gh", Repository: "a/b/c"},
+		NewIssue{Title: "x"},
+	); !errors.Is(err, forgehttp.ErrNotFound) {
 		t.Errorf("Create(nested on GitHub) err = %v, want ErrNotFound", err)
 	}
 }
@@ -1042,6 +1368,7 @@ func TestNew(t *testing.T) {
 			t.Errorf("%s: err = %v, want ErrInvalid", name, err)
 		}
 	}
+
 	none := newClient(t)
 	if list, err := none.List(context.Background(), ListOptions{}); err != nil || len(list) != 0 {
 		t.Errorf("List without sources = %v, %v", list, err)
@@ -1049,6 +1376,7 @@ func TestNew(t *testing.T) {
 	if _, err := none.Get(context.Background(), Ref{Repository: "a/b", Number: 1}); !errors.Is(err, forgehttp.ErrNotFound) {
 		t.Errorf("Get without sources = %v", err)
 	}
+
 	c := newClient(t, Source{ID: "a", Session: ok}, Source{ID: "b", Session: ok})
 	if s := c.Sources(); len(s) != 2 || s[0].ID != "a" || s[1].ID != "b" {
 		t.Errorf("Sources = %+v", s)

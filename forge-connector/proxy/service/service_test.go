@@ -33,7 +33,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 const (
@@ -45,7 +44,7 @@ const (
 
 // fakeBroker is a broker gRPC server built from brokerpb.
 type fakeBroker struct {
-	pb.UnimplementedBrokerServer
+	pb.UnimplementedBrokerServiceServer
 	baseURL string
 
 	mu         sync.Mutex
@@ -59,6 +58,7 @@ func bearerOf(ctx context.Context) string {
 	if v := md.Get("authorization"); len(v) == 1 {
 		return strings.TrimPrefix(v[0], "Bearer ")
 	}
+
 	return ""
 }
 
@@ -72,10 +72,16 @@ func (b *fakeBroker) IssueToken(ctx context.Context, r *pb.IssueTokenRequest) (*
 	case r.GetConnectionId() != connID:
 		return nil, status.Error(codes.PermissionDenied, "no")
 	}
-	return &pb.IssueTokenResponse{Kind: "github", BaseUrl: b.baseURL, GitBaseUrl: b.baseURL + "/git", Token: b.forgeToken}, nil
+
+	return &pb.IssueTokenResponse{
+		Kind:       "github",
+		BaseUrl:    b.baseURL,
+		GitBaseUrl: b.baseURL + "/git",
+		Token:      b.forgeToken,
+	}, nil
 }
 
-func (b *fakeBroker) VerifyClient(ctx context.Context, r *pb.VerifyClientRequest) (*pb.Client, error) {
+func (b *fakeBroker) VerifyClient(ctx context.Context, r *pb.VerifyClientRequest) (*pb.VerifyClientResponse, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.verifies++
@@ -85,20 +91,33 @@ func (b *fakeBroker) VerifyClient(ctx context.Context, r *pb.VerifyClientRequest
 	case r.GetConnectionId() != connID:
 		return nil, status.Error(codes.PermissionDenied, "no")
 	}
-	return &pb.Client{Id: "client", ConnectionIds: []string{connID}}, nil
+
+	return &pb.VerifyClientResponse{Client: &pb.Client{Id: "client", ConnectionIds: []string{connID}}}, nil
 }
 
-func (b *fakeBroker) ListClientConnections(ctx context.Context, _ *emptypb.Empty) (*pb.ListClientConnectionsResponse, error) {
+func (b *fakeBroker) ListClientConnections(ctx context.Context, _ *pb.ListClientConnectionsRequest) (*pb.ListClientConnectionsResponse, error) {
 	if bearerOf(ctx) != callerToken {
 		return nil, status.Error(codes.Unauthenticated, "no")
 	}
-	return &pb.ListClientConnectionsResponse{Connections: []*pb.ClientConnection{{Id: connID, Name: "me", Kind: "github", Status: "ok"}}}, nil
+
+	return &pb.ListClientConnectionsResponse{Connections: []*pb.ClientConnection{{
+		Id:     connID,
+		Name:   "me",
+		Kind:   "github",
+		Status: "ok",
+	}}}, nil
 }
 
-func (b *fakeBroker) set(f func()) { b.mu.Lock(); f(); b.mu.Unlock() }
+func (b *fakeBroker) set(f func()) {
+	b.mu.Lock()
+	f()
+	b.mu.Unlock()
+}
+
 func (b *fakeBroker) counts() (issues, verifies int) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
 	return b.issues, b.verifies
 }
 
@@ -107,7 +126,13 @@ type clock struct {
 	t  time.Time
 }
 
-func (c *clock) now() time.Time { c.mu.Lock(); defer c.mu.Unlock(); return c.t }
+func (c *clock) now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return c.t
+}
+
 func (c *clock) advance(d time.Duration) {
 	c.mu.Lock()
 	c.t = c.t.Add(d)
@@ -144,6 +169,7 @@ func newEnv(t *testing.T, o options) *env {
 			f(w, r)
 			return
 		}
+
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{"login":"octo"}`)
 	}))
@@ -151,6 +177,7 @@ func newEnv(t *testing.T, o options) *env {
 
 	e.broker = &fakeBroker{baseURL: e.forge.URL, forgeToken: forgeToken}
 	e.serveBroker(t, "127.0.0.1:0")
+
 	return e.finish(t, o, e.grpcAddr)
 }
 
@@ -160,11 +187,25 @@ func (e *env) serveBroker(t *testing.T, addr string) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	e.grpcAddr = l.Addr().String()
 	e.grpc = grpc.NewServer()
-	pb.RegisterBrokerServer(e.grpc, e.broker)
-	go e.grpc.Serve(l)
+	pb.RegisterBrokerServiceServer(e.grpc, e.broker)
+	serve(e.grpc, l)
 	t.Cleanup(e.grpc.Stop)
+}
+
+// serve runs srv in the background. Tests stop it, so Serve's error is unused.
+func serve(srv *grpc.Server, l net.Listener) {
+	go func() { _ = srv.Serve(l) }()
+}
+
+// verify calls VerifyClient for connID and fails unless it returns want.
+func (e *env) verify(t *testing.T, token forgeauth.StaticToken, want error) {
+	t.Helper()
+	if _, err := e.adapter.VerifyClient(context.Background(), token, connID); !errors.Is(err, want) {
+		t.Fatalf("VerifyClient = %v, want %v", err, want)
+	}
 }
 
 func (e *env) finish(t *testing.T, o options, addr string) *env {
@@ -173,22 +214,35 @@ func (e *env) finish(t *testing.T, o options, addr string) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	t.Cleanup(func() { conn.Close() })
 	logger := slog.New(slog.NewTextHandler(e.logs, nil))
 	e.adapter, err = service.NewBroker(service.BrokerConfig{
-		Client: pb.NewBrokerClient(conn), Credentials: forgeauth.StaticToken(proxyToken),
-		TokenTTL: o.tokenTTL, VerifyTTL: o.verifyTTL, Timeout: 2 * time.Second,
-		Logger: logger, Now: e.clock.now,
+		Client:      pb.NewBrokerServiceClient(conn),
+		Credentials: forgeauth.StaticToken(proxyToken),
+		TokenTTL:    o.tokenTTL,
+		VerifyTTL:   o.verifyTTL,
+		Timeout:     2 * time.Second,
+		Logger:      logger,
+		Now:         e.clock.now,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	server, err := service.New(service.Config{Broker: e.adapter, Registry: registry(t), Logger: logger, AllowGitPush: o.allowGitPush})
+
+	server, err := service.New(service.Config{
+		Broker:       e.adapter,
+		Registry:     registry(t),
+		Logger:       logger,
+		AllowGitPush: o.allowGitPush,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	e.proxy = httptest.NewServer(server)
 	t.Cleanup(e.proxy.Close)
+
 	return e
 }
 
@@ -200,6 +254,7 @@ func registry(t *testing.T) *forgeauth.Registry {
 			t.Fatal(err)
 		}
 	}
+
 	return &reg
 }
 
@@ -212,6 +267,7 @@ func (e *env) session(t *testing.T, token string) *forgeauth.Session {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return s
 }
 
@@ -222,18 +278,22 @@ func (e *env) get(t *testing.T, token, path string) (int, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	resp, err := s.Client.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
+
 	return resp.StatusCode, string(body)
 }
 
 func (e *env) forgeAuth(n int) string {
 	v, _ := e.forgeAuths.Load(n)
 	s, _ := v.(string)
+
 	return s
 }
 
@@ -261,14 +321,17 @@ func TestConnectorClient(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	conns, err := c.Connections(context.Background())
 	if err != nil || len(conns) != 1 || conns[0].ID != connID || conns[0].Name != "me" || conns[0].Kind != forgeauth.GitHub {
 		t.Fatalf("Connections = %+v, %v", conns, err)
 	}
+
 	var got struct{ Login string }
 	if err := conns[0].Session.GetJSON(context.Background(), "/user", &got); err != nil || got.Login != "octo" {
 		t.Fatalf("session request: %v %q", err, got.Login)
 	}
+
 	c, _ = connector.New(connector.Config{URL: e.proxy.URL, Credentials: forgeauth.StaticToken(proxyToken)})
 	if _, err := c.Connections(context.Background()); !errors.Is(err, forgehttp.ErrUnauthorized) {
 		t.Fatalf("proxy token listed connections: %v", err)
@@ -280,10 +343,12 @@ func TestRejectedCallersNeverReachForge(t *testing.T) {
 	if code, body := e.get(t, "wrong", "/user"); code != http.StatusUnauthorized || !strings.HasPrefix(body, "proxy:") {
 		t.Errorf("bad token: %d %q", code, body)
 	}
+
 	resp, err := http.Get(e.proxy.URL + "/c/other/user")
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("unknown connection = %d", resp.StatusCode)
@@ -300,9 +365,11 @@ func TestTokenCache(t *testing.T) {
 			t.Fatalf("status %d", code)
 		}
 	}
+
 	if issues, _ := e.broker.counts(); issues != 1 {
 		t.Errorf("issues within TTL = %d, want 1", issues)
 	}
+
 	// A rotated token is picked up once the cache entry expires.
 	e.broker.set(func() { e.broker.forgeToken = "rotated" })
 	e.clock.advance(time.Minute + time.Second)
@@ -333,6 +400,7 @@ func TestDropsTokenOn401(t *testing.T) {
 			http.Error(w, "bad credentials", http.StatusUnauthorized)
 			return
 		}
+
 		fmt.Fprint(w, `{"login":"octo"}`)
 	})
 	if code, body := e.get(t, callerToken, "/user"); code != http.StatusUnauthorized || !strings.Contains(body, "bad credentials") {
@@ -341,6 +409,7 @@ func TestDropsTokenOn401(t *testing.T) {
 	if hits := e.forgeHits.Load(); hits != 1 {
 		t.Fatalf("forge hits = %d, the request must not be retried", hits)
 	}
+
 	e.broker.set(func() { e.broker.forgeToken = "fresh" })
 	if code, _ := e.get(t, callerToken, "/user"); code != http.StatusOK {
 		t.Fatalf("second request = %d", code)
@@ -368,9 +437,11 @@ func TestVerifyCache(t *testing.T) {
 	for range 3 {
 		e.get(t, callerToken, "/user")
 	}
+
 	if _, verifies := e.broker.counts(); verifies != 1 {
 		t.Errorf("verifies within TTL = %d, want 1", verifies)
 	}
+
 	e.clock.advance(31 * time.Second)
 	e.get(t, callerToken, "/user")
 	if _, verifies := e.broker.counts(); verifies != 2 {
@@ -387,27 +458,30 @@ func TestDenialsAreCachedBriefly(t *testing.T) {
 				t.Fatalf("err = %v", err)
 			}
 		}
+
 		if _, v := e.broker.counts(); v != 1 {
 			t.Errorf("verifies = %d, want 1", v)
 		}
+
 		e.clock.advance(6 * time.Second)
-		e.adapter.VerifyClient(ctx, "wrong", connID)
+		e.verify(t, "wrong", broker.ErrUnauthorized)
 		if _, v := e.broker.counts(); v != 2 {
 			t.Errorf("denial outlived its cap: verifies = %d", v)
 		}
+
 		// An approval lives much longer than that.
-		e.adapter.VerifyClient(ctx, callerToken, connID)
+		e.verify(t, callerToken, nil)
 		e.clock.advance(6 * time.Second)
-		e.adapter.VerifyClient(ctx, callerToken, connID)
+		e.verify(t, callerToken, nil)
 		if _, v := e.broker.counts(); v != 3 {
 			t.Errorf("approval expired early: verifies = %d", v)
 		}
 	})
 	t.Run("capped by a short approval", func(t *testing.T) {
 		e := newEnv(t, options{verifyTTL: time.Second})
-		e.adapter.VerifyClient(ctx, "wrong", connID)
+		e.verify(t, "wrong", broker.ErrUnauthorized)
 		e.clock.advance(2 * time.Second)
-		e.adapter.VerifyClient(ctx, "wrong", connID)
+		e.verify(t, "wrong", broker.ErrUnauthorized)
 		if _, v := e.broker.counts(); v != 2 {
 			t.Errorf("verifies = %d, want 2", v)
 		}
@@ -419,6 +493,7 @@ func TestDenialsAreCachedBriefly(t *testing.T) {
 				t.Fatalf("err = %v", err)
 			}
 		}
+
 		if _, v := e.broker.counts(); v != 1 {
 			t.Errorf("verifies = %d, want 1", v)
 		}
@@ -435,6 +510,7 @@ func TestBrokerDown(t *testing.T) {
 	if e.forgeHits.Load() != 0 {
 		t.Error("forge was contacted without authorization")
 	}
+
 	// Failures are not cached: the proxy recovers when the broker returns.
 	e.serveBrokerAgain(t)
 	if code, _ := e.get(t, callerToken, "/user"); code != http.StatusOK {
@@ -450,21 +526,25 @@ func (e *env) serveBrokerAgain(t *testing.T) {
 		l, err := net.Listen("tcp", e.grpcAddr)
 		if err == nil {
 			e.grpc = grpc.NewServer()
-			pb.RegisterBrokerServer(e.grpc, e.broker)
-			go e.grpc.Serve(l)
+			pb.RegisterBrokerServiceServer(e.grpc, e.broker)
+			serve(e.grpc, l)
 			t.Cleanup(e.grpc.Stop)
 			break
 		}
+
 		if time.Now().After(deadline) {
 			t.Fatal(err)
 		}
+
 		time.Sleep(20 * time.Millisecond)
 	}
+
 	// gRPC reconnects with backoff; allow it some time.
 	for i := 0; i < 100; i++ {
 		if _, err := e.adapter.VerifyClient(context.Background(), callerToken, connID); err == nil {
 			return
 		}
+
 		time.Sleep(50 * time.Millisecond)
 	}
 }
@@ -475,14 +555,16 @@ func TestBrokerDeadline(t *testing.T) {
 	defer close(block)
 	// A broker that never answers yields a gateway timeout.
 	slow := grpc.NewServer()
-	pb.RegisterBrokerServer(slow, blockingBroker{block: block})
+	pb.RegisterBrokerServiceServer(slow, blockingBroker{block: block})
 	l, _ := net.Listen("tcp", "127.0.0.1:0")
-	go slow.Serve(l)
+	serve(slow, l)
 	defer slow.Stop()
 	conn, _ := grpc.NewClient(l.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	defer conn.Close()
 	b, err := service.NewBroker(service.BrokerConfig{
-		Client: pb.NewBrokerClient(conn), Credentials: forgeauth.StaticToken(proxyToken), Timeout: 50 * time.Millisecond,
+		Client:      pb.NewBrokerServiceClient(conn),
+		Credentials: forgeauth.StaticToken(proxyToken),
+		Timeout:     50 * time.Millisecond,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -490,11 +572,12 @@ func TestBrokerDeadline(t *testing.T) {
 	if _, err := b.IssueToken(context.Background(), connID); !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("err = %v", err)
 	}
+
 	_ = e
 }
 
 type blockingBroker struct {
-	pb.UnimplementedBrokerServer
+	pb.UnimplementedBrokerServiceServer
 	block chan struct{}
 }
 
@@ -503,6 +586,7 @@ func (b blockingBroker) IssueToken(ctx context.Context, _ *pb.IssueTokenRequest)
 	case <-ctx.Done():
 	case <-b.block:
 	}
+
 	return nil, status.Error(codes.Unavailable, "x")
 }
 
@@ -512,8 +596,9 @@ func TestProxyTokenMisconfigured(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer conn.Close()
-	b, _ := service.NewBroker(service.BrokerConfig{Client: pb.NewBrokerClient(conn), Credentials: forgeauth.StaticToken("wrong")})
+	b, _ := service.NewBroker(service.BrokerConfig{Client: pb.NewBrokerServiceClient(conn), Credentials: forgeauth.StaticToken("wrong")})
 	// The broker rejecting the proxy's own token is not the caller's fault.
 	if _, err := b.IssueToken(context.Background(), connID); !errors.Is(err, broker.ErrUnavailable) {
 		t.Errorf("err = %v", err)
@@ -541,7 +626,10 @@ func TestPaginationEndToEnd(t *testing.T) {
 		if page < pages {
 			w.Header().Add("Link", fmt.Sprintf(`<%s/repos?page=%d>; rel="next"`, e.forge.URL, page+1))
 		}
-		json.NewEncoder(w).Encode([]string{fmt.Sprintf("repo-%d", page)})
+
+		if err := json.NewEncoder(w).Encode([]string{fmt.Sprintf("repo-%d", page)}); err != nil {
+			t.Error(err)
+		}
 	})
 	s := e.session(t, callerToken)
 	var all []string
@@ -551,14 +639,17 @@ func TestPaginationEndToEnd(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		resp, err := s.Client.Do(req)
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		var items []string
 		if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
 			t.Fatal(err)
 		}
+
 		resp.Body.Close()
 		all = append(all, items...)
 		next, _ = forgehttp.NextPage(resp.Header)
@@ -566,14 +657,17 @@ func TestPaginationEndToEnd(t *testing.T) {
 			t.Fatalf("next link %q does not point at the proxy", next)
 		}
 	}
+
 	if strings.Join(all, ",") != "repo-1,repo-2,repo-3" {
 		t.Errorf("items = %v", all)
 	}
+
 	for i := 1; i <= pages; i++ {
 		if auth := e.forgeAuth(i); auth != "Bearer "+forgeToken {
 			t.Errorf("page %d: forge saw %q", i, auth)
 		}
 	}
+
 	if issues, verifies := e.broker.counts(); issues != 1 || verifies != 1 {
 		t.Errorf("broker calls: issue=%d verify=%d", issues, verifies)
 	}
@@ -591,6 +685,7 @@ func TestLogsAndSecrets(t *testing.T) {
 			t.Errorf("logs contain %q:\n%s", secret, logs)
 		}
 	}
+
 	for _, want := range []string{"connection=conn1", "method=GET", "path=/c/conn1/user", "status=200", "status=401", "duration="} {
 		if !strings.Contains(logs, want) {
 			t.Errorf("logs lack %q:\n%s", want, logs)
@@ -604,15 +699,18 @@ func TestHealthz(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK || strings.TrimSpace(string(body)) != "ok" {
 		t.Errorf("healthz = %d %q", resp.StatusCode, body)
 	}
+
 	resp, err = http.Post(e.proxy.URL+"/healthz", "text/plain", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusMethodNotAllowed {
 		t.Errorf("POST healthz = %d", resp.StatusCode)
@@ -627,6 +725,7 @@ func TestHealthzWhileStopping(t *testing.T) {
 	if err == nil || srv != nil {
 		t.Fatal("New without a broker must fail")
 	}
+
 	e := newEnv(t, options{})
 	server, _ := service.New(service.Config{Broker: e.adapter, Registry: registry(t)})
 	server.SetStopping()
@@ -649,15 +748,19 @@ func (e *env) git(t *testing.T, method, path, contentType string) int {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	req.Header.Set("Authorization", "Bearer "+callerToken)
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	resp.Body.Close()
+
 	return resp.StatusCode
 }
 
@@ -670,11 +773,13 @@ func TestGitRoute(t *testing.T) {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
+
 		w.Header().Set("Content-Type", "application/x-git-upload-pack-advertisement")
 	})
 	if code := e.git(t, http.MethodGet, "/g/"+connID+"/o/r.git/info/refs?service=git-upload-pack", ""); code != 200 {
 		t.Fatalf("status = %d", code)
 	}
+
 	want := http.Header{}
 	github.SetGitToken(want, forgeToken)
 	if e.forgeAuth(1) != want.Get("Authorization") {
@@ -687,16 +792,19 @@ func TestGitRoute(t *testing.T) {
 	if code := e.git(t, http.MethodPost, "/g/"+connID+"/o/r.git/git-receive-pack", "application/x-git-receive-pack-request"); code != 404 {
 		t.Errorf("push status = %d", code)
 	}
+
 	// A forge 401 on the Git route drops the cached token too.
 	e.broker.set(func() { e.broker.forgeToken = "stale" })
 	e.clock.advance(2 * time.Hour)
 	if code := e.git(t, http.MethodPost, "/g/"+connID+"/o/r.git/git-upload-pack", "application/x-git-upload-pack-request"); code != 401 {
 		t.Fatalf("stale status = %d", code)
 	}
+
 	e.broker.set(func() { e.broker.forgeToken = forgeToken })
 	if code := e.git(t, http.MethodPost, "/g/"+connID+"/o/r.git/git-upload-pack", "application/x-git-upload-pack-request"); code != 200 {
 		t.Fatalf("refreshed status = %d", code)
 	}
+
 	// Git responses can be flushed before the handler writes its final log.
 	e.proxy.Close()
 	if logs := e.logs.String(); !strings.Contains(logs, "connection="+connID) || strings.Contains(logs, "service=") {

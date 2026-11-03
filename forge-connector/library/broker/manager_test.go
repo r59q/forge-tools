@@ -49,13 +49,16 @@ func setup(t *testing.T, provider forgeauth.Provider) *fixture {
 		if r.Method != http.MethodGet || r.URL.Path != "/user" {
 			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
 			http.NotFound(w, r)
+
 			return
 		}
+
 		token, ok := provider.TokenFromHeader(r.Header)
 		status := int(f.status.Load())
 		if !ok || (token != string(oldToken) && token != string(newToken)) {
 			status = http.StatusUnauthorized
 		}
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
 		if status != http.StatusOK {
@@ -63,6 +66,7 @@ func setup(t *testing.T, provider forgeauth.Provider) *fixture {
 			_ = json.NewEncoder(w).Encode(map[string]string{"message": "rejected " + token})
 			return
 		}
+
 		name := "First identity"
 		if token == string(newToken) {
 			name = "Rotated identity"
@@ -70,27 +74,42 @@ func setup(t *testing.T, provider forgeauth.Provider) *fixture {
 		if f.echo.Load() {
 			name = "echo " + token
 		}
+
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"id": 42, "login": "owner", "username": "owner", "name": name, "full_name": name, "email": "owner@example.com",
+			"id":        42,
+			"login":     "owner",
+			"username":  "owner",
+			"name":      name,
+			"full_name": name,
+			"email":     "owner@example.com",
 		})
 	}))
 	t.Cleanup(srv.Close)
-	f.forge = broker.Forge{ID: "forge", Kind: provider.Kind(), BaseURL: srv.URL, Name: "Test forge", GitBaseURL: srv.URL + "/git"}
+	f.forge = broker.Forge{
+		ID:         "forge",
+		Kind:       provider.Kind(),
+		BaseURL:    srv.URL,
+		Name:       "Test forge",
+		GitBaseURL: srv.URL + "/git",
+	}
 	if err := f.store.CreateForge(f.ctx, f.forge); err != nil {
 		t.Fatal(err)
 	}
 	if err := f.registry.Register(provider); err != nil {
 		t.Fatal(err)
 	}
+
 	var err error
 	f.sealer, err = broker.NewAESGCMSealer(bytes.Repeat([]byte{0x42}, 32))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	f.manager, err = broker.NewManager(f.store, f.sealer, f.registry)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return f
 }
 
@@ -100,6 +119,7 @@ func (f *fixture) connection(t *testing.T) broker.Connection {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return conn
 }
 
@@ -112,10 +132,12 @@ func (f *fixture) client(t *testing.T, scope []broker.ID, issue bool) (broker.Cl
 	if client.ID == "" || token == "" || client.TokenHash != [32]byte{} {
 		t.Fatal("CreateClient returned incomplete metadata or a hash")
 	}
+
 	stored, err := f.store.GetClient(f.ctx, client.ID)
 	if err != nil || stored.TokenHash != sha256.Sum256([]byte(token)) {
 		t.Fatal("client token was not hashed correctly")
 	}
+
 	return client, token
 }
 
@@ -124,26 +146,34 @@ func TestConnectionLifecycle(t *testing.T) {
 		t.Run(string(provider.Kind()), func(t *testing.T) {
 			f := setup(t, provider)
 			conn := f.connection(t)
-			if conn.ID == "" || conn.ForgeID != f.forge.ID || conn.Status != broker.StatusOK || conn.Identity.ID != "42" || conn.Identity.Login != "owner" || conn.CreatedAt.IsZero() || conn.CheckedAt != conn.CreatedAt {
+			if conn.ID == "" ||
+				conn.ForgeID != f.forge.ID || conn.Status != broker.StatusOK || conn.Identity.ID != "42" || conn.Identity.Login != "owner" || conn.CreatedAt.IsZero() || conn.CheckedAt != conn.CreatedAt {
 				t.Fatalf("CreateConnection = %+v", conn)
 			}
+
 			sealed, err := f.store.GetCredential(f.ctx, conn.ID)
 			if err != nil || bytes.Contains(sealed, []byte(oldToken)) {
 				t.Fatal("stored credential is not sealed")
 			}
+
 			tested, err := f.manager.TestConnection(f.ctx, conn.ID)
 			if err != nil || tested.Status != broker.StatusOK || tested.CheckedAt.Before(conn.CheckedAt) || tested.CreatedAt != conn.CreatedAt {
 				t.Fatalf("TestConnection = %+v, %v", tested, err)
 			}
+
 			_, clientToken := f.client(t, []broker.ID{conn.ID}, true)
 			issued, err := f.manager.IssueToken(f.ctx, clientToken, conn.ID)
-			if err != nil || issued.Kind != provider.Kind() || issued.BaseURL != f.forge.BaseURL || issued.GitBaseURL != f.forge.GitBaseURL || issued.Token != oldToken {
+			if err != nil ||
+				issued.Kind != provider.Kind() || issued.BaseURL != f.forge.BaseURL || issued.GitBaseURL != f.forge.GitBaseURL || issued.Token != oldToken {
 				t.Fatalf("IssueToken failed: %v", err)
 			}
+
 			rotated, err := f.manager.RotateCredential(f.ctx, conn.ID, newToken)
-			if err != nil || rotated.Status != broker.StatusOK || rotated.Identity.Name != "Rotated identity" || rotated.CreatedAt != conn.CreatedAt || rotated.CheckedAt.Before(tested.CheckedAt) {
+			if err != nil ||
+				rotated.Status != broker.StatusOK || rotated.Identity.Name != "Rotated identity" || rotated.CreatedAt != conn.CreatedAt || rotated.CheckedAt.Before(tested.CheckedAt) {
 				t.Fatalf("RotateCredential = %+v, %v", rotated, err)
 			}
+
 			issued, err = f.manager.IssueToken(f.ctx, clientToken, conn.ID)
 			if err != nil || issued.Token != newToken {
 				t.Fatal("IssueToken did not return replacement")
@@ -174,17 +204,26 @@ func TestRejectInvalidCredentials(t *testing.T) {
 		if !errors.Is(err, broker.ErrInvalidCredential) || conn != (broker.Connection{}) {
 			t.Fatalf("invalid credential accepted: %v", err)
 		}
+
 		assertNoSecret(t, err, string(token))
 	}
+
 	connections, err := f.store.ListConnections(f.ctx)
 	if err != nil || len(connections) != 0 {
 		t.Fatal("failed creation persisted a connection")
 	}
+
 	conn := f.connection(t)
 	sealed, _ := f.store.GetCredential(f.ctx, conn.ID)
-	if result, err := f.manager.RotateCredential(f.ctx, conn.ID, "invalid-secret"); !errors.Is(err, broker.ErrInvalidCredential) || result != (broker.Connection{}) {
+	if result, err := f.manager.RotateCredential(
+		f.ctx,
+		conn.ID,
+		"invalid-secret",
+	); !errors.Is(err, broker.ErrInvalidCredential) ||
+		result != (broker.Connection{}) {
 		t.Fatalf("invalid rotation accepted: %v", err)
 	}
+
 	after, _ := f.store.GetConnection(f.ctx, conn.ID)
 	afterSealed, _ := f.store.GetCredential(f.ctx, conn.ID)
 	if after != conn || !bytes.Equal(sealed, afterSealed) {
@@ -209,9 +248,11 @@ func TestConnectionStatus(t *testing.T) {
 			_, token := f.client(t, []broker.ID{conn.ID}, true)
 			f.status.Store(int32(tc.code))
 			checked, err := f.manager.TestConnection(f.ctx, conn.ID)
-			if !errors.Is(err, tc.cause) || checked.Status != tc.status || checked.CheckedAt.Before(conn.CheckedAt) || checked.Identity != conn.Identity {
+			if !errors.Is(err, tc.cause) ||
+				checked.Status != tc.status || checked.CheckedAt.Before(conn.CheckedAt) || checked.Identity != conn.Identity {
 				t.Fatalf("TestConnection = %+v, %v", checked, err)
 			}
+
 			assertNoSecret(t, err, string(oldToken))
 			stored, err := f.store.GetConnection(f.ctx, conn.ID)
 			if err != nil || stored != checked {
@@ -223,6 +264,7 @@ func TestConnectionStatus(t *testing.T) {
 			if _, err := f.manager.IssueToken(f.ctx, token, conn.ID); !errors.Is(err, broker.ErrUnavailable) {
 				t.Fatalf("unhealthy token issued: %v", err)
 			}
+
 			f.status.Store(http.StatusOK)
 			recovered, err := f.manager.TestConnection(f.ctx, conn.ID)
 			if err != nil || recovered.Status != broker.StatusOK {
@@ -242,6 +284,7 @@ func TestClientAuthorization(t *testing.T) {
 	if issueToken == verifyToken || issueToken == emptyToken {
 		t.Fatal("client tokens are not unique")
 	}
+
 	for _, tc := range []struct {
 		name   string
 		token  forgeauth.StaticToken
@@ -266,6 +309,7 @@ func TestClientAuthorization(t *testing.T) {
 			if tc.verify == nil && (client.ID == "" || client.TokenHash != [32]byte{}) {
 				t.Fatal("VerifyClient returned missing metadata or hash")
 			}
+
 			issued, err := f.manager.IssueToken(f.ctx, tc.token, tc.conn)
 			if !errors.Is(err, tc.issue) {
 				t.Fatalf("IssueToken error = %v, want %v", err, tc.issue)
@@ -275,11 +319,18 @@ func TestClientAuthorization(t *testing.T) {
 			}
 		})
 	}
+
 	before := f.requests.Load()
 	if _, err := f.manager.VerifyClient(f.ctx, issueToken, conn.ID); err != nil || f.requests.Load() != before {
 		t.Fatal("VerifyClient contacted forge")
 	}
-	if _, token, err := f.manager.CreateClient(f.ctx, "bad scope", []broker.ID{"missing"}, true); !errors.Is(err, broker.ErrNotFound) || token != "" {
+	if _, token, err := f.manager.CreateClient(
+		f.ctx,
+		"bad scope",
+		[]broker.ID{"missing"},
+		true,
+	); !errors.Is(err, broker.ErrNotFound) ||
+		token != "" {
 		t.Fatal("client with missing connection created")
 	}
 	if err := f.manager.DeleteClient(f.ctx, issuer.ID); err != nil {
@@ -300,6 +351,7 @@ func TestClientForAllConnections(t *testing.T) {
 	if err != nil || token == "" || !client.AllConnections || len(client.Connections) != 0 || client.TokenHash != [32]byte{} {
 		t.Fatalf("CreateClientForAll = %+v, %v", client, err)
 	}
+
 	after := f.connection(t)
 	for _, id := range []broker.ID{before.ID, after.ID} {
 		if _, err := f.manager.VerifyClient(f.ctx, token, id); err != nil {
@@ -309,13 +361,16 @@ func TestClientForAllConnections(t *testing.T) {
 			t.Fatalf("IssueToken(%s) = %v", id, err)
 		}
 	}
+
 	if _, err := f.manager.VerifyClient(f.ctx, token, "missing"); !errors.Is(err, broker.ErrNotFound) {
 		t.Fatalf("VerifyClient(missing) = %v", err)
 	}
+
 	got, err := f.manager.ClientConnections(f.ctx, token)
 	if err != nil || len(got) != 2 {
 		t.Fatalf("ClientConnections = %+v, %v", got, err)
 	}
+
 	_, reader, err := f.manager.CreateClientForAll(f.ctx, "reader", false)
 	if err != nil {
 		t.Fatal(err)
@@ -323,6 +378,7 @@ func TestClientForAllConnections(t *testing.T) {
 	if _, err := f.manager.IssueToken(f.ctx, reader, after.ID); !errors.Is(err, broker.ErrForbidden) {
 		t.Fatalf("IssueToken without grant = %v", err)
 	}
+
 	clients, err := f.manager.ListClients(f.ctx)
 	if err != nil || len(clients) != 2 || !clients[0].AllConnections {
 		t.Fatalf("ListClients = %+v, %v", clients, err)
@@ -338,7 +394,13 @@ func TestRegisterClient(t *testing.T) {
 			t.Fatalf("RegisterClient(%q) = %v", bad, err)
 		}
 	}
-	client, err := f.manager.RegisterClient(f.ctx, broker.Client{ID: "ignored", Name: "proxy", AllConnections: true, CanIssueTokens: true}, token)
+
+	client, err := f.manager.RegisterClient(f.ctx, broker.Client{
+		ID:             "ignored",
+		Name:           "proxy",
+		AllConnections: true,
+		CanIssueTokens: true,
+	}, token)
 	if err != nil || client.ID == "ignored" || client.ID == "" || !client.AllConnections || client.TokenHash != [32]byte{} {
 		t.Fatalf("RegisterClient = %+v, %v", client, err)
 	}
@@ -348,7 +410,11 @@ func TestRegisterClient(t *testing.T) {
 	if _, err := f.manager.RegisterClient(f.ctx, broker.Client{Name: "copy"}, token); !errors.Is(err, broker.ErrConflict) {
 		t.Fatalf("duplicate token = %v", err)
 	}
-	if _, err := f.manager.RegisterClient(f.ctx, broker.Client{Name: "both", AllConnections: true, Connections: []broker.ID{conn.ID}}, token+"b"); !errors.Is(err, broker.ErrInvalid) {
+	if _, err := f.manager.RegisterClient(f.ctx, broker.Client{
+		Name:           "both",
+		AllConnections: true,
+		Connections:    []broker.ID{conn.ID},
+	}, token+"b"); !errors.Is(err, broker.ErrInvalid) {
 		t.Fatalf("all and listed connections = %v", err)
 	}
 	if clients, _ := f.manager.ListClients(f.ctx); len(clients) != 1 {
@@ -366,13 +432,25 @@ func TestClientConnections(t *testing.T) {
 	if _, err := f.manager.TestConnection(f.ctx, b.ID); err == nil {
 		t.Fatal("revocation not detected")
 	}
+
 	got, err := f.manager.ClientConnections(f.ctx, token)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	want := []broker.ClientConnection{
-		{ID: a.ID, Name: "Connection", Kind: forgeauth.GitLab, Status: broker.StatusOK},
-		{ID: b.ID, Name: "Connection", Kind: forgeauth.GitLab, Status: broker.StatusRevoked},
+		{
+			ID:     a.ID,
+			Name:   "Connection",
+			Kind:   forgeauth.GitLab,
+			Status: broker.StatusOK,
+		},
+		{
+			ID:     b.ID,
+			Name:   "Connection",
+			Kind:   forgeauth.GitLab,
+			Status: broker.StatusRevoked,
+		},
 	}
 	if a.ID > b.ID {
 		want[0], want[1] = want[1], want[0]
@@ -380,15 +458,18 @@ func TestClientConnections(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("ClientConnections = %+v, want %+v", got, want)
 	}
+
 	_, emptyToken := f.client(t, nil, false)
 	if got, err := f.manager.ClientConnections(f.ctx, emptyToken); err != nil || got == nil || len(got) != 0 {
 		t.Fatalf("empty scope = %+v, %v", got, err)
 	}
+
 	for _, token := range []forgeauth.StaticToken{"", "unknown", oldToken} {
 		if _, err := f.manager.ClientConnections(f.ctx, token); !errors.Is(err, broker.ErrUnauthorized) {
 			t.Fatalf("token %q: %v", token, err)
 		}
 	}
+
 	if err := f.manager.DeleteConnection(f.ctx, a.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -405,15 +486,18 @@ func TestSecretsAreWriteOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	rotated, err := f.manager.RotateCredential(f.ctx, conn.ID, newToken)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	client, clientToken := f.client(t, []broker.ID{conn.ID}, true)
 	verified, err := f.manager.VerifyClient(f.ctx, clientToken, conn.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	getConn, _ := f.store.GetConnection(f.ctx, conn.ID)
 	listConn, _ := f.store.ListConnections(f.ctx)
 	getClient, _ := f.store.GetClient(f.ctx, client.ID)
@@ -424,10 +508,12 @@ func TestSecretsAreWriteOnly(t *testing.T) {
 	for _, value := range []any{conn, checked, rotated, client, verified, getConn, listConn, getClient, listClient, forge, forges, sealed, f.manager, f.store, f.sealer} {
 		assertNoSecret(t, value, string(oldToken), string(newToken), string(clientToken))
 	}
+
 	issued, err := f.manager.IssueToken(f.ctx, clientToken, conn.ID)
 	if err != nil || issued.Token != newToken {
 		t.Fatal("IssueToken did not explicitly return secret")
 	}
+
 	// Explicit issuance and one-time bootstrap remain safe to format or log.
 	assertFormattedNoSecret(t, issued, string(newToken))
 	assertFormattedNoSecret(t, clientToken, string(clientToken))
@@ -473,10 +559,12 @@ func assertFormattedNoSecret(t *testing.T, value any, secrets ...string) {
 	for _, format := range []string{"%v", "%+v", "%#v", "%s", "%q", "%x"} {
 		fmt.Fprintf(&output, format, value)
 	}
+
 	encoded, err := json.Marshal(value)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	output.Write(encoded)
 	slog.New(slog.NewJSONHandler(&output, nil)).Info("value", "data", value)
 	slog.New(slog.NewTextHandler(&output, nil)).Info("value", "data", value)
@@ -498,6 +586,7 @@ func TestManagerMissingAndCanceled(t *testing.T) {
 			t.Fatal("missing dependency accepted")
 		}
 	}
+
 	ctx, cancel := context.WithCancel(f.ctx)
 	cancel()
 	for _, tc := range []struct {
@@ -505,9 +594,18 @@ func TestManagerMissingAndCanceled(t *testing.T) {
 		want error
 	}{{f.ctx, broker.ErrNotFound}, {ctx, context.Canceled}} {
 		operations := []func() error{
-			func() error { _, err := f.manager.CreateConnection(tc.ctx, "missing", "", oldToken); return err },
-			func() error { _, err := f.manager.TestConnection(tc.ctx, "missing"); return err },
-			func() error { _, err := f.manager.RotateCredential(tc.ctx, "missing", newToken); return err },
+			func() error {
+				_, err := f.manager.CreateConnection(tc.ctx, "missing", "", oldToken)
+				return err
+			},
+			func() error {
+				_, err := f.manager.TestConnection(tc.ctx, "missing")
+				return err
+			},
+			func() error {
+				_, err := f.manager.RotateCredential(tc.ctx, "missing", newToken)
+				return err
+			},
 			func() error { return f.manager.DeleteConnection(tc.ctx, "missing") },
 			func() error { return f.manager.DeleteClient(tc.ctx, "missing") },
 		}
@@ -517,6 +615,7 @@ func TestManagerMissingAndCanceled(t *testing.T) {
 			}
 		}
 	}
+
 	if _, token, err := f.manager.CreateClient(ctx, "", nil, false); !errors.Is(err, context.Canceled) || token != "" {
 		t.Fatal("canceled client creation returned token")
 	}
@@ -547,13 +646,16 @@ func TestDependencyFailuresAndTampering(t *testing.T) {
 	} else {
 		assertNoSecret(t, err, string(oldToken))
 	}
+
 	if _, err := badSealer.RotateCredential(f.ctx, conn.ID, newToken); !errors.Is(err, broker.ErrSealing) {
 		t.Fatal("rotation sealing failure ignored")
 	}
+
 	issued, err := f.manager.IssueToken(f.ctx, clientToken, conn.ID)
 	if err != nil || issued.Token != oldToken {
 		t.Fatal("failed sealing destroyed existing token")
 	}
+
 	badStore, err := broker.NewManager(failingStore{f.store}, f.sealer, f.registry)
 	if err != nil {
 		t.Fatal(err)
@@ -563,6 +665,7 @@ func TestDependencyFailuresAndTampering(t *testing.T) {
 	} else {
 		assertNoSecret(t, err, string(oldToken))
 	}
+
 	sealed, _ := f.store.GetCredential(f.ctx, conn.ID)
 	sealed[len(sealed)-1] ^= 1
 	if err := f.store.UpdateConnection(f.ctx, conn, sealed); err != nil {
@@ -571,7 +674,12 @@ func TestDependencyFailuresAndTampering(t *testing.T) {
 	if _, err := f.manager.VerifyClient(f.ctx, clientToken, conn.ID); err != nil {
 		t.Fatal("VerifyClient tried to decrypt credentials")
 	}
-	if result, err := f.manager.IssueToken(f.ctx, clientToken, conn.ID); !errors.Is(err, broker.ErrSealing) || result != (broker.IssuedToken{}) {
+	if result, err := f.manager.IssueToken(
+		f.ctx,
+		clientToken,
+		conn.ID,
+	); !errors.Is(err, broker.ErrSealing) ||
+		result != (broker.IssuedToken{}) {
 		t.Fatal("tampered token issued")
 	}
 	if _, err := f.manager.TestConnection(f.ctx, conn.ID); !errors.Is(err, broker.ErrSealing) {
@@ -601,5 +709,6 @@ func TestTransportErrorRedaction(t *testing.T) {
 	if !errors.Is(err, broker.ErrInvalidCredential) {
 		t.Fatal("transport error ignored")
 	}
+
 	assertNoSecret(t, err, string(oldToken))
 }

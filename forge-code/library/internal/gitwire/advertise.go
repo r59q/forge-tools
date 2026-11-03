@@ -3,6 +3,7 @@ package gitwire
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -33,6 +34,7 @@ func (c Capabilities) Value(name string) (string, bool) {
 			return v, true
 		}
 	}
+
 	return "", false
 }
 
@@ -54,16 +56,20 @@ func Advertise(ctx context.Context, hc *http.Client, repoURL string) (*Advertise
 	if err != nil {
 		return nil, err
 	}
+
 	u.RawQuery = "service=git-receive-pack"
 	req, err := newRequest(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, err
 	}
+
 	resp, err := do(hc, req, receivePackAdvertisement)
 	if err != nil {
 		return nil, err
 	}
+
 	defer resp.Body.Close()
+
 	return parseAdvertisement(resp.Body)
 }
 
@@ -73,65 +79,104 @@ func parseAdvertisement(r io.Reader) (*Advertisement, error) {
 	if err := skipServiceHeader(pr, "git-receive-pack"); err != nil {
 		return nil, err
 	}
-	a := &Advertisement{Refs: map[string]gitobj.ID{}}
-	first := true
+
+	p := &advertParser{a: &Advertisement{Refs: map[string]gitobj.ID{}}, first: true}
 	for {
 		kind, data, err := pr.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return nil, protoErr("advertisement ended without flush")
 		}
 		if err != nil {
 			return nil, err
 		}
 		if kind == PktFlush {
-			return a, nil
+			return p.a, nil
 		}
 		if kind != PktData {
 			return nil, protoErr("unexpected special pkt-line in advertisement")
 		}
-		line := trimLF(data)
-		if bytes.HasPrefix(line, []byte("ERR ")) {
-			return nil, remoteError(line[4:])
-		}
-		if first && string(line) == "version 1" {
-			continue
-		}
-		if first {
-			first = false
-			var caps []byte
-			line, caps, _ = bytes.Cut(line, []byte{0})
-			a.Caps = parseCaps(caps)
-			if f, ok := a.Caps.Value("object-format"); ok && f != "sha1" {
-				return nil, fmt.Errorf("%w: object format %q", ErrUnsupported, clean([]byte(f)))
-			}
-		} else if bytes.IndexByte(line, 0) >= 0 {
-			return nil, protoErr("capabilities after the first ref")
-		}
-		id, name, err := parseRefLine(line)
-		if err != nil {
+		if err := p.line(trimLF(data)); err != nil {
 			return nil, err
 		}
-		if name == "capabilities^{}" {
-			if !id.IsZero() || len(a.Refs) > 0 {
-				return nil, protoErr("misplaced capabilities^{} line")
-			}
-			continue
-		}
-		if name == ".have" || strings.HasSuffix(name, "^{}") {
-			continue
-		}
-		if _, dup := a.Refs[name]; dup {
-			return nil, protoErr("duplicate ref %q", clean([]byte(name)))
-		}
-		a.Refs[name] = id
 	}
+}
+
+// advertParser collects the refs and capabilities of an advertisement.
+type advertParser struct {
+	a     *Advertisement
+	first bool
+}
+
+// line parses one advertisement line.
+func (p *advertParser) line(line []byte) error {
+	if bytes.HasPrefix(line, []byte("ERR ")) {
+		return remoteError(line[4:])
+	}
+	if p.first && string(line) == "version 1" {
+		return nil
+	}
+
+	line, err := p.splitCaps(line)
+	if err != nil {
+		return err
+	}
+
+	id, name, err := parseRefLine(line)
+	if err != nil {
+		return err
+	}
+
+	return p.addRef(id, name)
+}
+
+// splitCaps reads the capabilities after the first ref and returns the
+// line without them.
+func (p *advertParser) splitCaps(line []byte) ([]byte, error) {
+	if !p.first {
+		if bytes.IndexByte(line, 0) >= 0 {
+			return nil, protoErr("capabilities after the first ref")
+		}
+
+		return line, nil
+	}
+
+	p.first = false
+	line, caps, _ := bytes.Cut(line, []byte{0})
+	p.a.Caps = parseCaps(caps)
+	if f, ok := p.a.Caps.Value("object-format"); ok && f != "sha1" {
+		return nil, fmt.Errorf("%w: object format %q", ErrUnsupported, clean([]byte(f)))
+	}
+
+	return line, nil
+}
+
+// addRef records ref name, skipping ".have", peeled and capability lines.
+func (p *advertParser) addRef(id gitobj.ID, name string) error {
+	if name == "capabilities^{}" {
+		if !id.IsZero() || len(p.a.Refs) > 0 {
+			return protoErr("misplaced capabilities^{} line")
+		}
+
+		return nil
+	}
+
+	if name == ".have" || strings.HasSuffix(name, "^{}") {
+		return nil
+	}
+	if _, dup := p.a.Refs[name]; dup {
+		return protoErr("duplicate ref %q", clean([]byte(name)))
+	}
+
+	p.a.Refs[name] = id
+
+	return nil
 }
 
 // skipServiceHeader reads the "# service=NAME" line and the flush after
 // it.
 func skipServiceHeader(pr *PktReader, service string) error {
 	kind, data, err := pr.Next()
-	if err == io.EOF {
+	if errors.Is(err, io.EOF) {
 		return protoErr("empty advertisement")
 	}
 	if err != nil {
@@ -141,8 +186,10 @@ func skipServiceHeader(pr *PktReader, service string) error {
 		if kind == PktData && bytes.HasPrefix(data, []byte("ERR ")) {
 			return remoteError(trimLF(data[4:]))
 		}
+
 		return protoErr("not a smart HTTP %s advertisement", service)
 	}
+
 	return skipToFlush(pr)
 }
 
@@ -151,7 +198,7 @@ func skipServiceHeader(pr *PktReader, service string) error {
 func skipToFlush(pr *PktReader) error {
 	for {
 		kind, _, err := pr.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return protoErr("service header without flush")
 		}
 		if err != nil {
@@ -169,10 +216,12 @@ func parseRefLine(line []byte) (gitobj.ID, string, error) {
 	if !ok || len(name) == 0 || bytes.ContainsAny(name, " \x00\n") {
 		return gitobj.ID{}, "", protoErr("bad ref line %q", clean(line))
 	}
+
 	id, err := gitobj.ParseID(string(hex))
 	if err != nil {
 		return gitobj.ID{}, "", protoErr("bad ref line %q", clean(line))
 	}
+
 	return id, string(name), nil
 }
 
@@ -182,6 +231,7 @@ func parseCaps(b []byte) Capabilities {
 	if len(f) == 0 {
 		return nil
 	}
+
 	return Capabilities(f)
 }
 
@@ -198,5 +248,6 @@ func (c *countingReader) Read(p []byte) (int, error) {
 	if c.n > c.max {
 		return n, fmt.Errorf("%w: response over %d bytes", ErrTooLarge, c.max)
 	}
+
 	return n, err
 }

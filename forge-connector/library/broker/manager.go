@@ -34,6 +34,7 @@ func NewManager(store Store, sealer Sealer, registry *forgeauth.Registry) (*Mana
 	if store == nil || sealer == nil || registry == nil {
 		return nil, ErrInvalid
 	}
+
 	return &Manager{store: store, sealer: sealer, registry: registry}, nil
 }
 
@@ -50,23 +51,32 @@ func (m *Manager) CreateConnection(ctx context.Context, forgeID ID, name string,
 	if err != nil {
 		return Connection{}, safeError(err, ErrStorage)
 	}
+
 	identity, err := m.whoami(ctx, forge, token)
 	if err != nil {
 		return Connection{}, err
 	}
+
 	id := randomID()
 	sealed, err := m.seal(token)
 	if err != nil {
 		return Connection{}, err
 	}
+
 	now := time.Now().UTC()
 	conn := Connection{
-		ID: id, ForgeID: forgeID, Name: name, Identity: identity,
-		Status: StatusOK, CheckedAt: now, CreatedAt: now,
+		ID:        id,
+		ForgeID:   forgeID,
+		Name:      name,
+		Identity:  identity,
+		Status:    StatusOK,
+		CheckedAt: now,
+		CreatedAt: now,
 	}
 	if err := m.store.CreateConnection(ctx, conn, sealed); err != nil {
 		return Connection{}, safeError(err, ErrStorage)
 	}
+
 	return conn, nil
 }
 
@@ -81,23 +91,28 @@ func (m *Manager) TestConnection(ctx context.Context, id ID) (Connection, error)
 	if err != nil {
 		return Connection{}, err
 	}
+
 	token, err := m.credential(ctx, id)
 	if err != nil {
 		return Connection{}, err
 	}
+
 	identity, checkErr := m.whoami(ctx, forge, token)
 	conn.CheckedAt = time.Now().UTC()
 	conn.Status = StatusOK
-	if checkErr == nil {
+	switch {
+	case checkErr == nil:
 		conn.Identity = identity
-	} else if errors.Is(checkErr, forgehttp.ErrUnauthorized) || errors.Is(checkErr, forgehttp.ErrForbidden) {
+	case errors.Is(checkErr, forgehttp.ErrUnauthorized), errors.Is(checkErr, forgehttp.ErrForbidden):
 		conn.Status = StatusRevoked
-	} else {
+	default:
 		conn.Status = StatusInvalid
 	}
+
 	if err := m.store.UpdateConnection(ctx, conn, nil); err != nil {
 		return Connection{}, safeError(err, ErrStorage)
 	}
+
 	return conn, checkErr
 }
 
@@ -111,20 +126,24 @@ func (m *Manager) RotateCredential(ctx context.Context, id ID, token forgeauth.S
 	if err != nil {
 		return Connection{}, err
 	}
+
 	identity, err := m.whoami(ctx, forge, token)
 	if err != nil {
 		return Connection{}, err
 	}
+
 	sealed, err := m.seal(token)
 	if err != nil {
 		return Connection{}, err
 	}
+
 	conn.Identity = identity
 	conn.Status = StatusOK
 	conn.CheckedAt = time.Now().UTC()
 	if err := m.store.UpdateConnection(ctx, conn, sealed); err != nil {
 		return Connection{}, safeError(err, ErrStorage)
 	}
+
 	return conn, nil
 }
 
@@ -132,6 +151,7 @@ func (m *Manager) RotateCredential(ctx context.Context, id ID, token forgeauth.S
 func (m *Manager) DeleteConnection(ctx context.Context, id ID) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
 	return safeError(m.store.DeleteConnection(ctx, id), ErrStorage)
 }
 
@@ -139,8 +159,15 @@ func (m *Manager) DeleteConnection(ctx context.Context, id ID) error {
 // Only a SHA-256 hash is stored. This one-time bootstrap token is the exception to
 // write-only client credentials; it cannot be retrieved later. The token type
 // redacts fmt, slog and JSON output. The returned Client omits TokenHash.
-func (m *Manager) CreateClient(ctx context.Context, name string, connections []ID, canIssueTokens bool) (Client, forgeauth.StaticToken, error) {
-	return m.createClient(ctx, Client{Name: name, Connections: slices.Clone(connections), CanIssueTokens: canIssueTokens}, "")
+func (m *Manager) CreateClient(
+	ctx context.Context,
+	name string,
+	connections []ID,
+	canIssueTokens bool,
+) (Client, forgeauth.StaticToken, error) {
+	client := Client{Name: name, Connections: slices.Clone(connections), CanIssueTokens: canIssueTokens}
+
+	return m.createClient(ctx, client, "")
 }
 
 // CreateClientForAll creates a client granted every connection, including
@@ -162,10 +189,14 @@ func (m *Manager) RegisterClient(ctx context.Context, client Client, token forge
 	if len(token) < MinClientTokenLength || strings.IndexFunc(string(token), func(r rune) bool { return r <= ' ' || r >= 0x7f }) >= 0 {
 		return Client{}, ErrInvalid
 	}
+
 	created, _, err := m.createClient(ctx, Client{
-		Name: client.Name, Connections: slices.Clone(client.Connections),
-		AllConnections: client.AllConnections, CanIssueTokens: client.CanIssueTokens,
+		Name:           client.Name,
+		Connections:    slices.Clone(client.Connections),
+		AllConnections: client.AllConnections,
+		CanIssueTokens: client.CanIssueTokens,
 	}, token)
+
 	return created, err
 }
 
@@ -182,11 +213,13 @@ func (m *Manager) createClient(ctx context.Context, client Client, token forgeau
 	} else if !errors.Is(err, ErrUnauthorized) {
 		return Client{}, "", err
 	}
+
 	client.ID = randomID()
 	client.TokenHash = sha256.Sum256([]byte(token))
 	if err := m.store.CreateClient(ctx, client); err != nil {
 		return Client{}, "", safeError(err, ErrStorage)
 	}
+
 	return clientMetadata(client), token, nil
 }
 
@@ -194,6 +227,7 @@ func (m *Manager) createClient(ctx context.Context, client Client, token forgeau
 func (m *Manager) DeleteClient(ctx context.Context, id ID) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
 	return safeError(m.store.DeleteClient(ctx, id), ErrStorage)
 }
 
@@ -208,6 +242,7 @@ func (m *Manager) VerifyClient(ctx context.Context, token forgeauth.StaticToken,
 	if err != nil {
 		return Client{}, err
 	}
+
 	return clientMetadata(client), nil
 }
 
@@ -239,16 +274,25 @@ func (m *Manager) IssueToken(ctx context.Context, clientToken forgeauth.StaticTo
 	if !client.CanIssueTokens {
 		return IssuedToken{}, ErrForbidden
 	}
+
 	_, forge, err := m.connection(ctx, connectionID)
 	if err != nil {
 		return IssuedToken{}, err
 	}
+
 	token, err := m.credential(ctx, connectionID)
 	if err != nil {
 		return IssuedToken{}, err
 	}
+
 	forge = withGitDefault(forge)
-	return IssuedToken{Kind: forge.Kind, BaseURL: forge.BaseURL, GitBaseURL: forge.GitBaseURL, Token: token}, nil
+
+	return IssuedToken{
+		Kind:       forge.Kind,
+		BaseURL:    forge.BaseURL,
+		GitBaseURL: forge.GitBaseURL,
+		Token:      token,
+	}, nil
 }
 
 // ClientConnection is a connection as its client sees it: no credential,
@@ -274,16 +318,19 @@ func (m *Manager) ClientConnections(ctx context.Context, token forgeauth.StaticT
 	if err != nil {
 		return nil, err
 	}
+
 	ids := slices.Clone(client.Connections)
 	if client.AllConnections {
 		conns, err := m.store.ListConnections(ctx)
 		if err != nil {
 			return nil, safeError(err, ErrStorage)
 		}
+
 		for _, conn := range conns {
 			ids = append(ids, conn.ID)
 		}
 	}
+
 	slices.Sort(ids)
 	result := []ClientConnection{}
 	for _, id := range slices.Compact(ids) {
@@ -294,8 +341,15 @@ func (m *Manager) ClientConnections(ctx context.Context, token forgeauth.StaticT
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, ClientConnection{ID: conn.ID, Name: conn.Name, Kind: forge.Kind, Status: conn.Status})
+
+		result = append(result, ClientConnection{
+			ID:     conn.ID,
+			Name:   conn.Name,
+			Kind:   forge.Kind,
+			Status: conn.Status,
+		})
 	}
+
 	return result, nil
 }
 
@@ -307,6 +361,7 @@ func (m *Manager) verifyClient(ctx context.Context, token forgeauth.StaticToken,
 	if !matched.AllConnections && !slices.Contains(matched.Connections, connectionID) {
 		return Client{}, ErrForbidden
 	}
+
 	conn, err := m.store.GetConnection(ctx, connectionID)
 	if err != nil {
 		return Client{}, safeError(err, ErrStorage)
@@ -314,6 +369,7 @@ func (m *Manager) verifyClient(ctx context.Context, token forgeauth.StaticToken,
 	if conn.Status != StatusOK {
 		return Client{}, ErrUnavailable
 	}
+
 	return matched, nil
 }
 
@@ -323,6 +379,7 @@ func (m *Manager) authenticate(ctx context.Context, token forgeauth.StaticToken)
 	if err != nil {
 		return Client{}, safeError(err, ErrStorage)
 	}
+
 	hash := sha256.Sum256([]byte(token))
 	var matched Client
 	found := 0
@@ -332,11 +389,14 @@ func (m *Manager) authenticate(ctx context.Context, token forgeauth.StaticToken)
 		if equal == 1 {
 			matched = client
 		}
+
 		found |= equal
 	}
+
 	if found != 1 || token == "" {
 		return Client{}, ErrUnauthorized
 	}
+
 	return matched, nil
 }
 
@@ -345,10 +405,12 @@ func (m *Manager) connection(ctx context.Context, id ID) (Connection, Forge, err
 	if err != nil {
 		return Connection{}, Forge{}, safeError(err, ErrStorage)
 	}
+
 	forge, err := m.store.GetForge(ctx, conn.ForgeID)
 	if err != nil {
 		return Connection{}, Forge{}, safeError(err, ErrStorage)
 	}
+
 	return conn, forge, nil
 }
 
@@ -357,11 +419,13 @@ func (m *Manager) credential(ctx context.Context, id ID) (forgeauth.StaticToken,
 	if err != nil {
 		return "", safeError(err, ErrStorage)
 	}
+
 	plaintext, err := m.sealer.Open(sealed)
 	defer clear(plaintext)
 	if err != nil {
 		return "", ErrSealing
 	}
+
 	return forgeauth.StaticToken(plaintext), nil
 }
 
@@ -372,6 +436,7 @@ func (m *Manager) seal(token forgeauth.StaticToken) ([]byte, error) {
 	if err != nil {
 		return nil, ErrSealing
 	}
+
 	return sealed, nil
 }
 
@@ -380,21 +445,25 @@ func (m *Manager) whoami(ctx context.Context, forge Forge, token forgeauth.Stati
 	if err != nil {
 		return forgeauth.Identity{}, safeError(err, ErrInvalidCredential)
 	}
+
 	identity, err := m.registry.Whoami(ctx, session)
 	if err != nil {
 		return forgeauth.Identity{}, safeError(err, ErrInvalidCredential)
 	}
+
 	// A forge may echo a credential even in a successful response.
 	redact := func(value string) string {
 		if token == "" {
 			return value
 		}
+
 		return strings.ReplaceAll(value, string(token), "[REDACTED]")
 	}
 	identity.ID = redact(identity.ID)
 	identity.Login = redact(identity.Login)
 	identity.Name = redact(identity.Name)
 	identity.Email = redact(identity.Email)
+
 	return identity, nil
 }
 
@@ -411,6 +480,7 @@ func randomBytes(size int) []byte {
 	data := make([]byte, size)
 	// crypto/rand.Read always fills data and terminates on entropy failure.
 	_, _ = rand.Read(data)
+
 	return data
 }
 
@@ -420,6 +490,7 @@ func safeError(err, fallback error) error {
 	if err == nil {
 		return nil
 	}
+
 	for _, known := range []error{
 		context.Canceled, context.DeadlineExceeded,
 		ErrNotFound, ErrConflict, ErrInvalid,
@@ -431,5 +502,6 @@ func safeError(err, fallback error) error {
 			return fmt.Errorf("%w: %w", fallback, known)
 		}
 	}
+
 	return fallback
 }

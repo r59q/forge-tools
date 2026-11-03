@@ -2,8 +2,10 @@ package gitwire
 
 import (
 	"bytes"
+	"cmp"
 	"errors"
 	"io"
+	"maps"
 	"slices"
 	"strings"
 
@@ -23,7 +25,7 @@ func ParseCommands(r io.Reader) ([]Command, Capabilities, io.Reader, error) {
 	var caps Capabilities
 	for {
 		kind, data, err := pr.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return nil, nil, nil, protoErr("command list ended without flush")
 		}
 		if err != nil {
@@ -35,23 +37,28 @@ func ParseCommands(r io.Reader) ([]Command, Capabilities, io.Reader, error) {
 		if kind != PktData {
 			return nil, nil, nil, protoErr("unexpected special pkt-line in commands")
 		}
+
 		line := trimLF(data)
 		if len(cmds) == 0 {
 			var c []byte
 			line, c, _ = bytes.Cut(line, []byte{0})
 			caps = parseCaps(c)
 		}
+
 		f := strings.Split(string(line), " ")
 		if len(f) != 3 {
 			return nil, nil, nil, protoErr("bad command %q", clean(line))
 		}
+
 		old, err1 := gitobj.ParseID(f[0])
 		nw, err2 := gitobj.ParseID(f[1])
 		if err1 != nil || err2 != nil || !validRefName(f[2]) {
 			return nil, nil, nil, protoErr("bad command %q", clean(line))
 		}
+
 		cmds = append(cmds, Command{Name: f[2], Old: old, New: nw})
 	}
+
 	return cmds, caps, pr.Rest(), nil
 }
 
@@ -60,25 +67,35 @@ func ParseCommands(r io.Reader) ([]Command, Capabilities, io.Reader, error) {
 // "capabilities^{}" line when there are no refs.
 func WriteAdvertisement(w io.Writer, refs map[string]gitobj.ID, caps []string) error {
 	pw := NewPktWriter(w)
-	pw.Line("# service=git-receive-pack")
-	pw.Flush()
+	if err := pw.Line("# service=git-receive-pack"); err != nil {
+		return err
+	}
+	if err := pw.Flush(); err != nil {
+		return err
+	}
+	if err := pw.Lines(advertisedRefs(refs, caps)...); err != nil {
+		return err
+	}
+
+	return pw.Flush()
+}
+
+// advertisedRefs returns the ref lines of an advertisement, with caps
+// after a NUL on the first.
+func advertisedRefs(refs map[string]gitobj.ID, caps []string) []string {
 	c := "\x00" + strings.Join(caps, " ")
 	if len(refs) == 0 {
-		pw.Line(gitobj.ZeroID.String() + " capabilities^{}" + c)
+		return []string{gitobj.ID{}.String() + " capabilities^{}" + c}
 	}
-	names := make([]string, 0, len(refs))
-	for n := range refs {
-		names = append(names, n)
+
+	lines := make([]string, 0, len(refs))
+	for _, n := range sortedKeys(refs) {
+		lines = append(lines, refs[n].String()+" "+n)
 	}
-	slices.Sort(names)
-	for i, n := range names {
-		line := refs[n].String() + " " + n
-		if i == 0 {
-			line += c
-		}
-		pw.Line(line)
-	}
-	return pw.Flush()
+
+	lines[0] += c
+
+	return lines
 }
 
 // WriteReport writes r as report-status, with refs sorted by name. With
@@ -86,30 +103,8 @@ func WriteAdvertisement(w io.Writer, refs map[string]gitobj.ID, caps []string) e
 func WriteReport(w io.Writer, r *Report, sideband bool) error {
 	var buf bytes.Buffer
 	pw := NewPktWriter(&buf)
-	if r.UnpackOK {
-		pw.Line("unpack ok")
-	} else {
-		msg := r.Unpack
-		if msg == "" {
-			msg = "error"
-		}
-		pw.Line("unpack " + msg)
-	}
-	names := make([]string, 0, len(r.Refs))
-	for n := range r.Refs {
-		names = append(names, n)
-	}
-	slices.Sort(names)
-	for _, n := range names {
-		if st := r.Refs[n]; st.OK {
-			pw.Line("ok " + n)
-		} else {
-			reason := st.Reason
-			if reason == "" {
-				reason = "rejected"
-			}
-			pw.Line("ng " + n + " " + reason)
-		}
+	if err := pw.Lines(reportLines(r)...); err != nil {
+		return err
 	}
 	if err := pw.Flush(); err != nil {
 		return err
@@ -118,7 +113,32 @@ func WriteReport(w io.Writer, r *Report, sideband bool) error {
 		_, err := w.Write(buf.Bytes())
 		return err
 	}
+
 	return writeSideband(w, buf.Bytes())
+}
+
+// reportLines returns the report-status lines of r.
+func reportLines(r *Report) []string {
+	unpack := "ok"
+	if !r.UnpackOK {
+		unpack = cmp.Or(r.Unpack, "error")
+	}
+
+	lines := []string{"unpack " + unpack}
+	for _, n := range sortedKeys(r.Refs) {
+		if st := r.Refs[n]; st.OK {
+			lines = append(lines, "ok "+n)
+		} else {
+			lines = append(lines, "ng "+n+" "+cmp.Or(st.Reason, "rejected"))
+		}
+	}
+
+	return lines
+}
+
+// sortedKeys returns the keys of m in order.
+func sortedKeys[V any](m map[string]V) []string {
+	return slices.Sorted(maps.Keys(m))
 }
 
 // writeSideband writes data on side-band channel 1, then a flush-pkt.
@@ -126,9 +146,13 @@ func writeSideband(w io.Writer, data []byte) error {
 	pw := NewPktWriter(w)
 	for len(data) > 0 {
 		n := min(len(data), MaxPktData-1)
-		pw.Data(append([]byte{bandData}, data[:n]...))
+		if err := pw.Data(append([]byte{bandData}, data[:n]...)); err != nil {
+			return err
+		}
+
 		data = data[n:]
 	}
+
 	return pw.Flush()
 }
 
@@ -136,10 +160,13 @@ func writeSideband(w io.Writer, data []byte) error {
 // "version 2", one line per capability, then a flush-pkt.
 func WriteV2Advertisement(w io.Writer, caps []string) error {
 	pw := NewPktWriter(w)
-	pw.Line("version 2")
-	for _, c := range caps {
-		pw.Line(c)
+	if err := pw.Line("version 2"); err != nil {
+		return err
 	}
+	if err := pw.Lines(caps...); err != nil {
+		return err
+	}
+
 	return pw.Flush()
 }
 
@@ -160,12 +187,13 @@ func ParseV2Request(r io.Reader) (*V2Request, error) {
 	args := false
 	for {
 		kind, data, err := pr.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return nil, protoErr("v2 request ended without flush")
 		}
 		if err != nil {
 			return nil, err
 		}
+
 		switch kind {
 		case PktFlush:
 			if req.Command == "" {
@@ -181,6 +209,7 @@ func ParseV2Request(r io.Reader) (*V2Request, error) {
 		case PktResponseEnd:
 			return nil, protoErr("response-end in v2 request")
 		}
+
 		line := string(trimLF(data))
 		switch {
 		case args:
@@ -205,18 +234,33 @@ func WriteFetchResponse(w io.Writer, shallow []gitobj.ID, objs []gitobj.Object) 
 	if err := WritePack(&pack, objs); err != nil {
 		return err
 	}
+
 	pw := NewPktWriter(w)
 	if len(shallow) > 0 {
-		pw.Line("shallow-info")
-		for _, id := range shallow {
-			pw.Line("shallow " + id.String())
+		if err := writeShallowInfo(pw, shallow); err != nil {
+			return err
 		}
-		pw.Delim()
 	}
+
 	if err := pw.Line("packfile"); err != nil {
 		return err
 	}
+
 	return writeSideband(w, pack.Bytes())
+}
+
+// writeShallowInfo writes a "shallow-info" section and its delim-pkt.
+func writeShallowInfo(pw *PktWriter, shallow []gitobj.ID) error {
+	lines := []string{"shallow-info"}
+	for _, id := range shallow {
+		lines = append(lines, "shallow "+id.String())
+	}
+
+	if err := pw.Lines(lines...); err != nil {
+		return err
+	}
+
+	return pw.Delim()
 }
 
 // WriteError writes an "ERR msg" line, as servers do to refuse a request.
@@ -224,5 +268,6 @@ func WriteError(w io.Writer, msg string) error {
 	if msg == "" || strings.ContainsAny(msg, "\n") {
 		return errors.New("gitwire: bad error message")
 	}
+
 	return NewPktWriter(w).Line("ERR " + msg)
 }

@@ -8,11 +8,13 @@ on:
       - forge-core/forgeapi/**
       - .github/workflows/forge-core-forgeapi.yml
       - .github/workflows/reusable-go.yml
+      - .golangci.yml
   pull_request:
     paths:
       - forge-core/forgeapi/**
       - .github/workflows/forge-core-forgeapi.yml
       - .github/workflows/reusable-go.yml
+      - .golangci.yml
   workflow_dispatch:
 
 permissions:

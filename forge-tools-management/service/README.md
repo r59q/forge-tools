@@ -73,12 +73,13 @@ choose these tokens and give them to the services and to management.
 Management registers them in the broker at startup, each granted every
 connection, including ones added later:
 
-| Setting | Broker client |
-| --- | --- |
-| `--proxy-token-*` | `forge-connector-proxy`, may issue forge tokens |
-| `--repositories-connector-token-*` | `forge-repositories` |
-| `--issues-connector-token-*` | `forge-issues` |
-| `--checkouts-connector-token-*` | `forge-checkouts` |
+| Setting                            | Broker client                                   |
+| ---------------------------------- | ----------------------------------------------- |
+| `--proxy-token-*`                  | `forge-connector-proxy`, may issue forge tokens |
+| `--repositories-connector-token-*` | `forge-repositories`                            |
+| `--issues-connector-token-*`       | `forge-issues`                                  |
+| `--checkouts-connector-token-*`    | `forge-checkouts`                               |
+| `--actions-connector-token-*`      | `forge-actions`                                 |
 
 If the broker does not yet accept a token, management replaces the client of
 that name with one using the token, so changing a token and restarting
@@ -90,33 +91,33 @@ errors. Without a token setting, nothing is registered.
 
 ### Settings
 
-| Flag | Environment variable | Default |
-| --- | --- | --- |
-| `--http-listen` | `FORGE_MANAGEMENT_HTTP_LISTEN` | `127.0.0.1:8083` |
-| `--grpc-listen` | `FORGE_MANAGEMENT_GRPC_LISTEN` | `127.0.0.1:9093` |
-| `--token-file` | `FORGE_MANAGEMENT_TOKEN_FILE` | none |
-| `--token-env` | `FORGE_MANAGEMENT_TOKEN_ENV` | `FORGE_MANAGEMENT_TOKEN` |
-| `--connector-address` | `FORGE_MANAGEMENT_CONNECTOR_ADDRESS` | none |
-| `--connector-admin-token-file` | `FORGE_MANAGEMENT_CONNECTOR_ADMIN_TOKEN_FILE` | none |
-| `--connector-admin-token-env` | `FORGE_MANAGEMENT_CONNECTOR_ADMIN_TOKEN_ENV` | `FORGE_MANAGEMENT_CONNECTOR_ADMIN_TOKEN` when connected |
-| `--connector-insecure` | `FORGE_MANAGEMENT_CONNECTOR_INSECURE` | `false` |
-| `--proxy-token-file` | `FORGE_MANAGEMENT_PROXY_TOKEN_FILE` | none |
-| `--proxy-token-env` | `FORGE_MANAGEMENT_PROXY_TOKEN_ENV` | `FORGE_MANAGEMENT_PROXY_TOKEN`, if set, when connected |
-| `--repositories-connector-token-file` | `FORGE_MANAGEMENT_REPOSITORIES_CONNECTOR_TOKEN_FILE` | none |
-| `--repositories-connector-token-env` | `FORGE_MANAGEMENT_REPOSITORIES_CONNECTOR_TOKEN_ENV` | `FORGE_MANAGEMENT_REPOSITORIES_CONNECTOR_TOKEN`, if set, when connected |
-| `--repositories-address` | `FORGE_MANAGEMENT_REPOSITORIES_ADDRESS` | none |
-| `--repositories-token-file` | `FORGE_MANAGEMENT_REPOSITORIES_TOKEN_FILE` | none |
-| `--repositories-token-env` | `FORGE_MANAGEMENT_REPOSITORIES_TOKEN_ENV` | `FORGE_MANAGEMENT_REPOSITORIES_TOKEN` when connected |
-| `--repositories-insecure` | `FORGE_MANAGEMENT_REPOSITORIES_INSECURE` | `false` |
-| `--issues-connector-token-file` | `FORGE_MANAGEMENT_ISSUES_CONNECTOR_TOKEN_FILE` | none |
-| `--issues-connector-token-env` | `FORGE_MANAGEMENT_ISSUES_CONNECTOR_TOKEN_ENV` | `FORGE_MANAGEMENT_ISSUES_CONNECTOR_TOKEN`, if set, when connected |
-| `--checkouts-connector-token-file` | `FORGE_MANAGEMENT_CHECKOUTS_CONNECTOR_TOKEN_FILE` | none |
-| `--checkouts-connector-token-env` | `FORGE_MANAGEMENT_CHECKOUTS_CONNECTOR_TOKEN_ENV` | `FORGE_MANAGEMENT_CHECKOUTS_CONNECTOR_TOKEN`, if set, when connected |
-| `--issues-address` | `FORGE_MANAGEMENT_ISSUES_ADDRESS` | none |
-| `--issues-token-file` | `FORGE_MANAGEMENT_ISSUES_TOKEN_FILE` | none |
-| `--issues-token-env` | `FORGE_MANAGEMENT_ISSUES_TOKEN_ENV` | `FORGE_MANAGEMENT_ISSUES_TOKEN` when connected |
-| `--issues-insecure` | `FORGE_MANAGEMENT_ISSUES_INSECURE` | `false` |
-| `--request-timeout` | `FORGE_MANAGEMENT_REQUEST_TIMEOUT` | `30s` |
+| Flag                                  | Environment variable                                 | Default                                                                 |
+| ------------------------------------- | ---------------------------------------------------- | ----------------------------------------------------------------------- |
+| `--http-listen`                       | `FORGE_MANAGEMENT_HTTP_LISTEN`                       | `127.0.0.1:8083`                                                        |
+| `--grpc-listen`                       | `FORGE_MANAGEMENT_GRPC_LISTEN`                       | `127.0.0.1:9093`                                                        |
+| `--token-file`                        | `FORGE_MANAGEMENT_TOKEN_FILE`                        | none                                                                    |
+| `--token-env`                         | `FORGE_MANAGEMENT_TOKEN_ENV`                         | `FORGE_MANAGEMENT_TOKEN`                                                |
+| `--connector-address`                 | `FORGE_MANAGEMENT_CONNECTOR_ADDRESS`                 | none                                                                    |
+| `--connector-admin-token-file`        | `FORGE_MANAGEMENT_CONNECTOR_ADMIN_TOKEN_FILE`        | none                                                                    |
+| `--connector-admin-token-env`         | `FORGE_MANAGEMENT_CONNECTOR_ADMIN_TOKEN_ENV`         | `FORGE_MANAGEMENT_CONNECTOR_ADMIN_TOKEN` when connected                 |
+| `--connector-insecure`                | `FORGE_MANAGEMENT_CONNECTOR_INSECURE`                | `false`                                                                 |
+| `--proxy-token-file`                  | `FORGE_MANAGEMENT_PROXY_TOKEN_FILE`                  | none                                                                    |
+| `--proxy-token-env`                   | `FORGE_MANAGEMENT_PROXY_TOKEN_ENV`                   | `FORGE_MANAGEMENT_PROXY_TOKEN`, if set, when connected                  |
+| `--repositories-connector-token-file` | `FORGE_MANAGEMENT_REPOSITORIES_CONNECTOR_TOKEN_FILE` | none                                                                    |
+| `--repositories-connector-token-env`  | `FORGE_MANAGEMENT_REPOSITORIES_CONNECTOR_TOKEN_ENV`  | `FORGE_MANAGEMENT_REPOSITORIES_CONNECTOR_TOKEN`, if set, when connected |
+| `--repositories-address`              | `FORGE_MANAGEMENT_REPOSITORIES_ADDRESS`              | none                                                                    |
+| `--repositories-token-file`           | `FORGE_MANAGEMENT_REPOSITORIES_TOKEN_FILE`           | none                                                                    |
+| `--repositories-token-env`            | `FORGE_MANAGEMENT_REPOSITORIES_TOKEN_ENV`            | `FORGE_MANAGEMENT_REPOSITORIES_TOKEN` when connected                    |
+| `--repositories-insecure`             | `FORGE_MANAGEMENT_REPOSITORIES_INSECURE`             | `false`                                                                 |
+| `--issues-connector-token-file`       | `FORGE_MANAGEMENT_ISSUES_CONNECTOR_TOKEN_FILE`       | none                                                                    |
+| `--issues-connector-token-env`        | `FORGE_MANAGEMENT_ISSUES_CONNECTOR_TOKEN_ENV`        | `FORGE_MANAGEMENT_ISSUES_CONNECTOR_TOKEN`, if set, when connected       |
+| `--checkouts-connector-token-file`    | `FORGE_MANAGEMENT_CHECKOUTS_CONNECTOR_TOKEN_FILE`    | none                                                                    |
+| `--checkouts-connector-token-env`     | `FORGE_MANAGEMENT_CHECKOUTS_CONNECTOR_TOKEN_ENV`     | `FORGE_MANAGEMENT_CHECKOUTS_CONNECTOR_TOKEN`, if set, when connected    |
+| `--issues-address`                    | `FORGE_MANAGEMENT_ISSUES_ADDRESS`                    | none                                                                    |
+| `--issues-token-file`                 | `FORGE_MANAGEMENT_ISSUES_TOKEN_FILE`                 | none                                                                    |
+| `--issues-token-env`                  | `FORGE_MANAGEMENT_ISSUES_TOKEN_ENV`                  | `FORGE_MANAGEMENT_ISSUES_TOKEN` when connected                          |
+| `--issues-insecure`                   | `FORGE_MANAGEMENT_ISSUES_INSECURE`                   | `false`                                                                 |
+| `--request-timeout`                   | `FORGE_MANAGEMENT_REQUEST_TIMEOUT`                   | `30s`                                                                   |
 
 Flags override environment settings. Choose one file or environment token
 source for each credential. Token environment settings name a variable;
@@ -150,18 +151,19 @@ requests for up to five seconds.
 
 ## API
 
-The [proto](proto/management.proto) is the source of truth. Every RPC needs
-`Authorization: Bearer <operator token>`.
+The [proto](proto/forge/management/v1/management.proto) defines
+`forge.management.v1.ManagementService` and is the source of truth. Every RPC
+needs `Authorization: Bearer <operator token>`.
 
-| RPC | REST endpoint |
-| --- | --- |
-| `ListRepositories` | `GET /v1/repositories` |
-| `ListIssues` | `GET /v1/issues?scope=&state=&source=&repository=` |
-| `ListConnections` | `GET /v1/connections` |
-| `AddConnection` | `POST /v1/connections` with `{"forge","host","name","credential"}` |
-| `TestConnection` | `POST /v1/connections/{id}/test` |
-| `RotateCredential` | `POST /v1/connections/{id}/credential` with `{"credential"}` |
-| `RemoveConnection` | `DELETE /v1/connections/{id}` |
+| RPC                | REST endpoint                                                      |
+| ------------------ | ------------------------------------------------------------------ |
+| `ListRepositories` | `GET /v1/repositories`                                             |
+| `ListIssues`       | `GET /v1/issues?scope=&state=&source=&repository=`                 |
+| `ListConnections`  | `GET /v1/connections`                                              |
+| `AddConnection`    | `POST /v1/connections` with `{"forge","host","name","credential"}` |
+| `TestConnection`   | `POST /v1/connections/{id}/test`                                   |
+| `RotateCredential` | `POST /v1/connections/{id}/credential` with `{"credential"}`       |
+| `RemoveConnection` | `DELETE /v1/connections/{id}`                                      |
 
 The browser routes use HTTP Basic authentication: `GET /`, `GET /issues`
 with the same query as `ListIssues`, `GET /connections`,
@@ -194,16 +196,16 @@ Issue entries contain `sourceId`, `forge`, `host`, `repository`, `number`,
 and `checkedAt`. There is no pagination. The backend gRPC receive limit is
 4 MiB; larger listings fail visibly rather than truncating results.
 
-| Cause | gRPC | HTTP |
-| --- | --- | --- |
-| Missing, wrong or unreadable operator credential | `UNAUTHENTICATED` | 401 |
-| Bad input, such as an unknown issue scope, or the forge rejected a new token | `INVALID_ARGUMENT` | 400 |
-| `TestConnection`: the forge rejected the stored token or was unreachable | `FAILED_PRECONDITION` | 400 |
-| Connection not found | `NOT_FOUND` | 404 |
-| No connector configured | `UNIMPLEMENTED` | 501 |
-| Backend failure, rejected backend credential or oversized result | `UNAVAILABLE` | 503 |
-| Request deadline | `DEADLINE_EXCEEDED` | 504 |
-| Canceled request | `CANCELED` | 499 |
+| Cause                                                                        | gRPC                  | HTTP |
+| ---------------------------------------------------------------------------- | --------------------- | ---- |
+| Missing, wrong or unreadable operator credential                             | `UNAUTHENTICATED`     | 401  |
+| Bad input, such as an unknown issue scope, or the forge rejected a new token | `INVALID_ARGUMENT`    | 400  |
+| `TestConnection`: the forge rejected the stored token or was unreachable     | `FAILED_PRECONDITION` | 400  |
+| Connection not found                                                         | `NOT_FOUND`           | 404  |
+| No connector configured                                                      | `UNIMPLEMENTED`       | 501  |
+| Backend failure, rejected backend credential or oversized result             | `UNAVAILABLE`         | 503  |
+| Request deadline                                                             | `DEADLINE_EXCEEDED`   | 504  |
+| Canceled request                                                             | `CANCELED`            | 499  |
 
 Failures expose no backend error details or partial results.
 
@@ -223,24 +225,41 @@ set `FORGE_MANAGEMENT_TOKEN_FILE`. The image runs as non-root. See the
 
 ## Regenerate
 
-Generated files are committed in `managementpb/`. Install protoc 33.0 and:
+Generated files are committed in `managementpb/`. To regenerate, install
+[buf](https://buf.build/docs/installation) 1.74.0 and Go, then run from
+this folder:
 
 ```sh
-go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.10
-go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
-go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway@v2.27.3
-```
-
-Check out `googleapis/googleapis` at
-`ff8fd20f3840386e12f4f69750eff6dc99f6e1b7` and set `GOOGLEAPIS_DIR` to its
-root. From this folder, with protoc's bundled includes available:
-
-```sh
-protoc -I proto -I "$GOOGLEAPIS_DIR" \
-  --go_out=managementpb --go_opt=paths=source_relative \
-  --go-grpc_out=managementpb --go-grpc_opt=paths=source_relative \
-  --grpc-gateway_out=managementpb --grpc-gateway_opt=paths=source_relative \
-  proto/management.proto
+buf generate
 go vet ./...
 go test ./...
 ```
+
+CI fails when the generated code is out of date.
+
+## Pipeline browsing
+
+Configure `--actions-address` / `FORGE_MANAGEMENT_ACTIONS_ADDRESS` with a
+forge-actions gRPC endpoint. Set `--actions-token-file` or `--actions-token-env`
+(`FORGE_MANAGEMENT_ACTIONS_TOKEN_FILE` / `FORGE_MANAGEMENT_ACTIONS_TOKEN_ENV`).
+The default credential variable is `FORGE_MANAGEMENT_ACTIONS_TOKEN`.
+`--actions-insecure=true` / `FORGE_MANAGEMENT_ACTIONS_INSECURE=true` enables
+plaintext on a trusted network; TLS is the default.
+
+`--actions-connector-token-file` / `--actions-connector-token-env` registers
+the actions service's connector client when the broker is configured. Their
+variables are `FORGE_MANAGEMENT_ACTIONS_CONNECTOR_TOKEN_FILE` and
+`FORGE_MANAGEMENT_ACTIONS_CONNECTOR_TOKEN_ENV`; the default credential variable
+is `FORGE_MANAGEMENT_ACTIONS_CONNECTOR_TOKEN`. It is optional unless explicitly
+configured. Operator and backend credentials must differ.
+
+The Pipelines link under a repository opens `/pipelines?source=&repository=`.
+Browse executions, open a job, and read its log. Logs are escaped text;
+missing/expired logs and truncation are explicit. Refresh to read current state.
+
+REST and gRPC expose `ListPipelines`, `GetPipeline`, `ListJobs`, `GetJob` and
+`ReadJobLog` on the same routes as [forge-actions](../../forge-actions/service/).
+List responses include `configured`. Detail operations return `UNIMPLEMENTED`
+when the capability is absent. These routes accept the operator bearer token;
+the browser uses the existing Basic authentication. Backend failures never
+become empty successful listings.

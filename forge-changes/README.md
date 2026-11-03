@@ -10,22 +10,22 @@ No forge-code or forge-review service is needed.
 
 ## Forge mappings
 
-| Feature | GitHub | GitLab | Forgejo |
-| --- | --- | --- | --- |
-| Proposal | Pull request number | Merge request `iid` | Pull request number |
-| List/get/create/update | Pulls REST API | Merge requests REST API | Pulls REST API |
-| Draft creation | `draft` field | `Draft:` title | `Draft:` title |
-| Draft/ready transition | GraphQL mutation | Title prefix | Title prefix |
-| Change target branch | `base` | `target_branch` | `base` |
-| Change source branch | Unsupported | Unsupported | Unsupported |
-| Close/reopen | `state` | `state_event` | `state` |
-| General comments | Issue comments | Notes, excluding system/diff/thread notes | Issue comments |
-| Commit list | Native endpoint, maximum 250 | Native endpoint | Native endpoint |
-| Files | Metadata and hunks, maximum 3,000 | Diff endpoint, instance limits | Metadata only |
-| Unified diff | Diff media type | `raw_diffs` | `.diff?binary=true` |
-| Merge methods | merge, squash, rebase | default, squash | merge, squash, rebase, rebase-merge, fast-forward-only |
-| Atomic head guard | `sha` | `sha` | `head_commit_id` |
-| Merge readiness | `mergeable`, `mergeable_state` | `detailed_merge_status` | `mergeable`; other requirements unknown |
+| Feature                | GitHub                            | GitLab                                    | Forgejo                                                |
+| ---------------------- | --------------------------------- | ----------------------------------------- | ------------------------------------------------------ |
+| Proposal               | Pull request number               | Merge request `iid`                       | Pull request number                                    |
+| List/get/create/update | Pulls REST API                    | Merge requests REST API                   | Pulls REST API                                         |
+| Draft creation         | `draft` field                     | `Draft:` title                            | `Draft:` title                                         |
+| Draft/ready transition | GraphQL mutation                  | Title prefix                              | Title prefix                                           |
+| Change target branch   | `base`                            | `target_branch`                           | `base`                                                 |
+| Change source branch   | Unsupported                       | Unsupported                               | Unsupported                                            |
+| Close/reopen           | `state`                           | `state_event`                             | `state`                                                |
+| General comments       | Issue comments                    | Notes, excluding system/diff/thread notes | Issue comments                                         |
+| Commit list            | Native endpoint, maximum 250      | Native endpoint                           | Native endpoint                                        |
+| Files                  | Metadata and hunks, maximum 3,000 | Diff endpoint, instance limits            | Metadata only                                          |
+| Unified diff           | Diff media type                   | `raw_diffs`                               | `.diff?binary=true`                                    |
+| Merge methods          | merge, squash, rebase             | default, squash                           | merge, squash, rebase, rebase-merge, fast-forward-only |
+| Atomic head guard      | `sha`                             | `sha`                                     | `head_commit_id`                                       |
+| Merge readiness        | `mergeable`, `mergeable_state`    | `detailed_merge_status`                   | `mergeable`; other requirements unknown                |
 
 Native API references: [GitHub pulls](https://docs.github.com/en/rest/pulls/pulls),
 [GitHub mutations](https://docs.github.com/en/graphql/reference/mutations),

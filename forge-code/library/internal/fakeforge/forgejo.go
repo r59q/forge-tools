@@ -1,13 +1,8 @@
 package fakeforge
 
 import (
-	"encoding/base64"
-	"errors"
 	"net/http"
 	"net/url"
-	"path"
-	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -82,6 +77,7 @@ func ForgejoAPIWith(opts ForgejoOptions) Front {
 	if opts.MaxResponseItems <= 0 {
 		opts.MaxResponseItems = forgejoMaxItems
 	}
+
 	return func(f *Forge) http.Handler { return &forgejoFront{f: f, opts: opts} }
 }
 
@@ -95,27 +91,31 @@ func (h *forgejoFront) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		WriteMessage(w, http.StatusMethodNotAllowed, "Method Not Allowed")
 		return
 	}
+
 	segs, ok := forgejoSegments(r.URL.EscapedPath())
 	if !ok {
 		WriteMessage(w, http.StatusBadRequest, "bad path")
 		return
 	}
+
 	if len(segs) < 3 || segs[0] != "repos" {
 		WriteMessage(w, http.StatusNotFound, "Not Found")
 		return
 	}
+
 	repo, status := h.f.Authorize(segs[1]+"/"+segs[2], false)
 	if status != 0 {
 		WriteMessage(w, status, http.StatusText(status))
 		return
 	}
+
 	base := "/api/v1/repos/" + url.PathEscape(segs[1]) + "/" + url.PathEscape(segs[2])
 	rest := segs[3:]
 	switch {
 	case len(rest) == 0:
 		h.repo(w, repo, segs[1], segs[2])
 		return
-	case len(rest) == 1 && rest[0] == "commits":
+	case len(rest) == 1 && rest[0] == segCommits:
 		h.commits(w, r, repo, base)
 		return
 	case len(rest) == 1 && rest[0] == "tags":
@@ -129,7 +129,7 @@ func (h *forgejoFront) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	case len(rest) == 3 && rest[0] == "git":
 		switch rest[1] {
-		case "commits":
+		case segCommits:
 			h.commit(w, repo, base, rest[2])
 			return
 		case "tags":
@@ -143,6 +143,7 @@ func (h *forgejoFront) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+
 	WriteMessage(w, http.StatusNotFound, "Not Found")
 }
 
@@ -155,8 +156,10 @@ func forgejoSegments(p string) ([]string, bool) {
 		if err != nil {
 			return nil, false
 		}
+
 		segs[i] = u
 	}
+
 	return segs, true
 }
 
@@ -179,6 +182,7 @@ func forgejoResolve(repo *Repo, rev string) (gitobj.ID, bool) {
 		_, ok := repo.Object(id)
 		return id, ok
 	}
+
 	for _, name := range []string{rev, "refs/" + rev, "refs/tags/" + rev, "refs/heads/" + rev} {
 		if strings.HasPrefix(name, "refs/") {
 			if id, ok := repo.Ref(name); ok {
@@ -186,7 +190,8 @@ func forgejoResolve(repo *Repo, rev string) (gitobj.ID, bool) {
 			}
 		}
 	}
-	return gitobj.ZeroID, false
+
+	return gitobj.ID{}, false
 }
 
 // forgejoDate formats a time as Forgejo does.
@@ -196,32 +201,34 @@ func forgejoSig(s gitobj.Signature) map[string]any {
 	return map[string]any{"name": s.Name, "email": s.Email, "date": forgejoDate(s.When)}
 }
 
-// commitJSON is a Forgejo Commit with stat, verification and files off.
+// forgejoMeta is a Forgejo CommitMeta: an object's URL, SHA and date.
+func forgejoMeta(url string, id gitobj.ID, when time.Time) map[string]any {
+	return map[string]any{"url": url, "sha": id.String(), "created": forgejoDate(when)}
+}
+
+// forgejoCommitJSON is a Forgejo Commit with stat, verification and files
+// off.
 func forgejoCommitJSON(base string, id gitobj.ID, c gitobj.Commit) map[string]any {
+	when := c.Committer.When
 	parents := []map[string]any{}
 	for _, p := range c.Parents {
-		parents = append(parents, map[string]any{
-			"url": base + "/git/commits/" + p.String(), "sha": p.String(), "created": forgejoDate(c.Committer.When),
-		})
+		parents = append(parents, forgejoMeta(base+"/git/commits/"+p.String(), p, when))
 	}
-	return map[string]any{
-		"url":      base + "/git/commits/" + id.String(),
-		"sha":      id.String(),
-		"created":  forgejoDate(c.Committer.When),
-		"html_url": base + "/commit/" + id.String(),
-		"commit": map[string]any{
-			"url":       base + "/git/commits/" + id.String(),
-			"author":    forgejoSig(c.Author),
-			"committer": forgejoSig(c.Committer),
-			"message":   c.Message,
-			"tree": map[string]any{
-				"url": base + "/git/trees/" + c.Tree.String(), "sha": c.Tree.String(), "created": forgejoDate(c.Committer.When),
-			},
-		},
-		"author":    nil,
-		"committer": nil,
-		"parents":   parents,
+
+	v := forgejoMeta(base+"/git/commits/"+id.String(), id, when)
+	v["html_url"] = base + "/commit/" + id.String()
+	v[keyCommit] = map[string]any{
+		"url":       base + "/git/commits/" + id.String(),
+		"author":    forgejoSig(c.Author),
+		"committer": forgejoSig(c.Committer),
+		keyMessage:  c.Message,
+		"tree":      forgejoMeta(base+"/git/trees/"+c.Tree.String(), c.Tree, when),
 	}
+	v["author"] = nil
+	v["committer"] = nil
+	v["parents"] = parents
+
+	return v
 }
 
 func (h *forgejoFront) commit(w http.ResponseWriter, repo *Repo, base, sha string) {
@@ -229,6 +236,7 @@ func (h *forgejoFront) commit(w http.ResponseWriter, repo *Repo, base, sha strin
 		WriteMessage(w, http.StatusUnprocessableEntity, "no valid ref or sha: "+sha)
 		return
 	}
+
 	id, ok := forgejoResolve(repo, sha)
 	if ok {
 		id, ok = forgejoPeelCommit(repo, id)
@@ -237,348 +245,12 @@ func (h *forgejoFront) commit(w http.ResponseWriter, repo *Repo, base, sha strin
 		WriteMessage(w, http.StatusNotFound, "object does not exist [id: "+sha+"]")
 		return
 	}
+
 	c, _ := repo.ReadCommit(id)
 	WriteJSON(w, http.StatusOK, forgejoCommitJSON(base, id, c))
-}
-
-// forgejoPathLog is Log for a /commits path, read as git reads a
-// pathspec. Glob magic is approximated: a pattern matches paths in the
-// tip's tree equal to it or matching it with path.Match, as git matches.
-func forgejoPathLog(repo *Repo, tip gitobj.ID, p string, not []gitobj.ID) ([]gitobj.ID, error) {
-	if lit, ok := strings.CutPrefix(p, ":(literal)"); ok || !strings.ContainsAny(p, "*?[") {
-		if ok {
-			p = lit
-		}
-		return repo.Log(tip, LogOptions{Path: p, Not: not})
-	}
-	entries, err := repo.ListTree(tip, true)
-	if err != nil {
-		return nil, err
-	}
-	match := map[gitobj.ID]bool{}
-	for _, e := range entries {
-		if ok, _ := path.Match(p, e.Path); !ok && e.Path != p {
-			continue
-		}
-		ids, err := repo.Log(tip, LogOptions{Path: e.Path, Not: not})
-		if err != nil {
-			return nil, err
-		}
-		for _, id := range ids {
-			match[id] = true
-		}
-	}
-	all, err := repo.Log(tip, LogOptions{Not: not})
-	return slices.DeleteFunc(all, func(id gitobj.ID) bool { return !match[id] }), err
 }
 
 func forgejoPeelCommit(repo *Repo, id gitobj.ID) (gitobj.ID, bool) {
 	c, err := repo.PeelCommit(id)
 	return c, err == nil
-}
-
-func (h *forgejoFront) refs(w http.ResponseWriter, repo *Repo, base, filter string) {
-	prefix := "refs/"
-	if filter != "" {
-		prefix += filter
-	}
-	var out []map[string]any
-	var names []string
-	for _, ref := range repo.Refs(prefix) {
-		if strings.HasPrefix(ref.Name, "refs/remotes/") {
-			continue
-		}
-		o, ok := repo.Object(ref.ID)
-		typ := ""
-		if ok {
-			typ = string(o.Type)
-		}
-		kind := map[string]string{"tag": "tags", "commit": "commits", "tree": "trees", "blob": "blobs"}[typ]
-		out = append(out, map[string]any{
-			"ref": ref.Name,
-			"url": base + "/git/" + ref.Name,
-			"object": map[string]any{
-				"type": typ, "sha": ref.ID.String(), "url": base + "/git/" + kind + "/" + ref.ID.String(),
-			},
-		})
-		names = append(names, ref.Name)
-	}
-	switch {
-	case len(out) == 0:
-		WriteMessage(w, http.StatusNotFound, "Not Found")
-	case h.opts.SingleRefObject && len(out) == 1 && names[0] == "refs/"+filter:
-		WriteJSON(w, http.StatusOK, out[0])
-	default:
-		WriteJSON(w, http.StatusOK, out)
-	}
-}
-
-func (h *forgejoFront) tag(w http.ResponseWriter, repo *Repo, base, sha string) {
-	id, err := gitobj.ParseID(strings.ToLower(sha))
-	var t gitobj.Tag
-	if err == nil {
-		t, err = repo.ReadTag(id)
-	}
-	if err == nil && !slices.ContainsFunc(repo.Refs("refs/tags/"), func(r NamedRef) bool { return r.ID == id }) {
-		err = errNoTagRef
-	}
-	if err != nil {
-		WriteMessage(w, http.StatusBadRequest, "GetAnnotatedTag: object does not exist")
-		return
-	}
-	v := map[string]any{
-		"tag":     t.Name,
-		"sha":     id.String(),
-		"url":     base + "/git/tags/" + id.String(),
-		"message": t.Message,
-		"object": map[string]any{
-			"type": string(t.Type), "sha": t.Object.String(), "url": base + "/git/" + string(t.Type) + "s/" + t.Object.String(),
-		},
-	}
-	if t.Tagger != nil {
-		v["tagger"] = forgejoSig(*t.Tagger)
-	}
-	WriteJSON(w, http.StatusOK, v)
-}
-
-// errNoTagRef is Forgejo's GetTagNameBySHA failing: no tag ref points to
-// the tag object.
-var errNoTagRef = errors.New("no tag ref points to the object")
-
-func (h *forgejoFront) tags(w http.ResponseWriter, r *http.Request, repo *Repo, base string) {
-	type tagInfo struct {
-		v    map[string]any
-		when time.Time
-	}
-	var all []tagInfo
-	for _, ref := range repo.Refs("refs/tags/") {
-		name := strings.TrimPrefix(ref.Name, "refs/tags/")
-		o, ok := repo.Object(ref.ID)
-		if !ok {
-			continue
-		}
-		target, msg := ref.ID, ""
-		var when time.Time
-		switch o.Type {
-		case gitobj.TypeTag:
-			t, err := repo.ReadTag(ref.ID)
-			if err != nil {
-				continue
-			}
-			target, msg = t.Object, strings.TrimSpace(t.Message)
-			if t.Tagger != nil {
-				when = t.Tagger.When
-			}
-		case gitobj.TypeCommit:
-			c, _ := repo.ReadCommit(ref.ID)
-			when = c.Committer.When
-		}
-		all = append(all, tagInfo{when: when, v: map[string]any{
-			"name":    name,
-			"message": msg,
-			"id":      ref.ID.String(),
-			"commit": map[string]any{
-				"url": base + "/git/commits/" + ref.ID.String(), "sha": target.String(), "created": forgejoDate(when),
-			},
-			"zipball_url": base + "/archive/" + name + ".zip",
-			"tarball_url": base + "/archive/" + name + ".tar.gz",
-		}})
-	}
-	slices.SortStableFunc(all, func(a, b tagInfo) int { return b.when.Compare(a.when) })
-	w.Header().Set("X-Total-Count", strconv.Itoa(len(all)))
-	start, end := Paginate(w, r, len(all), Paging{SizeParam: "limit", DefaultSize: forgejoPageSize, MaxSize: forgejoMaxItems})
-	out := []map[string]any{}
-	for _, t := range all[start:end] {
-		out = append(out, t.v)
-	}
-	WriteJSON(w, http.StatusOK, out)
-}
-
-func (h *forgejoFront) trees(w http.ResponseWriter, r *http.Request, repo *Repo, base, sha string) {
-	q := r.URL.Query()
-	root, ok := forgejoResolve(repo, sha)
-	var entries []PathEntry
-	var rootEntry gitobj.TreeEntry
-	var err error
-	if ok {
-		if rootEntry, err = repo.Lookup(root, ""); err == nil {
-			recursive, _ := strconv.ParseBool(q.Get("recursive"))
-			entries, err = repo.ListTree(root, recursive)
-		}
-	}
-	if !ok || err != nil {
-		WriteMessage(w, http.StatusBadRequest, "sha not found: "+sha)
-		return
-	}
-	perPage, _ := strconv.Atoi(q.Get("per_page"))
-	if perPage <= 0 || perPage > h.opts.TreesPerPage {
-		perPage = h.opts.TreesPerPage
-	}
-	page, _ := strconv.Atoi(q.Get("page"))
-	page = max(page, 1)
-	resp := map[string]any{
-		"sha":         rootEntry.ID.String(),
-		"url":         base + "/git/trees/" + rootEntry.ID.String(),
-		"tree":        nil,
-		"truncated":   false,
-		"page":        page,
-		"total_count": len(entries),
-	}
-	start := perPage * (page - 1)
-	if start < len(entries) {
-		// Forgejo's bug: truncated is set on every page, the last too.
-		resp["truncated"] = len(entries) > perPage
-		end := min(start+perPage, len(entries))
-		var list []map[string]any
-		for _, e := range entries[start:end] {
-			typ := e.Mode.Type()
-			u := base + "/git/blobs/" + e.ID.String()
-			switch typ {
-			case gitobj.TypeTree:
-				u = base + "/git/trees/" + e.ID.String()
-			case gitobj.TypeCommit:
-				u = ""
-			}
-			list = append(list, map[string]any{
-				"path": e.Path, "mode": forgejoMode(e.Mode), "type": string(typ),
-				"size": e.Size, "sha": e.ID.String(), "url": u,
-			})
-		}
-		resp["tree"] = list
-	}
-	WriteJSON(w, http.StatusOK, resp)
-}
-
-// forgejoMode formats a mode as %06o.
-func forgejoMode(m gitobj.Mode) string {
-	s := m.String()
-	return strings.Repeat("0", max(0, 6-len(s))) + s
-}
-
-func (h *forgejoFront) blob(w http.ResponseWriter, repo *Repo, base, sha string) {
-	id, err := gitobj.ParseID(strings.ToLower(sha))
-	o, ok := repo.Object(id)
-	if err != nil || !ok {
-		WriteMessage(w, http.StatusBadRequest, "object does not exist [id: "+sha+"]")
-		return
-	}
-	content := ""
-	if int64(len(o.Data)) <= h.opts.MaxBlobSize {
-		content = base64.StdEncoding.EncodeToString(o.Data)
-	}
-	WriteJSON(w, http.StatusOK, map[string]any{
-		"content":  content,
-		"encoding": "base64",
-		"url":      base + "/git/blobs/" + id.String(),
-		"sha":      id.String(),
-		"size":     len(o.Data),
-	})
-}
-
-func (h *forgejoFront) raw(w http.ResponseWriter, r *http.Request, repo *Repo, p string) {
-	rev := r.URL.Query().Get("ref")
-	if rev == "" {
-		rev = "refs/heads/" + repo.DefaultBranch()
-	}
-	id, ok := forgejoResolve(repo, rev)
-	if ok {
-		id, ok = forgejoPeelCommit(repo, id)
-	}
-	if !ok {
-		WriteMessage(w, http.StatusNotFound, "Not Found")
-		return
-	}
-	e, err := repo.Lookup(id, p)
-	if err != nil || p == "" || e.Mode == gitobj.ModeTree || e.Mode == gitobj.ModeSubmodule {
-		WriteMessage(w, http.StatusNotFound, "Not Found")
-		return
-	}
-	data, err := repo.ReadBlob(e.ID)
-	if err != nil {
-		WriteMessage(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	etag := `"` + e.ID.String() + `"`
-	w.Header().Set("ETag", etag)
-	if r.Header.Get("If-None-Match") == etag {
-		w.WriteHeader(http.StatusNotModified)
-		return
-	}
-	kind := "file"
-	if e.Mode == gitobj.ModeSymlink {
-		kind = "symlink"
-	}
-	w.Header().Set("X-Forgejo-Object-Type", kind)
-	w.Header().Set("Content-Type", http.DetectContentType(data))
-	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(data)
-}
-
-func (h *forgejoFront) commits(w http.ResponseWriter, r *http.Request, repo *Repo, base string) {
-	q := r.URL.Query()
-	sha := q.Get("sha")
-	if sha == "" {
-		if _, ok := repo.Head(); !ok {
-			WriteMessage(w, http.StatusConflict, "repository is empty")
-			return
-		}
-		sha = "refs/heads/" + repo.DefaultBranch()
-	}
-	tip, ok := forgejoResolve(repo, sha)
-	if ok {
-		tip, ok = forgejoPeelCommit(repo, tip)
-	}
-	if !ok {
-		WriteMessage(w, http.StatusNotFound, "sha not found")
-		return
-	}
-	var not []gitobj.ID
-	for _, n := range q["not"] {
-		id, ok := forgejoResolve(repo, n)
-		if !ok {
-			WriteMessage(w, http.StatusNotFound, "not found: "+n)
-			return
-		}
-		not = append(not, id)
-	}
-	path := q.Get("path")
-	ids, err := forgejoPathLog(repo, tip, path, not)
-	if err != nil {
-		WriteMessage(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	if path != "" && len(ids) == 0 {
-		WriteMessage(w, http.StatusNotFound, "no commits for path")
-		return
-	}
-	limit, _ := strconv.Atoi(q.Get("limit"))
-	if limit <= 0 {
-		limit = forgejoPageSize
-	}
-	limit = min(limit, h.opts.MaxResponseItems, h.opts.CommitsRangeSize)
-	page, _ := strconv.Atoi(q.Get("page"))
-	page = max(page, 1)
-	skip := (page - 1) * limit
-	if path != "" {
-		skip = (page - 1) * h.opts.CommitsRangeSize // Forgejo's path-skip bug
-	}
-	start := min(skip, len(ids))
-	end := min(start+limit, len(ids))
-	pages := (len(ids) + limit - 1) / limit
-
-	Paginate(w, r, len(ids), Paging{SizeParam: "limit", DefaultSize: limit, MaxSize: limit})
-	hd := w.Header()
-	hd.Set("X-Total", strconv.Itoa(len(ids)))
-	hd.Set("X-Total-Count", strconv.Itoa(len(ids)))
-	hd.Set("X-PageCount", strconv.Itoa(pages))
-	hd.Set("X-Page", strconv.Itoa(page))
-	hd.Set("X-PerPage", strconv.Itoa(limit))
-	hd.Set("X-HasMore", strconv.FormatBool(page < pages))
-	out := []map[string]any{}
-	for _, id := range ids[start:end] {
-		c, _ := repo.ReadCommit(id)
-		out = append(out, forgejoCommitJSON(base, id, c))
-	}
-	WriteJSON(w, http.StatusOK, out)
 }

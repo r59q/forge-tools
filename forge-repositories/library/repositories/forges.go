@@ -31,11 +31,13 @@ type forge interface {
 	tag(raw json.RawMessage) (Tag, error)
 }
 
-// forges holds the supported adapters by kind.
-var forges = map[forgeauth.Kind]forge{
-	forgeauth.GitHub:  github{},
-	forgeauth.GitLab:  gitlab{},
-	forgeauth.Forgejo: forgejo{},
+// forges returns the supported adapters by kind.
+func forges() map[forgeauth.Kind]forge {
+	return map[forgeauth.Kind]forge{
+		forgeauth.GitHub:  github{},
+		forgeauth.GitLab:  gitlab{},
+		forgeauth.Forgejo: forgejo{},
+	}
 }
 
 // ownerName escapes a two-segment path as "owner/name" for GitHub and
@@ -45,6 +47,7 @@ func ownerName(path string) (string, bool) {
 	if !ok || strings.Contains(name, "/") {
 		return "", false
 	}
+
 	return url.PathEscape(owner) + "/" + url.PathEscape(name), true
 }
 
@@ -70,26 +73,40 @@ type githubRepo struct {
 	UpdatedAt     time.Time `json:"updated_at"`
 }
 
-func (github) listPath() string                    { return "/user/repos?per_page=100" }
+func (github) listPath() string { return "/user/repos?per_page=100" }
+
 func (github) repoPath(path string) (string, bool) { return prefixed("/repos/", path) }
-func (github) branchesPath(repo string) string     { return repo + "/branches?per_page=100" }
-func (github) tagsPath(repo string) string         { return repo + "/tags?per_page=100" }
-func (github) updateMethod() string                { return http.MethodPatch }
+
+func (github) branchesPath(repo string) string { return repo + "/branches?per_page=100" }
+
+func (github) tagsPath(repo string) string { return repo + "/tags?per_page=100" }
+
+func (github) updateMethod() string { return http.MethodPatch }
 
 func (github) repository(raw json.RawMessage) (Repository, error) {
 	var v githubRepo
 	if err := json.Unmarshal(raw, &v); err != nil {
 		return Repository{}, err
 	}
+
 	vis := Visibility(v.Visibility)
 	if vis == "" {
 		vis = visibility(v.Private, false)
 	}
+
 	return Repository{
-		ID: id(v.ID), Path: v.FullName, Description: v.Description,
-		DefaultBranch: v.DefaultBranch, Visibility: vis, Archived: v.Archived,
-		Fork: v.Fork, WebURL: v.HTMLURL, CloneURL: v.CloneURL, SSHURL: v.SSHURL,
-		CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt,
+		ID:            id(v.ID),
+		Path:          v.FullName,
+		Description:   v.Description,
+		DefaultBranch: v.DefaultBranch,
+		Visibility:    vis,
+		Archived:      v.Archived,
+		Fork:          v.Fork,
+		WebURL:        v.HTMLURL,
+		CloneURL:      v.CloneURL,
+		SSHURL:        v.SSHURL,
+		CreatedAt:     v.CreatedAt,
+		UpdatedAt:     v.UpdatedAt,
 	}, nil
 }
 
@@ -102,6 +119,7 @@ func (github) branch(raw json.RawMessage) (Branch, error) {
 		Protected bool `json:"protected"`
 	}
 	err := json.Unmarshal(raw, &v)
+
 	return Branch{Name: v.Name, SHA: v.Commit.SHA, Protected: v.Protected}, err
 }
 
@@ -113,6 +131,7 @@ func (github) tag(raw json.RawMessage) (Tag, error) {
 		} `json:"commit"`
 	}
 	err := json.Unmarshal(raw, &v)
+
 	return Tag{Name: v.Name, SHA: v.Commit.SHA}, err
 }
 
@@ -144,24 +163,37 @@ func (gitlab) repoPath(path string) (string, bool) {
 }
 
 func (gitlab) branchesPath(repo string) string { return repo + "/repository/branches?per_page=100" }
-func (gitlab) tagsPath(repo string) string     { return repo + "/repository/tags?per_page=100" }
-func (gitlab) updateMethod() string            { return http.MethodPut }
+
+func (gitlab) tagsPath(repo string) string { return repo + "/repository/tags?per_page=100" }
+
+func (gitlab) updateMethod() string { return http.MethodPut }
 
 func (gitlab) repository(raw json.RawMessage) (Repository, error) {
 	var v gitlabProject
 	if err := json.Unmarshal(raw, &v); err != nil {
 		return Repository{}, err
 	}
+
 	updated := v.UpdatedAt
 	if updated.IsZero() {
 		updated = v.LastActivityAt
 	}
+
 	fork := len(v.ForkedFrom) > 0 && string(v.ForkedFrom) != "null"
+
 	return Repository{
-		ID: id(v.ID), Path: v.PathWithNamespace, Description: v.Description,
-		DefaultBranch: v.DefaultBranch, Visibility: Visibility(v.Visibility),
-		Archived: v.Archived, Fork: fork, WebURL: v.WebURL, CloneURL: v.HTTPURL,
-		SSHURL: v.SSHURL, CreatedAt: v.CreatedAt, UpdatedAt: updated,
+		ID:            id(v.ID),
+		Path:          v.PathWithNamespace,
+		Description:   v.Description,
+		DefaultBranch: v.DefaultBranch,
+		Visibility:    Visibility(v.Visibility),
+		Archived:      v.Archived,
+		Fork:          fork,
+		WebURL:        v.WebURL,
+		CloneURL:      v.HTTPURL,
+		SSHURL:        v.SSHURL,
+		CreatedAt:     v.CreatedAt,
+		UpdatedAt:     updated,
 	}, nil
 }
 
@@ -174,6 +206,7 @@ func (gitlab) branch(raw json.RawMessage) (Branch, error) {
 		Protected bool `json:"protected"`
 	}
 	err := json.Unmarshal(raw, &v)
+
 	return Branch{Name: v.Name, SHA: v.Commit.ID, Protected: v.Protected}, err
 }
 
@@ -185,6 +218,7 @@ func (gitlab) tag(raw json.RawMessage) (Tag, error) {
 		} `json:"commit"`
 	}
 	err := json.Unmarshal(raw, &v)
+
 	return Tag{Name: v.Name, SHA: v.Commit.ID}, err
 }
 
@@ -207,22 +241,35 @@ type forgejoRepo struct {
 	UpdatedAt     time.Time `json:"updated_at"`
 }
 
-func (forgejo) listPath() string                    { return "/user/repos?limit=50" }
+func (forgejo) listPath() string { return "/user/repos?limit=50" }
+
 func (forgejo) repoPath(path string) (string, bool) { return prefixed("/repos/", path) }
-func (forgejo) branchesPath(repo string) string     { return repo + "/branches?limit=50" }
-func (forgejo) tagsPath(repo string) string         { return repo + "/tags?limit=50" }
-func (forgejo) updateMethod() string                { return http.MethodPatch }
+
+func (forgejo) branchesPath(repo string) string { return repo + "/branches?limit=50" }
+
+func (forgejo) tagsPath(repo string) string { return repo + "/tags?limit=50" }
+
+func (forgejo) updateMethod() string { return http.MethodPatch }
 
 func (forgejo) repository(raw json.RawMessage) (Repository, error) {
 	var v forgejoRepo
 	if err := json.Unmarshal(raw, &v); err != nil {
 		return Repository{}, err
 	}
+
 	return Repository{
-		ID: id(v.ID), Path: v.FullName, Description: v.Description,
-		DefaultBranch: v.DefaultBranch, Visibility: visibility(v.Private, v.Internal),
-		Archived: v.Archived, Fork: v.Fork, WebURL: v.HTMLURL, CloneURL: v.CloneURL,
-		SSHURL: v.SSHURL, CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt,
+		ID:            id(v.ID),
+		Path:          v.FullName,
+		Description:   v.Description,
+		DefaultBranch: v.DefaultBranch,
+		Visibility:    visibility(v.Private, v.Internal),
+		Archived:      v.Archived,
+		Fork:          v.Fork,
+		WebURL:        v.HTMLURL,
+		CloneURL:      v.CloneURL,
+		SSHURL:        v.SSHURL,
+		CreatedAt:     v.CreatedAt,
+		UpdatedAt:     v.UpdatedAt,
 	}, nil
 }
 
@@ -235,6 +282,7 @@ func (forgejo) branch(raw json.RawMessage) (Branch, error) {
 		Protected bool `json:"protected"`
 	}
 	err := json.Unmarshal(raw, &v)
+
 	return Branch{Name: v.Name, SHA: v.Commit.ID, Protected: v.Protected}, err
 }
 
@@ -246,6 +294,7 @@ func (forgejo) tag(raw json.RawMessage) (Tag, error) {
 		} `json:"commit"`
 	}
 	err := json.Unmarshal(raw, &v)
+
 	return Tag{Name: v.Name, SHA: v.Commit.SHA}, err
 }
 
@@ -255,6 +304,7 @@ func prefixed(prefix, path string) (string, bool) {
 	if !ok {
 		return "", false
 	}
+
 	return prefix + p, true
 }
 
@@ -266,5 +316,6 @@ func visibility(private, internal bool) Visibility {
 	case internal:
 		return Internal
 	}
+
 	return Public
 }

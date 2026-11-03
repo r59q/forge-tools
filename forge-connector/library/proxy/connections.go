@@ -36,25 +36,31 @@ func (h *Handler) connections(w http.ResponseWriter, r *http.Request) {
 		proxyError(w, http.StatusNotFound)
 		return
 	}
+
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", http.MethodGet)
 		proxyError(w, http.StatusMethodNotAllowed)
+
 		return
 	}
+
 	token, ok := forgeauth.AuthorizationToken(r.Header, "Bearer")
 	if !ok {
 		proxyError(w, http.StatusUnauthorized)
 		return
 	}
+
 	values, err := h.lister.ClientConnections(r.Context(), forgeauth.StaticToken(token))
 	if err != nil {
 		dependencyError(w, err)
 		return
 	}
+
 	body := connectionsJSON{Connections: []connectionJSON{}}
 	for _, c := range values {
 		body.Connections = append(body.Connections, connectionJSON(c))
 	}
+
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(body)

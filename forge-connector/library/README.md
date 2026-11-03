@@ -100,7 +100,7 @@ the caller's token. The `connector` package is the matching Go client.
 Mount the handler without a path-cleaning router. It rejects absolute request
 targets, dot segments, backslashes and malformed or repeatedly encoded traversal.
 Encoded slashes, such as GitLab project names, are preserved. Requests only go
-to the connection's scheme, host and base path, without following redirects.
+to the connection's scheme, host and base path, without following redirects by default.
 `Link` and `Location` URLs within that endpoint become absolute proxy URLs;
 external, out-of-base and unsafe URLs are dropped. Bodies stream unchanged,
 including forge error bodies. Request trailers are not forwarded.
@@ -136,7 +136,7 @@ its commits and ref updates through it.
   `User-Agent` reach the forge. Responses keep only content and caching
   headers. `Set-Cookie` and trailers are dropped, and `WWW-Authenticate` is
   replaced with the proxy's realm.
-- Redirects are never followed. A `Location` is kept only when it points to an
+- Redirects are not followed by default. A `Location` is kept only when it points to an
   allowed route on the same Git origin, rewritten to the proxy.
 - The issued kind and API base URL must match the verified connection.
 
@@ -155,3 +155,12 @@ go test -race ./...
 Tests use `MemoryStore` and local `httptest` forges; no real credentials or
 external forge access are needed. When `git` is on PATH, a proxy test pushes
 and fetches through the handler to `git http-backend`; otherwise it is skipped.
+
+### External downloads
+
+`proxy.Config.DownloadHosts` optionally allows HTTPS GET redirects to trusted
+object-storage DNS hosts. Exact hosts and `*.example.com` subdomains are
+supported. The proxy makes a fresh GET without caller headers, cookies or
+credentials and follows at most three allowed redirects. Signed URLs are not
+returned to callers. Other redirects retain the existing restricted behavior.
+This is generic transport configuration; the proxy has no pipeline API logic.

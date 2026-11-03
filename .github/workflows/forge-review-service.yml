@@ -8,8 +8,11 @@ on:
       - forge-review/library/**
       - forge-connector/library/**
       - forge-core/forgeapi/**
+      - forge-core/servicekit/**
       - .dockerignore
       - .github/workflows/forge-review-service.yml
+      - buf.yaml
+      - buf.lock
       - .github/workflows/reusable-*.yml
   pull_request:
     paths:
@@ -17,8 +20,11 @@ on:
       - forge-review/library/**
       - forge-connector/library/**
       - forge-core/forgeapi/**
+      - forge-core/servicekit/**
       - .dockerignore
       - .github/workflows/forge-review-service.yml
+      - buf.yaml
+      - buf.lock
       - .github/workflows/reusable-*.yml
   workflow_dispatch:
 
@@ -28,6 +34,11 @@ permissions:
 jobs:
   test:
     uses: ./.github/workflows/reusable-go.yml
+    with:
+      dir: forge-review/service
+
+  proto:
+    uses: ./.github/workflows/reusable-proto.yml
     with:
       dir: forge-review/service
 

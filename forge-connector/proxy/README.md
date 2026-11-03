@@ -29,7 +29,7 @@ git -c "http.extraHeader=Authorization: Bearer $CLIENT_TOKEN" \
 ```
 
 The route allows only the smart-HTTP upload-pack and receive-pack endpoints,
-streams capped bodies, never follows redirects and drops cookies and
+streams capped bodies, does not follow redirects by default and drops cookies and
 credentials. See the [library](../library/README.md#git-route) for the rules.
 
 `GET /connections` lists the connections the client token may use, so callers
@@ -81,21 +81,21 @@ printf '%s\n' "$PROXY_CLIENT_TOKEN" > proxy-token
   --token-file proxy-token
 ```
 
-| Flag | Environment variable | Default |
-| --- | --- | --- |
-| `--http-listen` | `FORGE_PROXY_HTTP_LISTEN` | `127.0.0.1:8081` |
-| `--grpc-listen` | `FORGE_PROXY_GRPC_LISTEN` | `127.0.0.1:9091` |
-| `--broker-addr` | `FORGE_PROXY_BROKER_ADDR` | `127.0.0.1:9090` |
-| `--token-file` | `FORGE_PROXY_TOKEN_FILE` | none |
-| `--token-env` | `FORGE_PROXY_TOKEN_ENV` | `FORGE_PROXY_TOKEN` when no source is set |
-| `--token-ttl` | `FORGE_PROXY_TOKEN_TTL` | `60s` |
-| `--verify-ttl` | `FORGE_PROXY_VERIFY_TTL` | `30s` |
-| `--broker-timeout` | `FORGE_PROXY_BROKER_TIMEOUT` | `10s` |
-| `--broker-tls` | `FORGE_PROXY_BROKER_TLS` | `false` |
-| `--broker-ca-file` | `FORGE_PROXY_BROKER_CA_FILE` | system roots; implies TLS |
-| `--public-url` | `FORGE_PROXY_PUBLIC_URL` | derived from the request |
-| `--allow-git-push` | `FORGE_PROXY_ALLOW_GIT_PUSH` | `false` |
-| `--max-git-push-bytes` | `FORGE_PROXY_MAX_GIT_PUSH_BYTES` | `2147483648` (2 GiB) |
+| Flag                   | Environment variable             | Default                                   |
+| ---------------------- | -------------------------------- | ----------------------------------------- |
+| `--http-listen`        | `FORGE_PROXY_HTTP_LISTEN`        | `127.0.0.1:8081`                          |
+| `--grpc-listen`        | `FORGE_PROXY_GRPC_LISTEN`        | `127.0.0.1:9091`                          |
+| `--broker-addr`        | `FORGE_PROXY_BROKER_ADDR`        | `127.0.0.1:9090`                          |
+| `--token-file`         | `FORGE_PROXY_TOKEN_FILE`         | none                                      |
+| `--token-env`          | `FORGE_PROXY_TOKEN_ENV`          | `FORGE_PROXY_TOKEN` when no source is set |
+| `--token-ttl`          | `FORGE_PROXY_TOKEN_TTL`          | `60s`                                     |
+| `--verify-ttl`         | `FORGE_PROXY_VERIFY_TTL`         | `30s`                                     |
+| `--broker-timeout`     | `FORGE_PROXY_BROKER_TIMEOUT`     | `10s`                                     |
+| `--broker-tls`         | `FORGE_PROXY_BROKER_TLS`         | `false`                                   |
+| `--broker-ca-file`     | `FORGE_PROXY_BROKER_CA_FILE`     | system roots; implies TLS                 |
+| `--public-url`         | `FORGE_PROXY_PUBLIC_URL`         | derived from the request                  |
+| `--allow-git-push`     | `FORGE_PROXY_ALLOW_GIT_PUSH`     | `false`                                   |
+| `--max-git-push-bytes` | `FORGE_PROXY_MAX_GIT_PUSH_BYTES` | `2147483648` (2 GiB)                      |
 
 Flags override environment settings. Choose one token source; `--token-env`
 names a variable rather than containing the token. The token is read through
@@ -140,17 +140,17 @@ strings, tokens and headers are never logged.
 
 ## Error mapping
 
-| Status | Meaning |
-| --- | --- |
-| 401 | Missing or invalid client token |
-| 405 | `/connections` or a Git endpoint with the wrong method |
-| 413 | Git request body over its cap |
-| 415 | Git POST without the matching content type |
-| 403 | Client may not use the connection |
-| 404 | Unknown connection, or a Git route outside the allow-list |
-| 502 | Invalid endpoint or token, no Git base URL, or forge transport failure |
-| 503 | Broker unavailable or rejected the proxy's own token |
-| 504 | Broker call timed out |
+| Status | Meaning                                                                |
+| ------ | ---------------------------------------------------------------------- |
+| 401    | Missing or invalid client token                                        |
+| 405    | `/connections` or a Git endpoint with the wrong method                 |
+| 413    | Git request body over its cap                                          |
+| 415    | Git POST without the matching content type                             |
+| 403    | Client may not use the connection                                      |
+| 404    | Unknown connection, or a Git route outside the allow-list              |
+| 502    | Invalid endpoint or token, no Git base URL, or forge transport failure |
+| 503    | Broker unavailable or rejected the proxy's own token                   |
+| 504    | Broker call timed out                                                  |
 
 Forge responses, including forge errors, pass through unchanged.
 
@@ -176,3 +176,17 @@ err = session.GetJSON(ctx, "/user", &me)
 
 Pagination helpers such as `forgehttp.NextPage` follow links that already point
 back at the proxy.
+
+## External downloads
+
+`--download-hosts` / `FORGE_PROXY_DOWNLOAD_HOSTS` is a comma-separated list of
+trusted HTTPS storage hosts. Empty (the default) disables external downloads.
+A leading `*.` permits subdomains, for example `*.blob.core.windows.net`.
+Only port 443 is allowed. Choose hosts that are safe for the proxy to contact.
+
+For a GET redirect to an allowed host, the proxy fetches the body with a fresh,
+credential-free request. It forwards no caller headers or cookies, follows at
+most three allowed redirects, and never exposes signed download URLs. Writes
+and other redirect destinations retain the existing behavior. This supports
+logs and artifacts served by external storage without giving domain tools
+access to forge credentials.

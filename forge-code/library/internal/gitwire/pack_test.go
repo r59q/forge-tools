@@ -17,7 +17,12 @@ import (
 func sampleObjects() []gitobj.Object {
 	blob := gitobj.Object{Type: gitobj.TypeBlob, Data: []byte("hello\n")}
 	big := gitobj.Object{Type: gitobj.TypeBlob, Data: bytes.Repeat([]byte("0123456789"), 10000)}
-	tree, _ := gitobj.EncodeTree([]gitobj.TreeEntry{{Name: "a", Mode: gitobj.ModeFile, ID: blob.ID()}})
+	tree, _ := gitobj.EncodeTree([]gitobj.TreeEntry{{
+		Name: "a",
+		Mode: gitobj.ModeFile,
+		ID:   blob.ID(),
+	}})
+
 	return []gitobj.Object{
 		blob,
 		{Type: gitobj.TypeBlob, Data: []byte{}},
@@ -34,14 +39,17 @@ func TestPackRoundTrip(t *testing.T) {
 	if err := WritePack(&b, objs); err != nil {
 		t.Fatal(err)
 	}
+
 	data := b.Bytes()
 	if string(data[:4]) != "PACK" || data[7] != 2 || data[11] != byte(len(objs)) {
 		t.Fatalf("header % x", data[:12])
 	}
+
 	sum := sha1.Sum(data[:len(data)-20])
 	if !bytes.Equal(sum[:], data[len(data)-20:]) {
 		t.Fatal("bad trailer")
 	}
+
 	// Bytes after the pack stay unread with a bufio.Reader.
 	br := bufio.NewReader(io.MultiReader(bytes.NewReader(data), strings.NewReader("tail")))
 	got, err := ReadPack(br, 1<<20)
@@ -75,6 +83,7 @@ func TestObjectHeader(t *testing.T) {
 			t.Errorf("size %d: %d %d %v", size, code, got, err)
 		}
 	}
+
 	if _, _, err := readObjectHeader(bytes.NewReader(bytes.Repeat([]byte{0xff}, 12))); !errors.Is(err, ErrProtocol) {
 		t.Fatalf("overflow: %v", err)
 	}
@@ -84,24 +93,28 @@ func TestObjectHeader(t *testing.T) {
 func rawPack(count byte, body []byte) []byte {
 	p := append([]byte{'P', 'A', 'C', 'K', 0, 0, 0, 2, 0, 0, 0, count}, body...)
 	sum := sha1.Sum(p)
+
 	return append(p, sum[:]...)
 }
 
-func zlibBytes(data []byte) []byte {
+func zlibBytes(tb testing.TB, data []byte) []byte {
+	tb.Helper()
 	var b bytes.Buffer
 	zw := zlib.NewWriter(&b)
-	zw.Write(data)
-	zw.Close()
+	_, err := zw.Write(data)
+	must(tb, err)
+	must(tb, zw.Close())
+
 	return b.Bytes()
 }
 
 func TestReadPackErrors(t *testing.T) {
 	var good bytes.Buffer
-	WritePack(&good, sampleObjects()[:1])
+	must(t, WritePack(&good, sampleObjects()[:1]))
 	corrupt := bytes.Clone(good.Bytes())
 	corrupt[len(corrupt)-1] ^= 1
 
-	z := zlibBytes([]byte("abc"))
+	z := zlibBytes(t, []byte("abc"))
 	for name, tc := range map[string]struct {
 		in   []byte
 		want error

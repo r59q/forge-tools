@@ -23,6 +23,7 @@ services:
     restart: unless-stopped
     environment:
       FORGE_PROXY_BROKER_ADDR: broker:9090
+      FORGE_PROXY_DOWNLOAD_HOSTS: "${FORGE_PROXY_DOWNLOAD_HOSTS-*.blob.core.windows.net,*.actions.githubusercontent.com}"
       FORGE_PROXY_TOKEN: ${FORGE_PROXY_TOKEN:?set in .env}
 
   # Lists repositories of every connection, through the proxy. It never
@@ -48,6 +49,19 @@ services:
       FORGE_ISSUES_TOKEN: ${FORGE_ISSUES_TOKEN:?set in .env}
       FORGE_ISSUES_CONNECTOR_URL: http://proxy:8081
       FORGE_ISSUES_CONNECTOR_TOKEN: ${FORGE_ISSUES_CONNECTOR_TOKEN:?set in .env}
+
+  actions:
+    build:
+      context: ../..
+      dockerfile: forge-actions/service/Dockerfile
+    restart: unless-stopped
+    environment:
+      FORGE_ACTIONS_TOKEN: ${FORGE_ACTIONS_TOKEN:?set in .env}
+      FORGE_ACTIONS_CONNECTOR_URL: http://proxy:8081
+      FORGE_ACTIONS_CONNECTOR_TOKEN: ${FORGE_ACTIONS_CONNECTOR_TOKEN:?set in .env}
+    ports:
+      - "127.0.0.1:8089:8080"
+      - "127.0.0.1:9099:9090"
 
   checkouts:
     build:
@@ -75,12 +89,16 @@ services:
       FORGE_MANAGEMENT_CONNECTOR_INSECURE: "true"
       FORGE_MANAGEMENT_CONNECTOR_ADMIN_TOKEN: ${FORGE_BROKER_ADMIN_TOKEN:?set in .env}
       # Registered in the broker at startup, for the proxy, repositories and
-      # issues and checkouts.
+      # issues, checkouts and actions.
       FORGE_MANAGEMENT_PROXY_TOKEN: ${FORGE_PROXY_TOKEN:?set in .env}
       FORGE_MANAGEMENT_REPOSITORIES_CONNECTOR_TOKEN: ${FORGE_REPOSITORIES_CONNECTOR_TOKEN:?set in .env}
       FORGE_MANAGEMENT_REPOSITORIES_ADDRESS: repositories:9090
       FORGE_MANAGEMENT_REPOSITORIES_INSECURE: "true"
       FORGE_MANAGEMENT_REPOSITORIES_TOKEN: ${FORGE_REPOSITORIES_TOKEN:?set in .env}
+      FORGE_MANAGEMENT_ACTIONS_CONNECTOR_TOKEN: ${FORGE_ACTIONS_CONNECTOR_TOKEN:?set in .env}
+      FORGE_MANAGEMENT_ACTIONS_ADDRESS: actions:9090
+      FORGE_MANAGEMENT_ACTIONS_INSECURE: "true"
+      FORGE_MANAGEMENT_ACTIONS_TOKEN: ${FORGE_ACTIONS_TOKEN:?set in .env}
       FORGE_MANAGEMENT_CHECKOUTS_CONNECTOR_TOKEN: ${FORGE_CHECKOUTS_CONNECTOR_TOKEN:?set in .env}
       FORGE_MANAGEMENT_ISSUES_CONNECTOR_TOKEN: ${FORGE_ISSUES_CONNECTOR_TOKEN:?set in .env}
       FORGE_MANAGEMENT_ISSUES_ADDRESS: issues:9090

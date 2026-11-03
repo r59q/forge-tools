@@ -24,15 +24,21 @@ func newCache[V any](now func() time.Time, max int) *cache[V] {
 	return &cache[V]{now: now, max: max, entries: make(map[string]cacheEntry[V])}
 }
 
-func (c *cache[V]) get(key string) (V, bool) {
+// get returns a copy of key's fresh value, or nil.
+func (c *cache[V]) get(key string) *V {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	e, ok := c.entries[key]
-	if ok && !c.now().Before(e.expires) {
-		delete(c.entries, key)
-		ok = false
+	if !ok {
+		return nil
 	}
-	return e.value, ok
+
+	if !c.now().Before(e.expires) {
+		delete(c.entries, key)
+		return nil
+	}
+
+	return &e.value
 }
 
 // set stores value for ttl. A zero or negative ttl stores nothing.
@@ -40,6 +46,7 @@ func (c *cache[V]) set(key string, value V, ttl time.Duration) {
 	if ttl <= 0 {
 		return
 	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	now := c.now()
@@ -49,10 +56,12 @@ func (c *cache[V]) set(key string, value V, ttl time.Duration) {
 				delete(c.entries, k)
 			}
 		}
+
 		if len(c.entries) >= c.max {
 			return
 		}
 	}
+
 	c.entries[key] = cacheEntry[V]{value: value, expires: now.Add(ttl)}
 }
 

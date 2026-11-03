@@ -11,6 +11,7 @@ on:
       - forge-core/forgeapi/**
       - .github/workflows/examples.yml
       - .github/workflows/reusable-go.yml
+      - .golangci.yml
   pull_request:
     paths:
       - examples/go/**
@@ -20,6 +21,7 @@ on:
       - forge-core/forgeapi/**
       - .github/workflows/examples.yml
       - .github/workflows/reusable-go.yml
+      - .golangci.yml
   workflow_dispatch:
 
 permissions:

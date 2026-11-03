@@ -12,8 +12,11 @@ import (
 
 func ExampleClient_List() {
 	var reg forgeauth.Registry
-	reg.Register(github.Provider{})
-	reg.Register(gitlab.Provider{})
+	for _, p := range []forgeauth.Provider{github.Provider{}, gitlab.Provider{}} {
+		if err := reg.Register(p); err != nil {
+			panic(err)
+		}
+	}
 
 	// Each source is one forge-connector proxy connection. The caller states
 	// its kind; the proxy client token comes from FORGE_TOKEN.
@@ -26,6 +29,7 @@ func ExampleClient_List() {
 		if err != nil {
 			panic(err)
 		}
+
 		return issues.Source{ID: connection, Session: s}
 	}
 	c, err := issues.New(
@@ -43,6 +47,7 @@ func ExampleClient_List() {
 		fmt.Println(err)
 		return
 	}
+
 	for _, i := range list {
 		fmt.Println(i.Source.Kind, i.Repository, i.Number, i.Title)
 	}
@@ -58,11 +63,13 @@ func ExampleClient_Update() {
 		fmt.Println(err)
 		return
 	}
+
 	// Close the issue and clear its assignees; the labels stay.
 	iss, err := c.Update(ctx, ref, issues.Update{State: &closed, Assignees: &[]string{}})
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
+
 	fmt.Println(iss.State, iss.WebURL)
 }

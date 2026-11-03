@@ -1,0 +1,248 @@
+syntax = "proto3";
+package forge.actions.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/r59q/forge-tools/forge-actions/service/actionspb";
+
+// ActionsService reads pipeline executions through connector sessions. Every
+// RPC requires the service bearer token. Repository and source are required.
+service ActionsService {
+  // ListSources returns adapter capabilities. GET /v1/sources.
+  rpc ListSources(ListSourcesRequest) returns (ListSourcesResponse) {
+    option (google.api.http) = {get: "/v1/sources"};
+  }
+  // ListPipelines reads one page. GET /v1/pipelines?source=&repository=.
+  rpc ListPipelines(ListPipelinesRequest) returns (ListPipelinesResponse) {
+    option (google.api.http) = {get: "/v1/pipelines"};
+  }
+  // GetPipeline reads an execution. GET /v1/pipelines/{id}?source=&repository=.
+  rpc GetPipeline(GetPipelineRequest) returns (GetPipelineResponse) {
+    option (google.api.http) = {
+      get: "/v1/pipelines/{id}"
+      response_body: "pipeline"
+    };
+  }
+  // ListJobs reads latest jobs. GET /v1/pipelines/{id}/jobs?source=&repository=.
+  rpc ListJobs(ListJobsRequest) returns (ListJobsResponse) {
+    option (google.api.http) = {get: "/v1/pipelines/{id}/jobs"};
+  }
+  // GetJob includes steps where available. GET /v1/jobs/{id}?source=&repository=.
+  rpc GetJob(GetJobRequest) returns (GetJobResponse) {
+    option (google.api.http) = {
+      get: "/v1/jobs/{id}"
+      response_body: "job"
+    };
+  }
+  // ReadJobLog returns a bounded snapshot. GET /v1/jobs/{id}/log?source=&repository=.
+  rpc ReadJobLog(ReadJobLogRequest) returns (ReadJobLogResponse) {
+    option (google.api.http) = {
+      get: "/v1/jobs/{id}/log"
+      response_body: "log"
+    };
+  }
+  // ListArtifacts reads pipeline archives. GET /v1/pipelines/{id}/artifacts?source=&repository=.
+  rpc ListArtifacts(ListArtifactsRequest) returns (ListArtifactsResponse) {
+    option (google.api.http) = {get: "/v1/pipelines/{id}/artifacts"};
+  }
+  // DownloadArtifact returns at most 16 MiB; REST encodes bytes as base64.
+  // GET /v1/artifacts/{id}/download?source=&repository=.
+  rpc DownloadArtifact(DownloadArtifactRequest) returns (DownloadArtifactResponse) {
+    option (google.api.http) = {get: "/v1/artifacts/{id}/download"};
+  }
+  // ListDefinitions reads the workflow catalog where supported.
+  // GET /v1/definitions?source=&repository=.
+  rpc ListDefinitions(ListDefinitionsRequest) returns (ListDefinitionsResponse) {
+    option (google.api.http) = {get: "/v1/definitions"};
+  }
+}
+
+// Ref identifies a pipeline, job or artifact using its native decimal ID.
+message Ref {
+  string source = 1;
+  string repository = 2;
+  string id = 3;
+}
+// Capabilities describes adapter support, subject to forge version and access.
+message Capabilities {
+  bool definitions = 1;
+  bool steps = 2;
+  bool stages = 3;
+  bool job_logs = 4;
+  bool artifacts = 5;
+}
+// Source identifies a connection without credentials or connection URLs.
+message Source {
+  string id = 1;
+  string kind = 2;
+  Capabilities capabilities = 3;
+}
+// ListSourcesRequest lists the configured sources.
+message ListSourcesRequest {}
+// ListSourcesResponse contains configured sources in order.
+message ListSourcesResponse {
+  repeated Source sources = 1;
+}
+// Status separates lifecycle (unknown, queued, running, waiting, finished)
+// and result (empty, success, failure, cancelled, skipped, neutral, unknown).
+message Status {
+  string phase = 1;
+  string result = 2;
+  string native_status = 3;
+  string native_result = 4;
+}
+// Pipeline is one automation execution. Missing timestamps are unavailable.
+message Pipeline {
+  Ref ref = 1;
+  string name = 2;
+  string commit = 3;
+  // branch retains the native branch or ref spelling.
+  string branch = 4;
+  string definition_id = 5;
+  string event = 6;
+  string web_url = 7;
+  Status status = 8;
+  // attempt is zero when unavailable.
+  int64 attempt = 9;
+  google.protobuf.Timestamp created_at = 10;
+  google.protobuf.Timestamp started_at = 11;
+  google.protobuf.Timestamp finished_at = 12;
+  google.protobuf.Timestamp updated_at = 13;
+}
+// Job is a unit of execution. Stage and runner are optional.
+message Job {
+  Ref ref = 1;
+  string pipeline_id = 2;
+  string name = 3;
+  string stage = 4;
+  string web_url = 5;
+  string runner = 6;
+  Status status = 7;
+  int64 attempt = 8;
+  bool allow_failure = 9;
+  google.protobuf.Timestamp started_at = 10;
+  google.protobuf.Timestamp finished_at = 11;
+  bool steps_known = 12;
+  repeated Step steps = 13;
+}
+// Step is an operation in a job with its native step number.
+message Step {
+  int64 number = 1;
+  string name = 2;
+  Status status = 3;
+  google.protobuf.Timestamp started_at = 4;
+  google.protobuf.Timestamp finished_at = 5;
+}
+// Artifact is an archive. Size is -1 when unavailable; availability is
+// available, expired or unknown. GitLab IDs name the producing job.
+message Artifact {
+  Ref ref = 1;
+  string pipeline_id = 2;
+  string job_id = 3;
+  string name = 4;
+  int64 size = 5;
+  string availability = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp expires_at = 8;
+}
+// Definition is a configured automation process where exposed.
+message Definition {
+  string id = 1;
+  string name = 2;
+  string path = 3;
+  string web_url = 4;
+  string state = 5;
+}
+// ListPipelinesRequest selects one source and repository. Page defaults to 1.
+// Each page contains up to 50 native entries, filtered locally by phase/result.
+// Branch is a branch name; definition_id is a GitHub ID or Forgejo filename.
+message ListPipelinesRequest {
+  string source = 1;
+  string repository = 2;
+  int32 page = 3;
+  string commit = 4;
+  string branch = 5;
+  string definition_id = 6;
+  string phase = 7;
+  string result = 8;
+}
+// ListPipelinesResponse may have no matches and still have a next page.
+message ListPipelinesResponse {
+  repeated Pipeline pipelines = 1;
+  int32 next_page = 2;
+}
+// GetPipelineRequest identifies a pipeline by its native ID.
+message GetPipelineRequest {
+  string source = 1;
+  string repository = 2;
+  string id = 3;
+}
+// GetPipelineResponse contains the pipeline; REST returns it bare.
+message GetPipelineResponse {
+  Pipeline pipeline = 1;
+}
+// ListJobsRequest identifies the pipeline whose jobs to list.
+message ListJobsRequest {
+  string source = 1;
+  string repository = 2;
+  string id = 3;
+}
+// ListJobsResponse contains latest jobs; at most 1000 entries.
+message ListJobsResponse {
+  repeated Job jobs = 1;
+}
+// GetJobRequest identifies a job by its native ID.
+message GetJobRequest {
+  string source = 1;
+  string repository = 2;
+  string id = 3;
+}
+// GetJobResponse contains the job; REST returns it bare.
+message GetJobResponse {
+  Job job = 1;
+}
+// ListArtifactsRequest identifies the pipeline whose archives to list.
+message ListArtifactsRequest {
+  string source = 1;
+  string repository = 2;
+  string id = 3;
+}
+// ListArtifactsResponse contains at most 1000 archives.
+message ListArtifactsResponse {
+  repeated Artifact artifacts = 1;
+}
+// ListDefinitionsRequest selects one source and repository.
+message ListDefinitionsRequest {
+  string source = 1;
+  string repository = 2;
+}
+// ListDefinitionsResponse contains at most 1000 definitions.
+message ListDefinitionsResponse {
+  repeated Definition definitions = 1;
+}
+// Log is a UTF-8 snapshot of up to 1 MiB of native log bytes.
+message Log {
+  string text = 1;
+  bool truncated = 2;
+}
+// ReadJobLogRequest identifies a job by its native ID.
+message ReadJobLogRequest {
+  string source = 1;
+  string repository = 2;
+  string id = 3;
+}
+// ReadJobLogResponse contains the log; REST returns it bare.
+message ReadJobLogResponse {
+  Log log = 1;
+}
+// DownloadArtifactRequest identifies an artifact by its native ID.
+message DownloadArtifactRequest {
+  string source = 1;
+  string repository = 2;
+  string id = 3;
+}
+// DownloadArtifactResponse contains archive bytes, base64 encoded in REST JSON.
+message DownloadArtifactResponse {
+  bytes data = 1;
+}

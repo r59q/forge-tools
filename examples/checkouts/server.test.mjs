@@ -8,8 +8,15 @@ import path from 'node:path';
 import { createExplorer } from './server.mjs';
 
 async function listen(t, server) {
-  server.listen(0, '127.0.0.1'); await once(server, 'listening');
-  t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }));
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(
+    () =>
+      new Promise(resolve => {
+        server.closeAllConnections();
+        server.close(resolve);
+      }),
+  );
   return `http://127.0.0.1:${server.address().port}`;
 }
 
@@ -20,48 +27,117 @@ test('exploration uses the shared checkout and forwards only supported checkout 
   const location = path.join(root, 'copies', id);
   await mkdir(location, { recursive: true });
   await writeFile(path.join(location, 'hello.js'), 'hello from checkout\n');
-  const record = { id, location, reference: 'main', state: 'ready', repository: { source: 'gh', path: 'owner/repo' } };
+  const record = {
+    id,
+    location,
+    reference: 'main',
+    state: 'ready',
+    repository: { source: 'gh', path: 'owner/repo' },
+  };
   const calls = [];
-  const upstream = await listen(t, createServer(async (req, res) => {
-    assert.equal(req.headers.authorization, req.url === '/connections' ? 'Bearer connector-only' : 'Bearer checkout-only');
-    let data = ''; for await (const chunk of req) data += chunk;
-    calls.push({ method: req.method, path: req.url, body: data ? JSON.parse(data) : undefined });
-    res.setHeader('Content-Type', 'application/json');
-    if (req.method === 'DELETE') { res.writeHead(400); res.end('{"message":"private-upstream-detail"}'); return; }
-    if (req.url === '/connections') res.end(JSON.stringify({ connections: [{ id: 'gh', status: 'ok' }] }));
-    else if (req.url.endsWith('/status')) res.end('{"files":[{"path":"hello.js","worktree":"M"}]}');
-    else if (req.url.endsWith('/diff')) res.end('{"unstaged":"K2hlbGxv"}');
-    else if (req.url.endsWith('/retain')) res.end(JSON.stringify({ ...record, state: 'retained' }));
-    else if (req.url === '/v1/checkouts' && req.method === 'GET') res.end(JSON.stringify({ checkouts: [record] }));
-    else res.end(JSON.stringify(record));
-  }));
-  const base = await listen(t, createExplorer({ checkoutURL: upstream, checkoutToken: 'checkout-only', connectorURL: upstream, connectorToken: 'connector-only', dataDirectory: root, demoPath: '/data/demo' }));
-  const api = async (route, options) => { const r = await fetch(base + route, options); return { status: r.status, data: await r.json() }; };
+  const upstream = await listen(
+    t,
+    createServer(async (req, res) => {
+      assert.equal(
+        req.headers.authorization,
+        req.url === '/connections' ? 'Bearer connector-only' : 'Bearer checkout-only',
+      );
+      let data = '';
+      for await (const chunk of req) data += chunk;
+      calls.push({ method: req.method, path: req.url, body: data ? JSON.parse(data) : undefined });
+      res.setHeader('Content-Type', 'application/json');
+      if (req.method === 'DELETE') {
+        res.writeHead(400);
+        res.end('{"message":"private-upstream-detail"}');
+        return;
+      }
+      if (req.url === '/connections')
+        res.end(JSON.stringify({ connections: [{ id: 'gh', status: 'ok' }] }));
+      else if (req.url.endsWith('/status'))
+        res.end('{"files":[{"path":"hello.js","worktree":"M"}]}');
+      else if (req.url.endsWith('/diff')) res.end('{"unstaged":"K2hlbGxv"}');
+      else if (req.url.endsWith('/retain'))
+        res.end(JSON.stringify({ ...record, state: 'retained' }));
+      else if (req.url === '/v1/checkouts' && req.method === 'GET')
+        res.end(JSON.stringify({ checkouts: [record] }));
+      else res.end(JSON.stringify(record));
+    }),
+  );
+  const base = await listen(
+    t,
+    createExplorer({
+      checkoutURL: upstream,
+      checkoutToken: 'checkout-only',
+      connectorURL: upstream,
+      connectorToken: 'connector-only',
+      dataDirectory: root,
+      demoPath: '/data/demo',
+    }),
+  );
+  const api = async (route, options) => {
+    const r = await fetch(base + route, options);
+    return { status: r.status, data: await r.json() };
+  };
   assert.equal((await api('/api/connections')).data.connections[0].id, 'gh');
   for (const source of ['', 'gh']) {
-    const created = await api('/api/checkouts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source, repository: 'owner/repo', reference: 'v1', localPath: '/etc' }) });
+    const created = await api('/api/checkouts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        source,
+        repository: 'owner/repo',
+        reference: 'v1',
+        localPath: '/etc',
+      }),
+    });
     assert.equal(created.status, 200);
-    assert.deepEqual(calls.at(-1).body.repository, source ? { source, path: 'owner/repo' } : { localPath: '/data/demo' });
+    assert.deepEqual(
+      calls.at(-1).body.repository,
+      source ? { source, path: 'owner/repo' } : { localPath: '/data/demo' },
+    );
   }
   assert.equal((await api('/api/checkouts')).data.checkouts.length, 1);
   assert.deepEqual((await api(`/api/checkouts/${id}/files`)).data.files, ['hello.js']);
-  assert.equal((await api(`/api/checkouts/${id}/file?path=hello.js`)).data.text, 'hello from checkout\n');
+  assert.equal(
+    (await api(`/api/checkouts/${id}/file?path=hello.js`)).data.text,
+    'hello from checkout\n',
+  );
   assert.equal((await api(`/api/checkouts/${id}/search?q=checkout`)).data.matches.length, 1);
   assert.equal((await api(`/api/checkouts/${id}/status`)).data.files[0].path, 'hello.js');
   assert.equal((await api(`/api/checkouts/${id}/diff`)).data.unstaged, 'K2hlbGxv');
-  assert.equal((await api(`/api/checkouts/${id}/retain`, { method: 'POST' })).data.state, 'retained');
+  assert.equal(
+    (await api(`/api/checkouts/${id}/retain`, { method: 'POST' })).data.state,
+    'retained',
+  );
   const removed = await api(`/api/checkouts/${id}?discard=true`, { method: 'DELETE' });
   assert.equal(removed.status, 400);
   assert.match(removed.data.error, /Removal refused/);
   assert.equal(calls.at(-1).path, `/v1/checkouts/${id}`);
   assert.equal((await api(`/api/checkouts/${id}/file?path=../demo`)).status, 400);
   const before = calls.length;
-  assert.equal((await api('/api/checkouts', { headers: { Origin: 'https://attacker.example' } })).status, 403);
+  assert.equal(
+    (await api('/api/checkouts', { headers: { Origin: 'https://attacker.example' } })).status,
+    403,
+  );
   const rebound = await new Promise((resolve, reject) => {
-    request(base + '/api/checkouts', { headers: { Host: 'attacker.example' } }, res => { res.resume(); resolve(res.statusCode); }).on('error', reject).end();
+    request(base + '/api/checkouts', { headers: { Host: 'attacker.example' } }, res => {
+      res.resume();
+      resolve(res.statusCode);
+    })
+      .on('error', reject)
+      .end();
   });
   assert.equal(rebound, 403);
-  assert.equal((await api('/api/checkouts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: 'null' })).status, 400);
+  assert.equal(
+    (
+      await api('/api/checkouts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: 'null',
+      })
+    ).status,
+    400,
+  );
   assert.equal(calls.length, before);
   for (const route of ['/', '/app.js', '/style.css']) {
     const response = await fetch(base + route);
@@ -71,4 +147,84 @@ test('exploration uses the shared checkout and forwards only supported checkout 
   }
   record.location = '/etc';
   assert.equal((await api(`/api/checkouts/${id}/files`)).status, 409);
+});
+
+test('invalid requests are rejected before contacting a service', async t => {
+  let calls = 0;
+  const upstream = await listen(
+    t,
+    createServer((_req, res) => {
+      calls++;
+      res.end('{}');
+    }),
+  );
+  const base = await listen(
+    t,
+    createExplorer({
+      checkoutURL: upstream,
+      checkoutToken: 'checkout-only',
+      connectorURL: upstream,
+      connectorToken: 'connector-only',
+      dataDirectory: '/data',
+      demoPath: '/data/demo',
+    }),
+  );
+
+  const cases = [
+    { name: 'content type', body: '{}', headers: {}, status: 415 },
+    { name: 'malformed JSON', body: '{', status: 400 },
+    { name: 'missing fields', body: '{"source":"gh"}', status: 400 },
+    {
+      name: 'long reference',
+      body: JSON.stringify({ source: '', repository: '', reference: 'x'.repeat(1025) }),
+      status: 400,
+    },
+    { name: 'large body', body: ' '.repeat(8193), status: 413 },
+  ];
+
+  for (const item of cases) {
+    const response = await fetch(`${base}/api/checkouts`, {
+      method: 'POST',
+      headers: item.headers ?? { 'Content-Type': 'application/json' },
+      body: item.body,
+    });
+    assert.equal(response.status, item.status, item.name);
+  }
+
+  const id = 'a'.repeat(32);
+  assert.equal((await fetch(`${base}/api/checkouts/${id}/files`, { method: 'POST' })).status, 405);
+  assert.equal((await fetch(`${base}/api/checkouts/not-an-id`)).status, 404);
+  assert.equal(
+    (await fetch(`${base}/api/checkouts`, { headers: { 'Sec-Fetch-Site': 'cross-site' } })).status,
+    403,
+  );
+  assert.equal(calls, 0);
+});
+
+test('service failures return useful errors without upstream details', async t => {
+  const upstream = await listen(
+    t,
+    createServer((_req, res) => {
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      res.end('{"message":"private-upstream-detail"}');
+    }),
+  );
+  const base = await listen(
+    t,
+    createExplorer({
+      checkoutURL: upstream,
+      checkoutToken: 'checkout-only',
+      connectorURL: upstream,
+      connectorToken: 'connector-only',
+      dataDirectory: '/data',
+      demoPath: '/data/demo',
+    }),
+  );
+
+  const response = await fetch(`${base}/api/checkouts`);
+  assert.equal(response.status, 503);
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  const body = await response.json();
+  assert.match(body.error, /Service request failed \(503\)/);
+  assert.doesNotMatch(body.error, /private-upstream-detail|checkout-only/);
 });

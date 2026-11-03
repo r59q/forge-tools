@@ -30,14 +30,17 @@ func NewAESGCMSealer(key []byte) (*AESGCMSealer, error) {
 	if len(key) != 32 {
 		return nil, ErrInvalid
 	}
+
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, ErrSealing
 	}
+
 	aead, err := cipher.NewGCMWithRandomNonce(block)
 	if err != nil {
 		return nil, ErrSealing
 	}
+
 	return &AESGCMSealer{aead: aead}, nil
 }
 
@@ -46,7 +49,8 @@ func (s *AESGCMSealer) Seal(plaintext []byte) ([]byte, error) {
 	if s == nil || s.aead == nil {
 		return nil, ErrSealing
 	}
-	return s.aead.Seal(nil, nil, plaintext, nil), nil
+
+	return s.aead.Seal(nil, nil, plaintext, nil), nil //nolint:gosec // NewGCMWithRandomNonce generates the nonce.
 }
 
 // Open verifies ciphertext before returning plaintext. Modified, truncated and
@@ -55,10 +59,12 @@ func (s *AESGCMSealer) Open(sealed []byte) ([]byte, error) {
 	if s == nil || s.aead == nil {
 		return nil, ErrSealing
 	}
+
 	plaintext, err := s.aead.Open(nil, nil, sealed, nil)
 	if err != nil {
 		return nil, ErrSealing
 	}
+
 	return plaintext, nil
 }
 

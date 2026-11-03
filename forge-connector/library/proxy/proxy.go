@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httputil"
+	"net/url"
 	"strings"
 
 	"github.com/r59q/forge-tools/forge-connector/library/broker"
@@ -55,6 +56,10 @@ type Config struct {
 	// MaxGitPushBytes caps a push request body. Zero means
 	// DefaultMaxGitPushBytes.
 	MaxGitPushBytes int64
+	// DownloadHosts allows credential-free HTTPS GET redirects to these DNS
+	// hosts. A leading *. permits subdomains. Empty disables external downloads.
+	// Configure only trusted object-storage hosts; no caller headers are sent.
+	DownloadHosts []string
 }
 
 // Handler serves /c/{connectionID}/<API path>, the Git smart-HTTP route
@@ -63,17 +68,22 @@ type Config struct {
 // it without path cleaning so encoded traversal is rejected, not redirected.
 // Requests inherit the caller's context; the service should set deadlines.
 type Handler struct {
-	verifier  Verifier
-	issuer    TokenIssuer
-	lister    ConnectionLister
-	registry  *forgeauth.Registry
-	transport http.RoundTripper
-	publicURL string
-	allowPush bool
-	maxPush   int64
+	verifier      Verifier
+	issuer        TokenIssuer
+	lister        ConnectionLister
+	registry      *forgeauth.Registry
+	transport     http.RoundTripper
+	publicURL     string
+	allowPush     bool
+	maxPush       int64
+	downloadHosts []string
 }
 
 var _ http.Handler = (*Handler)(nil)
+
+// errMetadataChanged reports that issued credentials no longer match the
+// authorized connection.
+var errMetadataChanged = errors.New("proxy: connection metadata changed")
 
 // New validates config and constructs a Handler. Invalid configuration returns
 // broker.ErrInvalid. The adapters and transport are shared across requests.
@@ -81,25 +91,44 @@ func New(config Config) (*Handler, error) {
 	if config.Verifier == nil || config.TokenIssuer == nil || config.Registry == nil || config.MaxGitPushBytes < 0 {
 		return nil, broker.ErrInvalid
 	}
+
+	for _, host := range config.DownloadHosts {
+		if !validDownloadHost(host) {
+			return nil, broker.ErrInvalid
+		}
+	}
+
 	maxPush := config.MaxGitPushBytes
 	if maxPush == 0 {
 		maxPush = DefaultMaxGitPushBytes
 	}
+
 	publicURL := ""
 	if config.PublicURL != "" {
 		u, ok := baseURL(config.PublicURL)
 		if !ok || (u.Path != "" && u.Path != "/") {
 			return nil, broker.ErrInvalid
 		}
+
 		publicURL = u.Scheme + "://" + u.Host
 	}
+
 	rt := config.Transport
 	if rt == nil {
 		rt = http.DefaultTransport
 	}
-	return &Handler{verifier: config.Verifier, issuer: config.TokenIssuer, lister: config.Connections,
-		registry: config.Registry, transport: rt, publicURL: publicURL,
-		allowPush: config.AllowGitPush, maxPush: maxPush}, nil
+
+	return &Handler{
+		verifier:      config.Verifier,
+		issuer:        config.TokenIssuer,
+		lister:        config.Connections,
+		registry:      config.Registry,
+		transport:     rt,
+		publicURL:     publicURL,
+		allowPush:     config.AllowGitPush,
+		maxPush:       maxPush,
+		downloadHosts: append([]string(nil), config.DownloadHosts...),
+	}, nil
 }
 
 // Format keeps adapter credentials out of formatted output.
@@ -113,85 +142,145 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.connections(w, r)
 		return
 	}
+
 	if r.URL != nil && strings.HasPrefix(r.URL.EscapedPath(), GitPrefix) {
 		h.serveGit(w, r)
 		return
 	}
+
+	h.serveAPI(w, r)
+}
+
+// serveAPI proxies one forge API request on the /c/ route.
+func (h *Handler) serveAPI(w http.ResponseWriter, r *http.Request) {
 	id, apiPath, code := route(r)
 	if code != 0 {
 		proxyError(w, code)
 		return
 	}
+
 	conn, err := h.verifier.Connection(r.Context(), id)
 	if err != nil {
 		dependencyError(w, err)
 		return
 	}
+
 	base, ok := baseURL(conn.BaseURL)
 	if !ok {
 		proxyError(w, http.StatusBadGateway)
 		return
 	}
+
 	provider, err := h.registry.Provider(conn.Kind)
 	if err != nil {
 		proxyError(w, http.StatusBadGateway)
 		return
 	}
+
 	token, ok := provider.TokenFromHeader(r.Header)
 	if !ok {
 		proxyError(w, http.StatusUnauthorized)
 		return
 	}
-	if _, err := h.verifier.VerifyClient(r.Context(), forgeauth.StaticToken(token), id); err != nil {
-		dependencyError(w, err)
-		return
-	}
-	issued, err := h.issuer.IssueToken(r.Context(), id)
+
+	issued, err := h.issue(r.Context(), token, id, conn)
 	if err != nil {
 		dependencyError(w, err)
 		return
 	}
-	// Fail closed if metadata changed between authorization and issuance.
-	if issued.Kind != conn.Kind || issued.BaseURL != conn.BaseURL || !validToken(string(issued.Token)) {
-		proxyError(w, http.StatusBadGateway)
-		return
-	}
-	target := targetURL(base, apiPath, r.URL)
+
 	origin, ok := h.origin(r)
 	if !ok {
 		proxyError(w, http.StatusBadRequest)
 		return
 	}
-	proxyBase := origin + "/c/" + string(id)
-	p := httputil.ReverseProxy{
+
+	rewrite := urlRewrite{
+		base:      base,
+		target:    targetURL(base, apiPath, r.URL),
+		proxyBase: origin + "/c/" + string(id),
+	}
+
+	// Downloads use the forge request's context, derived from r's by ReverseProxy.
+	p := h.apiProxy(rewrite, provider, string(issued.Token)) //nolint:contextcheck // inherited via resp.Request
+	p.ServeHTTP(&responseWriter{ResponseWriter: w, rewrite: rewrite.headers}, r)
+}
+
+// issue authorizes the caller's token for id, then issues the forge
+// credential. It fails closed if metadata changed between authorization and
+// issuance.
+func (h *Handler) issue(ctx context.Context, token string, id broker.ID, conn forgeauth.Connection) (broker.IssuedToken, error) {
+	if _, err := h.verifier.VerifyClient(ctx, forgeauth.StaticToken(token), id); err != nil {
+		return broker.IssuedToken{}, err
+	}
+
+	issued, err := h.issuer.IssueToken(ctx, id)
+	if err != nil {
+		return broker.IssuedToken{}, err
+	}
+
+	if issued.Kind != conn.Kind || issued.BaseURL != conn.BaseURL || !validToken(string(issued.Token)) {
+		return broker.IssuedToken{}, errMetadataChanged
+	}
+
+	return issued, nil
+}
+
+// urlRewrite maps forge URLs in response headers to the proxy route.
+type urlRewrite struct {
+	base      *url.URL
+	target    *url.URL
+	proxyBase string
+}
+
+func (u urlRewrite) headers(h http.Header) {
+	rewriteHeaders(h, u.base, u.target, u.proxyBase)
+}
+
+// apiProxy sends the request to the forge with the issued token instead of
+// the caller's credentials.
+func (h *Handler) apiProxy(rewrite urlRewrite, provider forgeauth.Provider, token string) *httputil.ReverseProxy {
+	p := h.reverseProxy()
+
+	p.Rewrite = func(pr *httputil.ProxyRequest) {
+		pr.Out.URL = rewrite.target
+		pr.Out.Host = rewrite.target.Host
+		stripCredentials(pr.Out.Header)
+		// Credentials must not be smuggled as request trailers.
+		pr.Out.Trailer = nil
+		provider.SetToken(pr.Out.Header, token)
+	}
+
+	p.ModifyResponse = func(resp *http.Response) error {
+		if err := h.download(resp); err != nil {
+			return err
+		}
+
+		rewrite.headers(resp.Header)
+		if resp.StatusCode != http.StatusSwitchingProtocols {
+			resp.Body = &responseBody{ReadCloser: resp.Body, rewrite: func() {
+				rewrite.headers(resp.Trailer)
+			}}
+		}
+
+		return nil
+	}
+
+	return p
+}
+
+// reverseProxy returns a streaming proxy that answers transport failures
+// with 502. ReverseProxy's default logger can include transport error
+// messages, so logging is discarded.
+func (h *Handler) reverseProxy() *httputil.ReverseProxy {
+	return &httputil.ReverseProxy{
 		Transport:     h.transport,
 		FlushInterval: -1,
-		// ReverseProxy's default logger can include transport error messages.
-		ErrorLog: log.New(io.Discard, "", 0),
+		ErrorLog:      log.New(io.Discard, "", 0),
 		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, _ error) {
 			proxyError(w, http.StatusBadGateway)
 		},
-		Rewrite: func(pr *httputil.ProxyRequest) {
-			pr.Out.URL = target
-			pr.Out.Host = target.Host
-			stripCredentials(pr.Out.Header)
-			// Credentials must not be smuggled as request trailers.
-			pr.Out.Trailer = nil
-			provider.SetToken(pr.Out.Header, string(issued.Token))
-		},
-		ModifyResponse: func(resp *http.Response) error {
-			rewriteHeaders(resp.Header, base, target, proxyBase)
-			if resp.StatusCode != http.StatusSwitchingProtocols {
-				resp.Body = &responseBody{ReadCloser: resp.Body, rewrite: func() {
-					rewriteHeaders(resp.Trailer, base, target, proxyBase)
-				}}
-			}
-			return nil
-		},
 	}
-	p.ServeHTTP(&responseWriter{ResponseWriter: w, rewrite: func(h http.Header) {
-		rewriteHeaders(h, base, target, proxyBase)
-	}}, r)
 }
 
 // origin returns the proxy's public origin for response URLs.
@@ -203,9 +292,11 @@ func (h *Handler) origin(r *http.Request) (string, bool) {
 			origin = "https://" + r.Host
 		}
 	}
+
 	if public, ok := baseURL(origin); !ok || public.Path != "" {
 		return "", false
 	}
+
 	return origin, true
 }
 
@@ -221,6 +312,7 @@ func (w *responseWriter) WriteHeader(code int) {
 	if code >= 100 && code < 200 {
 		w.rewrite(w.Header())
 	}
+
 	w.ResponseWriter.WriteHeader(code)
 }
 
@@ -234,6 +326,7 @@ func (b *responseBody) Read(p []byte) (int, error) {
 	if err == io.EOF {
 		b.rewrite()
 	}
+
 	return n, err
 }
 
@@ -247,11 +340,13 @@ func validToken(token string) bool {
 	if token == "" {
 		return false
 	}
+
 	for i := range token {
 		if token[i] <= ' ' || token[i] == 0x7f {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -266,7 +361,10 @@ func dependencyError(w http.ResponseWriter, err error) {
 		code = http.StatusNotFound
 	case errors.Is(err, context.DeadlineExceeded):
 		code = http.StatusGatewayTimeout
+	case errors.Is(err, errMetadataChanged):
+		code = http.StatusBadGateway
 	}
+
 	proxyError(w, code)
 }
 

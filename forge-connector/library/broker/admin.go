@@ -28,21 +28,31 @@ func (m *Manager) RegisterForge(ctx context.Context, forge Forge) (Forge, error)
 	if strings.TrimSpace(forge.BaseURL) == "" {
 		return Forge{}, ErrInvalid
 	}
+
 	// Open checks the endpoint with a placeholder credential and makes no request.
 	session, err := m.registry.Open(ctx, forgeauth.Connection{Kind: forge.Kind, BaseURL: forge.BaseURL}, placeholder)
 	if err != nil {
 		return Forge{}, safeError(err, ErrInvalid)
 	}
+
 	gitBase := defaultGitURL(forge.Kind, session.BaseURL)
 	if strings.TrimSpace(forge.GitBaseURL) != "" {
 		if gitBase, err = checkGitURL(forge.GitBaseURL); err != nil {
 			return Forge{}, err
 		}
 	}
-	f := Forge{ID: randomID(), Kind: forge.Kind, BaseURL: session.BaseURL, Name: forge.Name, GitBaseURL: gitBase}
+
+	f := Forge{
+		ID:         randomID(),
+		Kind:       forge.Kind,
+		BaseURL:    session.BaseURL,
+		Name:       forge.Name,
+		GitBaseURL: gitBase,
+	}
 	if err := m.store.CreateForge(ctx, f); err != nil {
 		return Forge{}, safeError(err, ErrStorage)
 	}
+
 	return f, nil
 }
 
@@ -55,6 +65,7 @@ func checkGitURL(raw string) (string, error) {
 	if err != nil {
 		return "", ErrInvalid
 	}
+
 	return remote.BaseURL, nil
 }
 
@@ -64,10 +75,12 @@ func defaultGitURL(kind forgeauth.Kind, baseURL string) string {
 	if err != nil {
 		return ""
 	}
+
 	gitBase, err := checkGitURL(raw)
 	if err != nil {
 		return ""
 	}
+
 	return gitBase
 }
 
@@ -76,6 +89,7 @@ func withGitDefault(f Forge) Forge {
 	if f.GitBaseURL == "" {
 		f.GitBaseURL = defaultGitURL(f.Kind, f.BaseURL)
 	}
+
 	return f
 }
 
@@ -87,6 +101,7 @@ func (m *Manager) ListForges(ctx context.Context) ([]Forge, error) {
 	for i := range result {
 		result[i] = withGitDefault(result[i])
 	}
+
 	return result, safeError(err, ErrStorage)
 }
 
@@ -94,6 +109,7 @@ func (m *Manager) ListForges(ctx context.Context) ([]Forge, error) {
 func (m *Manager) DeleteForge(ctx context.Context, id ID) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
 	return safeError(m.store.DeleteForge(ctx, id), ErrStorage)
 }
 
@@ -102,6 +118,7 @@ func (m *Manager) ListConnections(ctx context.Context) ([]Connection, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	result, err := m.store.ListConnections(ctx)
+
 	return result, safeError(err, ErrStorage)
 }
 
@@ -110,6 +127,7 @@ func (m *Manager) GetConnection(ctx context.Context, id ID) (Connection, error) 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	result, err := m.store.GetConnection(ctx, id)
+
 	return result, safeError(err, ErrStorage)
 }
 
@@ -121,8 +139,10 @@ func (m *Manager) ListClients(ctx context.Context) ([]Client, error) {
 	if err != nil {
 		return nil, safeError(err, ErrStorage)
 	}
+
 	for i := range clients {
 		clients[i] = clientMetadata(clients[i])
 	}
+
 	return clients, nil
 }

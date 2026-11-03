@@ -39,13 +39,16 @@ type backend interface {
 	// the Client sets it from Source.Git.
 	capabilities() Capabilities
 
+	refBackend
+	commitBackend
+	contentBackend
+}
+
+// refBackend reads a repository's refs. See backend for the rules.
+type refBackend interface {
 	// defaultBranch returns the short name of the default branch, such
 	// as "main", or "" if the repository has none.
 	defaultBranch(o *op) (string, error)
-
-	// commit returns the commit id. A missing commit, or an object that is
-	// not a commit, is objectMissing(id).
-	commit(o *op, id OID) (Commit, error)
 
 	// ref looks up one ref by its full name, refs/heads/X or refs/tags/X,
 	// matched exactly. Annotated tags are peeled into Ref.Commit; GitHub
@@ -58,6 +61,14 @@ type backend interface {
 	// call budget runs out it may return truncated with what it has, but
 	// only if every returned Ref is complete; otherwise the error.
 	refs(o *op, prefix string, limit int) (refs []Ref, truncated bool, err error)
+}
+
+// commitBackend reads commits and their history. See backend for the
+// rules.
+type commitBackend interface {
+	// commit returns the commit id. A missing commit, or an object that is
+	// not a commit, is objectMissing(id).
+	commit(o *op, id OID) (Commit, error)
 
 	// history returns up to n (1 to 100) commits reachable from tip,
 	// newest first in the forge's log order, only those that change path
@@ -68,6 +79,14 @@ type backend interface {
 	// follow. A path with no history gives an empty page, not an error.
 	history(o *op, tip OID, path string, n int, pos historyPos) (commits []Commit, next historyPos, more bool, err error)
 
+	// mergeBase returns the best common ancestor of two different,
+	// existing commits. It returns errNoMergeBase if they share no
+	// history, and ErrUnsupported if it cannot pick one base.
+	mergeBase(o *op, a, b OID) (OID, error)
+}
+
+// contentBackend reads trees and blobs. See backend for the rules.
+type contentBackend interface {
 	// tree lists the directory at path ("" is the root) in commit. Entries
 	// carry their full Path from the repository root. With recursive it
 	// lists every entry below path, in any order; the Client sorts. It
@@ -93,11 +112,6 @@ type backend interface {
 	// readBlob opens the blob id like readFile. A missing blob is
 	// objectMissing(id).
 	readBlob(o *op, id OID) (*Reader, error)
-
-	// mergeBase returns the best common ancestor of two different,
-	// existing commits. It returns errNoMergeBase if they share no
-	// history, and ErrUnsupported if it cannot pick one base.
-	mergeBase(o *op, a, b OID) (OID, error)
 }
 
 // commitMessage drops one trailing newline from a commit message. GitHub
@@ -112,11 +126,19 @@ type historyPos struct {
 	Offset int
 }
 
-// backends holds the supported adapters by kind.
-var backends = map[forgeauth.Kind]backend{
-	forgeauth.GitHub:  githubBackend{},
-	forgeauth.GitLab:  gitlabBackend{},
-	forgeauth.Forgejo: forgejoBackend{},
+// paramPerPage is the page size parameter of GitHub, GitLab and some
+// Forgejo endpoints.
+const paramPerPage = "per_page"
+
+// acceptJSON returns request headers that ask for JSON.
+func acceptJSON() http.Header {
+	return http.Header{"Accept": {"application/json"}}
+}
+
+// bodyReader returns a Reader that streams resp's body as blob id, with
+// the response's Content-Length as its size.
+func bodyReader(id OID, resp *http.Response) *Reader {
+	return &Reader{Blob: Blob{ID: id, Size: resp.ContentLength}, ReadCloser: resp.Body}
 }
 
 // op is the context of one Client call: its session, repository, limits,
@@ -138,14 +160,21 @@ type op struct {
 
 // newOp returns an op for one call on repo over s.
 func newOp(ctx context.Context, s *forgeauth.Session, repo string, l Limits) *op {
-	o := &op{ctx: ctx, repo: repo, limits: l, memo: map[string]any{}}
+	o := &op{
+		ctx:    ctx,
+		repo:   repo,
+		limits: l,
+		memo:   map[string]any{},
+	}
 	c := *s.Client
 	next := c.Transport
 	if next == nil {
 		next = http.DefaultTransport
 	}
+
 	c.Transport = &countingTransport{o: o, next: next}
 	o.s = &forgeauth.Session{Kind: s.Kind, BaseURL: s.BaseURL, Client: &c}
+
 	return o
 }
 
@@ -156,6 +185,7 @@ func (o *op) spend() error {
 	if o.calls.Add(1) > int64(o.limits.MaxCalls) {
 		return errBudget
 	}
+
 	return nil
 }
 
@@ -167,20 +197,23 @@ func (o *op) left() int {
 // cached returns the value stored under key, calling load to fill it on
 // first use. Errors are not stored. Keys are chosen by the adapter, such
 // as "tree:" + OID; values live for one Client call only.
-func cached[T any](o *op, key string, load func() (T, error)) (T, error) {
+func cached[T any](o *op, key string, load func() (T, error)) (T, error) { //nolint:ireturn // T is the caller's concrete type.
 	o.mu.Lock()
 	v, ok := o.memo[key]
 	o.mu.Unlock()
 	if ok {
 		return v.(T), nil
 	}
+
 	t, err := load()
 	if err != nil {
 		return t, err
 	}
+
 	o.mu.Lock()
 	o.memo[key] = t
 	o.mu.Unlock()
+
 	return t, nil
 }
 
@@ -193,9 +226,11 @@ type countingTransport struct {
 func (t *countingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if err := t.o.spend(); err != nil {
 		if req.Body != nil {
-			req.Body.Close()
+			_ = req.Body.Close() // the budget error is the one to report
 		}
+
 		return nil, err
 	}
+
 	return t.next.RoundTrip(req)
 }

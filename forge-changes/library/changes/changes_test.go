@@ -23,15 +23,43 @@ func fixture(kind forgeauth.Kind, state, title, sha string, draft bool) map[stri
 		if state == "open" {
 			state = "opened"
 		}
-		return map[string]any{"id": 90, "iid": 7, "state": state, "title": title, "description": "body", "draft": draft,
-			"author": map[string]any{"username": "sam", "web_url": "https://forge/sam"}, "source_branch": "feature", "target_branch": "main",
-			"source_project_id": 3, "target_project_id": 3, "diff_refs": map[string]string{"head_sha": sha, "start_sha": target, "base_sha": target},
-			"web_url": "https://forge/o/r/-/merge_requests/7", "detailed_merge_status": "mergeable", "created_at": "2026-01-01T00:00:00Z"}
+
+		return map[string]any{
+			"id":                    90,
+			"iid":                   7,
+			"state":                 state,
+			"title":                 title,
+			"description":           "body",
+			"draft":                 draft,
+			"author":                map[string]any{"username": "sam", "web_url": "https://forge/sam"},
+			"source_branch":         "feature",
+			"target_branch":         "main",
+			"source_project_id":     3,
+			"target_project_id":     3,
+			"diff_refs":             map[string]string{"head_sha": sha, "start_sha": target, "base_sha": target},
+			"web_url":               "https://forge/o/r/-/merge_requests/7",
+			"detailed_merge_status": "mergeable",
+			"created_at":            "2026-01-01T00:00:00Z",
+		}
 	}
-	return map[string]any{"id": 90, "number": 7, "node_id": "PR_node", "state": state, "title": title, "body": "body", "draft": draft,
-		"user": map[string]string{"login": "sam", "html_url": "https://forge/sam"}, "head": map[string]any{"ref": "feature", "sha": sha, "repo": map[string]string{"full_name": "o/r"}},
-		"base":     map[string]any{"ref": "main", "sha": target, "repo": map[string]string{"full_name": "o/r"}},
-		"html_url": "https://forge/o/r/pulls/7", "mergeable": true, "mergeable_state": "clean", "changed_files": 1, "created_at": "2026-01-01T00:00:00Z"}
+
+	return map[string]any{
+		"id":              90,
+		"number":          7,
+		"node_id":         "PR_node",
+		"state":           state,
+		"title":           title,
+		"body":            "body",
+		"draft":           draft,
+		"user":            map[string]string{"login": "sam", "html_url": "https://forge/sam"},
+		"head":            map[string]any{"ref": "feature", "sha": sha, "repo": map[string]string{"full_name": "o/r"}},
+		"base":            map[string]any{"ref": "main", "sha": target, "repo": map[string]string{"full_name": "o/r"}},
+		"html_url":        "https://forge/o/r/pulls/7",
+		"mergeable":       true,
+		"mergeable_state": "clean",
+		"changed_files":   1,
+		"created_at":      "2026-01-01T00:00:00Z",
+	}
 }
 
 func client(t *testing.T, kind forgeauth.Kind, h http.HandlerFunc) (*Client, Ref) {
@@ -42,6 +70,7 @@ func client(t *testing.T, kind forgeauth.Kind, h http.HandlerFunc) (*Client, Ref
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return c, Ref{"connection", "o/r", 7}
 }
 
@@ -49,6 +78,7 @@ func endpoint(kind forgeauth.Kind) string {
 	if kind == forgeauth.GitLab {
 		return "/projects/o%2Fr/merge_requests"
 	}
+
 	return "/repos/o/r/pulls"
 }
 
@@ -68,20 +98,26 @@ func TestLifecycle(t *testing.T) {
 					if b.Variables["id"] != "PR_node" {
 						t.Error("missing node ID")
 					}
+
 					name := "markPullRequestReadyForReview"
 					draft = false
 					if strings.Contains(b.Query, "convertPullRequestToDraft") {
 						name = "convertPullRequestToDraft"
 						draft = true
 					}
+
 					_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{name: map[string]any{"pullRequest": map[string]bool{"isDraft": draft}}}})
+
 					return
 				}
+
 				if path != endpoint(kind) && path != endpoint(kind)+"/7" {
 					t.Errorf("path %s", path)
 					http.NotFound(w, req)
+
 					return
 				}
+
 				if req.Method != "GET" {
 					writes++
 					var b map[string]any
@@ -94,6 +130,7 @@ func TestLifecycle(t *testing.T) {
 							draft = strings.HasPrefix(v, "Draft:")
 						}
 					}
+
 					if v, ok := b["draft"].(bool); ok {
 						draft = v
 					}
@@ -128,6 +165,7 @@ func TestLifecycle(t *testing.T) {
 						}
 					}
 				}
+
 				_ = json.NewEncoder(w).Encode(fixture(kind, state, title, head, draft))
 			})
 			ctx := context.Background()
@@ -135,12 +173,14 @@ func TestLifecycle(t *testing.T) {
 			if err != nil || v.Ref != r || v.Author.Login != "sam" || v.Revision.Head != head || v.State != Open || v.CreatedAt.IsZero() {
 				t.Fatalf("create: %+v %v", v, err)
 			}
+
 			for _, want := range []bool{true, false} {
 				v, err = c.SetDraft(ctx, r, want)
 				if err != nil || v.Draft != want {
 					t.Fatalf("draft %v: %+v %v", want, v, err)
 				}
 			}
+
 			empty := ""
 			for _, want := range []State{Closed, Open} {
 				v, err = c.Update(ctx, r, Update{State: &want, Description: &empty})
@@ -148,6 +188,7 @@ func TestLifecycle(t *testing.T) {
 					t.Fatalf("state: %+v %v", v, err)
 				}
 			}
+
 			before := writes
 			_, err = c.Update(ctx, r, Update{SourceBranch: &empty, Description: &empty})
 			if !errors.Is(err, ErrUnsupported) || writes != before {
@@ -166,6 +207,7 @@ func TestListFiltersAndPagination(t *testing.T) {
 				if r.URL.EscapedPath() != endpoint(kind) {
 					t.Errorf("path %s", r.URL.EscapedPath())
 				}
+
 				a := fixture(kind, "closed", "rejected", head, false)
 				if r.URL.Query().Get("page") == "2" {
 					a = fixture(kind, "closed", "merged", head, true)
@@ -173,12 +215,19 @@ func TestListFiltersAndPagination(t *testing.T) {
 				} else {
 					w.Header().Set("Link", "<"+endpoint(kind)+"?page=2>; rel=\"next\"")
 				}
+
 				_ = json.NewEncoder(w).Encode([]any{a})
 			})
-			v, err := c.List(context.Background(), ListOptions{Repository: "o/r", State: "merged", Author: "sam", Draft: ptr(true)})
+			v, err := c.List(context.Background(), ListOptions{
+				Repository: "o/r",
+				State:      "merged",
+				Author:     "sam",
+				Draft:      ptr(true),
+			})
 			if err != nil || len(v) != 1 || v[0].State != Merged || calls != 2 {
 				t.Fatalf("list: %+v %v calls=%d", v, err, calls)
 			}
+
 			v, err = c.List(context.Background(), ListOptions{Repository: "o/r", State: "closed"})
 			if err != nil || len(v) != 1 || v[0].Title != "rejected" {
 				t.Fatalf("closed: %+v %v", v, err)
@@ -196,13 +245,19 @@ func TestDiscussionAndContent(t *testing.T) {
 				p := r.URL.Path
 				switch {
 				case strings.HasSuffix(p, "/notes"), strings.HasSuffix(p, "/comments"):
-					cm := map[string]any{"id": 1, "body": "hello", "user": map[string]string{"login": "sam"}, "author": map[string]string{"username": "sam"}}
+					cm := map[string]any{
+						"id":     1,
+						"body":   "hello",
+						"user":   map[string]string{"login": "sam"},
+						"author": map[string]string{"username": "sam"},
+					}
 					if r.Method == "POST" {
 						var b map[string]string
 						_ = json.NewDecoder(r.Body).Decode(&b)
 						if b["body"] != "hello" {
 							t.Error(b)
 						}
+
 						_ = json.NewEncoder(w).Encode(cm)
 					} else {
 						_ = json.NewEncoder(w).Encode([]any{cm, map[string]any{"id": 2, "system": true}, map[string]any{"id": 3, "type": "DiffNote"}, map[string]any{"id": 4, "position": map[string]int{"line": 1}}})
@@ -228,18 +283,22 @@ func TestDiscussionAndContent(t *testing.T) {
 			if err != nil || len(cm) != 1 || cm[0].Body != "hello" {
 				t.Fatalf("comments %+v %v", cm, err)
 			}
+
 			added, err := c.AddComment(ctx, r, "hello")
 			if err != nil || added.ID != "1" {
 				t.Fatalf("add %+v %v", added, err)
 			}
+
 			commits, err := c.Commits(ctx, r)
 			if err != nil || len(commits) != 1 || commits[0].ID != head || commits[0].Message != "message" {
 				t.Fatalf("commits %+v %v", commits, err)
 			}
+
 			files, err := c.Files(ctx, r)
 			if err != nil || len(files.Files) != 1 || files.Files[0].OldPath != "old.go" || files.Files[0].Status != "renamed" {
 				t.Fatalf("files %+v %v", files, err)
 			}
+
 			diff, err := c.Diff(ctx, r)
 			if err != nil || diff.Revision.Head != head || !strings.HasPrefix(diff.Patch, "diff --git") {
 				t.Fatalf("diff %+v %v", diff, err)
@@ -257,6 +316,7 @@ func TestMergeGuardsAndFailures(t *testing.T) {
 					_ = json.NewEncoder(w).Encode(fixture(kind, "open", "title", head, false))
 					return
 				}
+
 				writes++
 				var b map[string]any
 				_ = json.NewDecoder(r.Body).Decode(&b)
@@ -269,17 +329,20 @@ func TestMergeGuardsAndFailures(t *testing.T) {
 				} else if r.Method != "PUT" {
 					t.Error(r.Method)
 				}
+
 				if b[key] != head {
 					t.Errorf("atomic head guard missing: %v", b)
 				}
 				if _, ok := b["force_merge"]; ok {
 					t.Error("force merge sent")
 				}
+
 				w.WriteHeader(statusCode)
 				if statusCode != 200 {
 					fmt.Fprint(w, `{"message":"merge conflict"}`)
 					return
 				}
+
 				switch kind {
 				case forgeauth.GitHub:
 					_ = json.NewEncoder(w).Encode(map[string]any{"merged": success, "sha": target})
@@ -296,14 +359,17 @@ func TestMergeGuardsAndFailures(t *testing.T) {
 			if !errors.Is(err, ErrHeadChanged) || writes != 0 {
 				t.Fatalf("stale: %v writes=%d", err, writes)
 			}
+
 			_, err = c.Merge(ctx, r, MergeOptions{Method: "invented", ExpectedHead: head})
 			if !errors.Is(err, ErrUnsupported) || writes != 0 {
 				t.Fatalf("method: %v", err)
 			}
+
 			v, err := c.Merge(ctx, r, MergeOptions{Method: "squash", ExpectedHead: head})
 			if err != nil || !v.Merged {
 				t.Fatalf("merge %+v %v", v, err)
 			}
+
 			for _, code := range []int{409, 405, 422} {
 				statusCode = code
 				_, err = c.Merge(ctx, r, MergeOptions{Method: "squash", ExpectedHead: head})
@@ -315,6 +381,7 @@ func TestMergeGuardsAndFailures(t *testing.T) {
 					t.Errorf("status %d: %v", code, err)
 				}
 			}
+
 			if kind != forgeauth.Forgejo {
 				statusCode = 200
 				success = false
@@ -334,11 +401,13 @@ func TestReadinessAndRevisionRace(t *testing.T) {
 			fmt.Fprint(w, "diff")
 			return
 		}
+
 		reads++
 		sha := head
 		if reads > 1 {
 			sha = newHead
 		}
+
 		v := fixture(forgeauth.GitHub, "open", "title", sha, false)
 		v["mergeable"] = nil
 		delete(v, "mergeable_state")
@@ -348,6 +417,7 @@ func TestReadinessAndRevisionRace(t *testing.T) {
 	if err != nil || readiness.Status != "unknown" || readiness.Conditions[3].Status != "unknown" {
 		t.Fatalf("readiness %+v %v", readiness, err)
 	}
+
 	reads = 0
 	_, err = c.Diff(context.Background(), r)
 	if !errors.Is(err, ErrHeadChanged) {
@@ -361,6 +431,7 @@ func TestValidationAndForgeErrors(t *testing.T) {
 	if !errors.Is(err, forgehttp.ErrForbidden) {
 		t.Fatal(err)
 	}
+
 	for _, repo := range []string{"", "owner", "o/../r", "o/r?token=bad", "o/%2f"} {
 		r.Repository = repo
 		_, err = c.Get(context.Background(), r)
@@ -368,11 +439,13 @@ func TestValidationAndForgeErrors(t *testing.T) {
 			t.Errorf("%s: %v", repo, err)
 		}
 	}
+
 	r = Ref{"connection", "o/r", 7}
 	_, err = c.Merge(context.Background(), r, MergeOptions{ExpectedHead: "short"})
 	if !errors.Is(err, ErrInvalid) {
 		t.Fatal(err)
 	}
+
 	r.Source = ""
 	_, err = c.Get(context.Background(), r)
 	if !errors.Is(err, ErrInvalid) {

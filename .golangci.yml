@@ -1,0 +1,274 @@
+# Shared golangci-lint config for all Go projects.
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - contextcheck
+    - depguard
+    - dupl
+    - errorlint
+    - funlen
+    - gochecknoglobals
+    - gocognit
+    - goconst
+    - gocritic
+    - gosec
+    - interfacebloat
+    - ireturn
+    - lll
+    - misspell
+    - nestif
+    - noctx
+    - revive
+  settings:
+    depguard:
+      rules:
+        library-no-transport:
+          files:
+            - "**/forge-*/library/**"
+            - "!**/forge-connector/**"
+          deny:
+            - pkg: "google.golang.org/grpc"
+              desc: libraries hold business rules; transport belongs in services
+            - pkg: "github.com/grpc-ecosystem"
+              desc: libraries hold business rules; transport belongs in services
+            - pkg: "google.golang.org/protobuf"
+              desc: libraries hold business rules; transport belongs in services
+            - pkg: "github.com/r59q/forge-tools/forge-actions/service"
+              desc: libraries must not import services
+            - pkg: "github.com/r59q/forge-tools/forge-changes/service"
+              desc: libraries must not import services
+            - pkg: "github.com/r59q/forge-tools/forge-checkouts/service"
+              desc: libraries must not import services
+            - pkg: "github.com/r59q/forge-tools/forge-code/service"
+              desc: libraries must not import services
+            - pkg: "github.com/r59q/forge-tools/forge-issues/service"
+              desc: libraries must not import services
+            - pkg: "github.com/r59q/forge-tools/forge-repositories/service"
+              desc: libraries must not import services
+            - pkg: "github.com/r59q/forge-tools/forge-review/service"
+              desc: libraries must not import services
+            - pkg: "github.com/r59q/forge-tools/forge-tools-management/service"
+              desc: libraries must not import services
+        core-no-tools:
+          files:
+            - "**/forge-core/**"
+          deny:
+            - pkg: "github.com/r59q/forge-tools/forge-actions"
+              desc: forge-core must not depend on any tool
+            - pkg: "github.com/r59q/forge-tools/forge-changes"
+              desc: forge-core must not depend on any tool
+            - pkg: "github.com/r59q/forge-tools/forge-checkouts"
+              desc: forge-core must not depend on any tool
+            - pkg: "github.com/r59q/forge-tools/forge-code"
+              desc: forge-core must not depend on any tool
+            - pkg: "github.com/r59q/forge-tools/forge-issues"
+              desc: forge-core must not depend on any tool
+            - pkg: "github.com/r59q/forge-tools/forge-repositories"
+              desc: forge-core must not depend on any tool
+            - pkg: "github.com/r59q/forge-tools/forge-review"
+              desc: forge-core must not depend on any tool
+            - pkg: "github.com/r59q/forge-tools/forge-tools-management"
+              desc: forge-core must not depend on any tool
+            - pkg: "github.com/r59q/forge-tools/forge-connector"
+              desc: forge-core must not depend on any tool
+        connector-no-tools:
+          files:
+            - "**/forge-connector/**"
+          deny:
+            - pkg: "github.com/r59q/forge-tools/forge-actions"
+              desc: forge-connector knows no tool domain
+            - pkg: "github.com/r59q/forge-tools/forge-changes"
+              desc: forge-connector knows no tool domain
+            - pkg: "github.com/r59q/forge-tools/forge-checkouts"
+              desc: forge-connector knows no tool domain
+            - pkg: "github.com/r59q/forge-tools/forge-code"
+              desc: forge-connector knows no tool domain
+            - pkg: "github.com/r59q/forge-tools/forge-issues"
+              desc: forge-connector knows no tool domain
+            - pkg: "github.com/r59q/forge-tools/forge-repositories"
+              desc: forge-connector knows no tool domain
+            - pkg: "github.com/r59q/forge-tools/forge-review"
+              desc: forge-connector knows no tool domain
+            - pkg: "github.com/r59q/forge-tools/forge-tools-management"
+              desc: forge-connector knows no tool domain
+        actions-no-other-tools:
+          files:
+            - "**/forge-actions/**"
+          deny:
+            - pkg: "github.com/r59q/forge-tools/forge-changes"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-checkouts"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-code"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-issues"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-repositories"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-review"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-tools-management"
+              desc: tools must not depend on each other
+        changes-no-other-tools:
+          files:
+            - "**/forge-changes/**"
+          deny:
+            - pkg: "github.com/r59q/forge-tools/forge-actions"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-checkouts"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-code"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-issues"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-repositories"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-review"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-tools-management"
+              desc: tools must not depend on each other
+        checkouts-no-other-tools:
+          files:
+            - "**/forge-checkouts/**"
+          deny:
+            - pkg: "github.com/r59q/forge-tools/forge-actions"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-changes"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-code"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-issues"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-repositories"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-review"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-tools-management"
+              desc: tools must not depend on each other
+        code-no-other-tools:
+          files:
+            - "**/forge-code/**"
+          deny:
+            - pkg: "github.com/r59q/forge-tools/forge-actions"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-changes"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-checkouts"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-issues"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-repositories"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-review"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-tools-management"
+              desc: tools must not depend on each other
+        issues-no-other-tools:
+          files:
+            - "**/forge-issues/**"
+          deny:
+            - pkg: "github.com/r59q/forge-tools/forge-actions"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-changes"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-checkouts"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-code"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-repositories"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-review"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-tools-management"
+              desc: tools must not depend on each other
+        repositories-no-other-tools:
+          files:
+            - "**/forge-repositories/**"
+          deny:
+            - pkg: "github.com/r59q/forge-tools/forge-actions"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-changes"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-checkouts"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-code"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-issues"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-review"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-tools-management"
+              desc: tools must not depend on each other
+        review-no-other-tools:
+          files:
+            - "**/forge-review/**"
+          deny:
+            - pkg: "github.com/r59q/forge-tools/forge-actions"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-changes"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-checkouts"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-code"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-issues"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-repositories"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-tools-management"
+              desc: tools must not depend on each other
+    dupl:
+      threshold: 150
+    funlen:
+      lines: 80
+      statements: 50
+    goconst:
+      min-len: 5
+      min-occurrences: 4
+    gocognit:
+      min-complexity: 30
+    lll:
+      line-length: 140
+    nestif:
+      min-complexity: 5
+    revive:
+      rules:
+        - name: exported
+        - name: file-length-limit
+          arguments:
+            - max: 400
+              skipComments: true
+              skipBlankLines: true
+  exclusions:
+    presets:
+      - std-error-handling
+    rules:
+      - path: _test\.go
+        linters:
+          - contextcheck
+          - dupl
+          - funlen
+          - gochecknoglobals
+          - gocognit
+          - goconst
+          - gosec
+          - ireturn
+          - lll
+          - nestif
+          - noctx
+      - path: _test\.go
+        linters:
+          - revive
+        text: file-length-limit
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

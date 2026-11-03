@@ -71,13 +71,13 @@ from trees and blobs; forge compare APIs are never used.
 - `Patches` adds hunks without file headers. Binary files (a NUL in the
   first 8000 bytes), pure renames and mode-only changes get none.
 
-| Option | Default | When exceeded |
-|---|---|---|
-| `MaxChanges` | 3000 | `Truncated`; the kept changes are not always the first by path |
-| `MaxPatchFiles` | 100, at most 1000 | later changes get `PatchOmitted` |
-| `MaxPatchBytes` | 256 KiB per patch, at most 1 MiB | `PatchOmitted`; line counts are kept. Blobs over 16 times this get no patch |
-| Patch reads | 64 MiB of blobs per `Compare` | later changes get `PatchOmitted` |
-| `Limits.MaxCalls` | 1000 | `ErrTooLarge` while resolving, `Truncated` while walking, `PatchOmitted` while reading blobs |
+| Option            | Default                          | When exceeded                                                                                |
+| ----------------- | -------------------------------- | -------------------------------------------------------------------------------------------- |
+| `MaxChanges`      | 3000                             | `Truncated`; the kept changes are not always the first by path                               |
+| `MaxPatchFiles`   | 100, at most 1000                | later changes get `PatchOmitted`                                                             |
+| `MaxPatchBytes`   | 256 KiB per patch, at most 1 MiB | `PatchOmitted`; line counts are kept. Blobs over 16 times this get no patch                  |
+| Patch reads       | 64 MiB of blobs per `Compare`    | later changes get `PatchOmitted`                                                             |
+| `Limits.MaxCalls` | 1000                             | `ErrTooLarge` while resolving, `Truncated` while walking, `PatchOmitted` while reading blobs |
 
 ## Writes
 
@@ -113,14 +113,14 @@ refs again and reports success only if every ref is at `New`.
 
 ## Limits
 
-| Setting | Default | When exceeded |
-|---|---|---|
-| `Limits.MaxBlobBytes` | 100 MiB | `ErrTooLarge`, while streaming or up front when the size is known |
-| `Limits.MaxCalls` | 1000 forge requests per call | listings set `Truncated`; other calls fail with `ErrTooLarge` |
-| `Limits.MaxWriteBytes` | 64 MiB of content per commit | `ErrTooLarge` |
-| `RefsOptions.Limit` | 10000 refs | `Truncated`; branches come before tags |
-| `HistoryOptions.PageSize` | 50, at most 100 | `ErrInvalid` |
-| `TreeOptions.MaxEntries` | 100000 entries | `Truncated` |
+| Setting                   | Default                      | When exceeded                                                     |
+| ------------------------- | ---------------------------- | ----------------------------------------------------------------- |
+| `Limits.MaxBlobBytes`     | 100 MiB                      | `ErrTooLarge`, while streaming or up front when the size is known |
+| `Limits.MaxCalls`         | 1000 forge requests per call | listings set `Truncated`; other calls fail with `ErrTooLarge`     |
+| `Limits.MaxWriteBytes`    | 64 MiB of content per commit | `ErrTooLarge`                                                     |
+| `RefsOptions.Limit`       | 10000 refs                   | `Truncated`; branches come before tags                            |
+| `HistoryOptions.PageSize` | 50, at most 100              | `ErrInvalid`                                                      |
+| `TreeOptions.MaxEntries`  | 100000 entries               | `Truncated`                                                       |
 
 A truncated tree keeps the first entries in the forge's listing order, so
 which entries come back differs per forge. Entries are always sorted by path.
@@ -130,17 +130,17 @@ which entries come back differs per forge. Entries are always sorted by path.
 Paths are relative to the session base. GitLab `:id` is the URL-encoded
 project path. Every read after `Resolve` uses only object IDs.
 
-| Read | GitHub | GitLab | Forgejo |
-|---|---|---|---|
-| `HEAD` | `GET /repos/{o}/{r}` | `GET /projects/:id` | `GET /repos/{o}/{r}` |
-| Commit by ID | `git/commits/{id}` | `repository/commits/{id}` | `git/commits/{id}` |
-| Ref | `git/ref/{name}`, tags peeled with `git/tags/{id}` | `repository/branches/{b}` or `repository/tags/{t}` | `git/refs/{name}` (exact match picked), tags peeled with `git/commits/{id}` |
-| `ListRefs` | unpaged `git/matching-refs/{heads,tags}/`, peeled from paged `/tags`; tags read again to catch moves | paged `repository/branches` and `repository/tags` | unpaged `git/refs/{heads,tags}/`, peeled from paged `/tags` |
-| `History` | `commits?sha=&path=` | `repository/commits?ref_name=&path=&follow=false` | `commits?sha=&path=:(literal)…`, always 50 per forge page |
-| `Tree`, `Stat` | `git/trees/{id}` per path segment, `?recursive=1` (subtree walk if cut) | `repository/tree?ref=&path=`, keyset paging | `git/trees/{id}` per path segment, paged |
-| `ReadFile` | tree walk, then `git/blobs/{id}` (raw) | parent `repository/tree?ref=&path=`, then `repository/blobs/{id}/raw` | `raw/{p}?ref=` |
-| `ReadBlob` | `git/blobs/{id}` (raw) | `repository/blobs/{id}/raw` | `git/blobs/{id}` (base64 JSON) |
-| `MergeBase` | `compare/{a}...{b}` | `repository/merge_base` | computed from `commits?sha=&not=` listings |
+| Read           | GitHub                                                                                               | GitLab                                                                | Forgejo                                                                     |
+| -------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `HEAD`         | `GET /repos/{o}/{r}`                                                                                 | `GET /projects/:id`                                                   | `GET /repos/{o}/{r}`                                                        |
+| Commit by ID   | `git/commits/{id}`                                                                                   | `repository/commits/{id}`                                             | `git/commits/{id}`                                                          |
+| Ref            | `git/ref/{name}`, tags peeled with `git/tags/{id}`                                                   | `repository/branches/{b}` or `repository/tags/{t}`                    | `git/refs/{name}` (exact match picked), tags peeled with `git/commits/{id}` |
+| `ListRefs`     | unpaged `git/matching-refs/{heads,tags}/`, peeled from paged `/tags`; tags read again to catch moves | paged `repository/branches` and `repository/tags`                     | unpaged `git/refs/{heads,tags}/`, peeled from paged `/tags`                 |
+| `History`      | `commits?sha=&path=`                                                                                 | `repository/commits?ref_name=&path=&follow=false`                     | `commits?sha=&path=:(literal)…`, always 50 per forge page                   |
+| `Tree`, `Stat` | `git/trees/{id}` per path segment, `?recursive=1` (subtree walk if cut)                              | `repository/tree?ref=&path=`, keyset paging                           | `git/trees/{id}` per path segment, paged                                    |
+| `ReadFile`     | tree walk, then `git/blobs/{id}` (raw)                                                               | parent `repository/tree?ref=&path=`, then `repository/blobs/{id}/raw` | `raw/{p}?ref=`                                                              |
+| `ReadBlob`     | `git/blobs/{id}` (raw)                                                                               | `repository/blobs/{id}/raw`                                           | `git/blobs/{id}` (base64 JSON)                                              |
+| `MergeBase`    | `compare/{a}...{b}`                                                                                  | `repository/merge_base`                                               | computed from `commits?sha=&not=` listings                                  |
 
 Typical cost: `Resolve` takes 1 request for an ID or full ref name, 2 for
 a bare name (looked up in parallel), plus 1 per `~`/`^` step and, for an

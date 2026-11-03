@@ -70,18 +70,26 @@ func New(c Config) (*Client, error) {
 		u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || c.Credentials == nil {
 		return nil, broker.ErrInvalid
 	}
+
 	u.Path, u.RawPath = strings.TrimRight(u.Path, "/"), ""
 	hc := c.HTTPClient
 	if hc == nil {
 		hc = http.DefaultClient
 	}
+
 	reg := &forgeauth.Registry{}
 	for _, p := range []forgeauth.Provider{github.Provider{}, gitlab.Provider{}, forgejo.Provider{}} {
 		if err := reg.Register(p); err != nil {
 			return nil, err
 		}
 	}
-	return &Client{url: u, creds: c.Credentials, http: hc, registry: reg}, nil
+
+	return &Client{
+		url:      u,
+		creds:    c.Credentials,
+		http:     hc,
+		registry: reg,
+	}, nil
 }
 
 // Connections returns the usable connections in ID order, each with an open
@@ -93,6 +101,7 @@ func (c *Client) Connections(ctx context.Context) ([]Connection, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	result := []Connection{}
 	for _, l := range listed {
 		if l.Status != broker.StatusOK {
@@ -101,6 +110,7 @@ func (c *Client) Connections(ctx context.Context) ([]Connection, error) {
 		if _, err := c.registry.Provider(l.Kind); err != nil {
 			continue
 		}
+
 		session, err := c.registry.Open(ctx, forgeauth.Connection{
 			Kind:    l.Kind,
 			BaseURL: c.url.JoinPath("c", string(l.ID)).String(),
@@ -108,12 +118,21 @@ func (c *Client) Connections(ctx context.Context) ([]Connection, error) {
 		if err != nil {
 			return nil, fmt.Errorf("connector: connection %s: %w", l.ID, err)
 		}
+
 		git, err := forgeauth.NewGitRemote(c.url.JoinPath(strings.Trim(proxy.GitPrefix, "/"), string(l.ID)).String(), c.creds, setBearer, nil)
 		if err != nil {
 			return nil, fmt.Errorf("connector: connection %s: %w", l.ID, err)
 		}
-		result = append(result, Connection{ID: l.ID, Name: l.Name, Kind: l.Kind, Session: session, Git: git})
+
+		result = append(result, Connection{
+			ID:      l.ID,
+			Name:    l.Name,
+			Kind:    l.Kind,
+			Session: session,
+			Git:     git,
+		})
 	}
+
 	return result, nil
 }
 
@@ -126,20 +145,24 @@ func (c *Client) list(ctx context.Context) ([]broker.ClientConnection, error) {
 	if err != nil {
 		return nil, fmt.Errorf("connector: %w", forgeauth.ErrNoToken)
 	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url.JoinPath(proxy.ConnectionsPath).String(), nil)
 	if err != nil {
 		return nil, err
 	}
+
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("connector: list connections: %w", err)
 	}
+
 	defer resp.Body.Close()
 	if err := forgehttp.CheckResponse(resp); err != nil {
 		return nil, err
 	}
+
 	var body struct {
 		Connections []struct {
 			ID     broker.ID      `json:"id"`
@@ -151,9 +174,11 @@ func (c *Client) list(ctx context.Context) ([]broker.ClientConnection, error) {
 	if err := json.NewDecoder(io.LimitReader(resp.Body, maxBody)).Decode(&body); err != nil {
 		return nil, fmt.Errorf("connector: decode connections: %w", err)
 	}
+
 	result := make([]broker.ClientConnection, len(body.Connections))
 	for i, l := range body.Connections {
 		result[i] = broker.ClientConnection(l)
 	}
+
 	return result, nil
 }

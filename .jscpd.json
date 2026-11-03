@@ -1,0 +1,18 @@
+{
+  "format": ["go", "javascript", "typescript"],
+  "minTokens": 100,
+  "minLines": 15,
+  "gitignore": true,
+  "ignore": [
+    "**/*_test.go",
+    "**/*.test.mjs",
+    "**/*.test.ts",
+    "**/*.pb.go",
+    "**/*.pb.gw.go",
+    "**/fakeforge/**",
+    "**/testdata/**",
+    "**/node_modules/**"
+  ],
+  "reporters": ["console"],
+  "exitCode": 1
+}

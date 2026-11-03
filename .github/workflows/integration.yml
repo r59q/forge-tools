@@ -1,6 +1,6 @@
 name: integration
 
-# Runs the full-stack example against r59q/test-repo on GitHub and
+# Runs the full-stack example against r59q/test-repo on GitHub and GitLab, and
 # gitmyagent/test-repo on a self-hosted Forgejo. It needs secrets, so it never
 # runs on pull requests.
 on:
@@ -27,7 +27,14 @@ jobs:
           FORGE_TEST_FORGE: github
           FORGE_TEST_TOKEN: ${{ secrets.GH_TEST_REPO_PAT }}
         run: scripts/integration-test.sh
-      # Runs even if the GitHub test failed, so both results show.
+      # Run each forge test even if another failed, so all results show.
+      - name: Test GitLab
+        if: ${{ !cancelled() && steps.start.outcome == 'success' }}
+        env:
+          FORGE_TEST_FORGE: gitlab
+          FORGE_TEST_REPOSITORY: r59q/test-repo
+          FORGE_TEST_TOKEN: ${{ secrets.GL_TEST_REPO_PAT }}
+        run: scripts/integration-test.sh
       - name: Test Forgejo
         if: ${{ !cancelled() && steps.start.outcome == 'success' }}
         env:

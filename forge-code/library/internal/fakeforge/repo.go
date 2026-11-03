@@ -40,6 +40,7 @@ func NewRepo() *Repo {
 func (r *Repo) ID() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+
 	return r.id
 }
 
@@ -47,6 +48,7 @@ func (r *Repo) ID() int {
 func (r *Repo) DefaultBranch() string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+
 	return r.head
 }
 
@@ -62,6 +64,7 @@ func (r *Repo) Head() (gitobj.ID, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	id, ok := r.refs["refs/heads/"+r.head]
+
 	return id, ok
 }
 
@@ -69,6 +72,7 @@ func (r *Repo) Head() (gitobj.ID, bool) {
 func (r *Repo) Private() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+
 	return r.private
 }
 
@@ -84,14 +88,16 @@ func (r *Repo) SetPrivate(private bool) {
 // no-op.
 func (r *Repo) Put(o gitobj.Object) (gitobj.ID, error) {
 	if err := checkObject(o); err != nil {
-		return gitobj.ZeroID, err
+		return gitobj.ID{}, err
 	}
+
 	id := o.ID()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, ok := r.objects[id]; !ok {
 		r.objects[id] = gitobj.Object{Type: o.Type, Data: slices.Clone(o.Data)}
 	}
+
 	return id, nil
 }
 
@@ -108,6 +114,7 @@ func checkObject(o gitobj.Object) error {
 	default:
 		err = fmt.Errorf("%w: object type %q", gitobj.ErrInvalid, o.Type)
 	}
+
 	return err
 }
 
@@ -119,6 +126,7 @@ func (r *Repo) Object(id gitobj.ID) (gitobj.Object, bool) {
 	if !ok {
 		return gitobj.Object{}, false
 	}
+
 	return gitobj.Object{Type: o.Type, Data: slices.Clone(o.Data)}, true
 }
 
@@ -126,6 +134,7 @@ func (r *Repo) Object(id gitobj.ID) (gitobj.Object, bool) {
 func (r *Repo) IDs() []gitobj.ID {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+
 	return slices.SortedFunc(maps.Keys(r.objects), func(a, b gitobj.ID) int {
 		return bytes.Compare(a[:], b[:])
 	})
@@ -139,6 +148,7 @@ func (r *Repo) ReadBlob(id gitobj.ID) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return slices.Clone(o.Data), nil
 }
 
@@ -146,6 +156,7 @@ func (r *Repo) ReadBlob(id gitobj.ID) ([]byte, error) {
 func (r *Repo) ReadTree(id gitobj.ID) ([]gitobj.TreeEntry, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+
 	return r.tree(id)
 }
 
@@ -153,6 +164,7 @@ func (r *Repo) ReadTree(id gitobj.ID) ([]gitobj.TreeEntry, error) {
 func (r *Repo) ReadCommit(id gitobj.ID) (gitobj.Commit, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+
 	return r.commit(id)
 }
 
@@ -164,6 +176,7 @@ func (r *Repo) ReadTag(id gitobj.ID) (gitobj.Tag, error) {
 	if err != nil {
 		return gitobj.Tag{}, err
 	}
+
 	return gitobj.DecodeTag(o.Data)
 }
 
@@ -172,6 +185,7 @@ func (r *Repo) ReadTag(id gitobj.ID) (gitobj.Tag, error) {
 func (r *Repo) Peel(id gitobj.ID) (gitobj.ID, gitobj.Type, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+
 	return r.peel(id)
 }
 
@@ -179,6 +193,7 @@ func (r *Repo) Peel(id gitobj.ID) (gitobj.ID, gitobj.Type, error) {
 func (r *Repo) PeelCommit(id gitobj.ID) (gitobj.ID, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+
 	return r.peelCommit(id)
 }
 
@@ -191,6 +206,7 @@ func (r *Repo) get(id gitobj.ID, t gitobj.Type) (gitobj.Object, error) {
 	if o.Type != t {
 		return o, fmt.Errorf("%w: %s is a %s, not a %s", ErrWrongType, id, o.Type, t)
 	}
+
 	return o, nil
 }
 
@@ -199,6 +215,7 @@ func (r *Repo) tree(id gitobj.ID) ([]gitobj.TreeEntry, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return gitobj.DecodeTree(o.Data)
 }
 
@@ -207,6 +224,7 @@ func (r *Repo) commit(id gitobj.ID) (gitobj.Commit, error) {
 	if err != nil {
 		return gitobj.Commit{}, err
 	}
+
 	return gitobj.DecodeCommit(o.Data)
 }
 
@@ -217,28 +235,32 @@ func (r *Repo) peel(id gitobj.ID) (gitobj.ID, gitobj.Type, error) {
 	for range maxPeel {
 		o, ok := r.objects[id]
 		if !ok {
-			return gitobj.ZeroID, "", fmt.Errorf("%w: object %s", ErrNotFound, id)
+			return gitobj.ID{}, "", fmt.Errorf("%w: object %s", ErrNotFound, id)
 		}
 		if o.Type != gitobj.TypeTag {
 			return id, o.Type, nil
 		}
+
 		t, err := gitobj.DecodeTag(o.Data)
 		if err != nil {
-			return gitobj.ZeroID, "", err
+			return gitobj.ID{}, "", err
 		}
+
 		id = t.Object
 	}
-	return gitobj.ZeroID, "", fmt.Errorf("%w: tag chain longer than %d", ErrWrongType, maxPeel)
+
+	return gitobj.ID{}, "", fmt.Errorf("%w: tag chain longer than %d", ErrWrongType, maxPeel)
 }
 
 func (r *Repo) peelCommit(id gitobj.ID) (gitobj.ID, error) {
 	p, t, err := r.peel(id)
 	if err != nil {
-		return gitobj.ZeroID, err
+		return gitobj.ID{}, err
 	}
 	if t != gitobj.TypeCommit {
-		return gitobj.ZeroID, fmt.Errorf("%w: %s peels to a %s", ErrWrongType, id, t)
+		return gitobj.ID{}, fmt.Errorf("%w: %s peels to a %s", ErrWrongType, id, t)
 	}
+
 	return p, nil
 }
 
@@ -247,6 +269,7 @@ func must(id gitobj.ID, err error) gitobj.ID {
 	if err != nil {
 		panic("fakeforge: " + err.Error())
 	}
+
 	return id
 }
 
@@ -263,6 +286,7 @@ func (r *Repo) WriteTree(entries ...gitobj.TreeEntry) gitobj.ID {
 		if e.Mode == gitobj.ModeSubmodule {
 			continue
 		}
+
 		r.mu.RLock()
 		_, err := r.get(e.ID, e.Mode.Type())
 		r.mu.RUnlock()
@@ -270,10 +294,12 @@ func (r *Repo) WriteTree(entries ...gitobj.TreeEntry) gitobj.ID {
 			panic(fmt.Sprintf("fakeforge: tree entry %q: %v", e.Name, err))
 		}
 	}
+
 	data, err := gitobj.EncodeTree(entries)
 	if err != nil {
 		panic("fakeforge: " + err.Error())
 	}
+
 	return must(r.Put(gitobj.Object{Type: gitobj.TypeTree, Data: data}))
 }
 
@@ -287,14 +313,17 @@ func (r *Repo) WriteCommit(c gitobj.Commit) gitobj.ID {
 			_, err = r.get(p, gitobj.TypeCommit)
 		}
 	}
+
 	r.mu.RUnlock()
 	if err != nil {
 		panic("fakeforge: commit: " + err.Error())
 	}
+
 	data, err := gitobj.EncodeCommit(c)
 	if err != nil {
 		panic("fakeforge: " + err.Error())
 	}
+
 	return must(r.Put(gitobj.Object{Type: gitobj.TypeCommit, Data: data}))
 }
 
@@ -312,10 +341,12 @@ func (r *Repo) WriteTag(t gitobj.Tag) gitobj.ID {
 	if t.Type != o.Type {
 		panic(fmt.Sprintf("fakeforge: tag %q: target is a %s, not a %s", t.Name, o.Type, t.Type))
 	}
+
 	data, err := gitobj.EncodeTag(t)
 	if err != nil {
 		panic("fakeforge: " + err.Error())
 	}
+
 	return must(r.Put(gitobj.Object{Type: gitobj.TypeTag, Data: data}))
 }
 
@@ -342,13 +373,16 @@ func (r *Repo) BuildTree(files map[string]File) gitobj.ID {
 			if dirs[name] == nil {
 				dirs[name] = map[string]File{}
 			}
+
 			dirs[name][rest] = f
 			continue
 		}
+
 		mode := f.Mode
 		if mode == 0 {
 			mode = gitobj.ModeFile
 		}
+
 		var id gitobj.ID
 		switch mode {
 		case gitobj.ModeSubmodule:
@@ -358,14 +392,18 @@ func (r *Repo) BuildTree(files map[string]File) gitobj.ID {
 		default:
 			id = r.WriteBlob(f.Data)
 		}
+
 		entries = append(entries, gitobj.TreeEntry{Name: name, Mode: mode, ID: id})
 	}
+
 	for _, name := range slices.Sorted(maps.Keys(dirs)) {
 		if _, clash := files[name]; clash {
 			panic(fmt.Sprintf("fakeforge: BuildTree: %q is a file and a directory", name))
 		}
+
 		entries = append(entries, gitobj.TreeEntry{Name: name, Mode: gitobj.ModeTree, ID: r.BuildTree(dirs[name])})
 	}
+
 	return r.WriteTree(entries...)
 }
 
@@ -398,6 +436,7 @@ func (r *Repo) Ref(name string) (gitobj.ID, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	id, ok := r.refs[name]
+
 	return id, ok
 }
 
@@ -411,7 +450,9 @@ func (r *Repo) Refs(prefix string) []NamedRef {
 			out = append(out, NamedRef{Name: name, ID: id})
 		}
 	}
+
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+
 	return out
 }
 
@@ -422,12 +463,14 @@ func (r *Repo) SetRef(name string, id gitobj.ID) {
 	if !strings.HasPrefix(name, "refs/") {
 		panic(fmt.Sprintf("fakeforge: ref %q does not start with refs/", name))
 	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if id.IsZero() {
 		delete(r.refs, name)
 		return
 	}
+
 	r.refs[name] = id
 }
 
@@ -449,6 +492,7 @@ func (r *Repo) UpdateRefs(updates ...RefUpdate) error {
 		if !strings.HasPrefix(u.Name, "refs/") || seen[u.Name] {
 			return fmt.Errorf("%w: bad or repeated ref %q", gitobj.ErrInvalid, u.Name)
 		}
+
 		seen[u.Name] = true
 		if cur := r.refs[u.Name]; cur != u.Old {
 			return fmt.Errorf("%w: %s is at %s, not %s", ErrStale, u.Name, cur, u.Old)
@@ -457,6 +501,7 @@ func (r *Repo) UpdateRefs(updates ...RefUpdate) error {
 			return fmt.Errorf("%w: object %s for %s", ErrNotFound, u.New, u.Name)
 		}
 	}
+
 	for _, u := range updates {
 		if u.New.IsZero() {
 			delete(r.refs, u.Name)
@@ -464,5 +509,6 @@ func (r *Repo) UpdateRefs(updates ...RefUpdate) error {
 			r.refs[u.Name] = u.New
 		}
 	}
+
 	return nil
 }

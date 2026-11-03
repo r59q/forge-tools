@@ -40,7 +40,11 @@ func TestParseLinks(t *testing.T) {
 		{
 			"comma in url and quoted param",
 			[]string{`<https://f.example/a?q=x,y>; rel="next"; title="a, \"b\""`},
-			Links{{URL: "https://f.example/a?q=x,y", Rel: "next", Params: map[string]string{"title": `a, "b"`}}},
+			Links{{
+				URL:    "https://f.example/a?q=x,y",
+				Rel:    "next",
+				Params: map[string]string{"title": `a, "b"`},
+			}},
 		},
 		{
 			"unquoted rel and odd spacing",
@@ -79,6 +83,7 @@ func TestParseLinks(t *testing.T) {
 			for _, v := range tt.values {
 				h.Add("Link", v)
 			}
+
 			got := ParseLinks(h)
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("ParseLinks() = %#v, want %#v", got, tt.want)
@@ -107,6 +112,7 @@ func TestNextPage(t *testing.T) {
 			if tt.link != "" {
 				h.Set("Link", tt.link)
 			}
+
 			got, ok := NextPage(h)
 			if got != tt.want || ok != tt.wantOK {
 				t.Errorf("NextPage() = %q, %v, want %q, %v", got, ok, tt.want, tt.wantOK)
@@ -118,12 +124,17 @@ func TestNextPage(t *testing.T) {
 func TestLinksString(t *testing.T) {
 	links := Links{
 		{URL: "https://proxy.example/c/1/repos?page=2", Rel: "next"},
-		{URL: "https://proxy.example/c/1/repos?page=9", Rel: "last", Params: map[string]string{"title": `say "hi"`, "anchor": "#x"}},
+		{
+			URL:    "https://proxy.example/c/1/repos?page=9",
+			Rel:    "last",
+			Params: map[string]string{"title": `say "hi"`, "anchor": "#x"},
+		},
 	}
 	want := `<https://proxy.example/c/1/repos?page=2>; rel="next", <https://proxy.example/c/1/repos?page=9>; rel="last"; anchor="#x"; title="say \"hi\""`
 	if got := links.String(); got != want {
 		t.Errorf("String() = %s\nwant %s", got, want)
 	}
+
 	// Formatting then parsing gives the same links.
 	h := http.Header{"Link": {links.String()}}
 	if got := ParseLinks(h); !reflect.DeepEqual(got, links) {

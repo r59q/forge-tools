@@ -30,6 +30,7 @@ func (m Mode) Valid() bool {
 	case ModeTree, ModeFile, ModeExec, ModeSymlink, ModeSubmodule:
 		return true
 	}
+
 	return false
 }
 
@@ -42,6 +43,7 @@ func (m Mode) Type() Type {
 	case ModeSubmodule:
 		return TypeCommit
 	}
+
 	return TypeBlob
 }
 
@@ -66,6 +68,7 @@ func CheckName(name string) error {
 	case isDotGit(name):
 		return fmt.Errorf("%w: tree entry name %s is reserved", ErrInvalid, quote(name))
 	}
+
 	return nil
 }
 
@@ -79,9 +82,11 @@ func isDotGit(name string) bool {
 			b.WriteRune(r)
 		}
 	}
+
 	if strings.EqualFold(b.String(), ".git") {
 		return true
 	}
+
 	for part := range strings.SplitSeq(name, `\`) {
 		base, _, ads := strings.Cut(part, ":")
 		base = strings.TrimRight(base, " .")
@@ -92,6 +97,7 @@ func isDotGit(name string) bool {
 			return false
 		}
 	}
+
 	return false
 }
 
@@ -111,6 +117,7 @@ func sortKey(e TreeEntry) string {
 	if e.Mode == ModeTree {
 		return e.Name + "/"
 	}
+
 	return e.Name
 }
 
@@ -139,16 +146,19 @@ func EncodeTree(entries []TreeEntry) ([]byte, error) {
 		if seen[e.Name] {
 			return nil, fmt.Errorf("%w: duplicate tree entry %s", ErrInvalid, quote(e.Name))
 		}
+
 		seen[e.Name] = true
 		if e.Mode == ModeSymlink && strings.EqualFold(e.Name, ".gitmodules") {
 			return nil, fmt.Errorf("%w: .gitmodules is a symlink", ErrInvalid)
 		}
+
 		b.WriteString(e.Mode.String())
 		b.WriteByte(' ')
 		b.WriteString(e.Name)
 		b.WriteByte(0)
 		b.Write(e.ID[:])
 	}
+
 	return b.Bytes(), nil
 }
 
@@ -162,27 +172,33 @@ func DecodeTree(data []byte) ([]TreeEntry, error) {
 		if sp < 1 || sp > 7 {
 			return nil, fmt.Errorf("%w: bad tree entry mode", ErrInvalid)
 		}
+
 		var mode uint32
 		for _, c := range data[:sp] {
 			if c < '0' || c > '7' {
 				return nil, fmt.Errorf("%w: bad tree entry mode", ErrInvalid)
 			}
+
 			mode = mode<<3 | uint32(c-'0')
 		}
+
 		data = data[sp+1:]
 		nul := bytes.IndexByte(data, 0)
 		if nul < 1 {
 			return nil, fmt.Errorf("%w: bad tree entry name", ErrInvalid)
 		}
+
 		name := string(data[:nul])
 		data = data[nul+1:]
 		if len(data) < Size {
 			return nil, fmt.Errorf("%w: truncated tree entry %s", ErrInvalid, quote(name))
 		}
+
 		e := TreeEntry{Name: name, Mode: Mode(mode)}
 		copy(e.ID[:], data)
 		data = data[Size:]
 		out = append(out, e)
 	}
+
 	return out, nil
 }

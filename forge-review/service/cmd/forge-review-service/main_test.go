@@ -9,22 +9,34 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/r59q/forge-tools/forge-core/servicekit"
 )
 
 func TestParseStandaloneAndFlags(t *testing.T) {
 	s, err := parse(nil, func(string) string { return "" }, io.Discard)
-	if err != nil || s.connectorURL != "" || s.tokenEnv != "FORGE_REVIEW_TOKEN" || s.dataDirectory != "./review-data" {
+	if err != nil || s.ConnectorURL != "" || s.TokenEnv != "FORGE_REVIEW_TOKEN" || s.dataDirectory != "./review-data" {
 		t.Fatal(s, err)
 	}
+
 	for _, args := range [][]string{{"--data-dir="}, {"--request-timeout=0s"}, {"--token-env=X", "--token-file=x"}, {"--connector-token-env=X", "--connector-token-file=x"}, {"--unknown"}} {
 		if _, err := parse(args, func(string) string { return "" }, io.Discard); err == nil {
 			t.Fatal("accepted", args)
 		}
 	}
 }
+
 func TestServiceRestartPreservesReviews(t *testing.T) {
 	t.Setenv("REVIEW_TEST_TOKEN", "fixture-token")
-	s := settings{grpcAddress: "127.0.0.1:0", httpAddress: "127.0.0.1:0", tokenEnv: "REVIEW_TEST_TOKEN", dataDirectory: t.TempDir(), timeout: time.Second}
+	s := settings{
+		Settings: servicekit.Settings{
+			GRPCAddress: "127.0.0.1:0",
+			HTTPAddress: "127.0.0.1:0",
+			TokenEnv:    "REVIEW_TEST_TOKEN",
+			Timeout:     time.Second,
+		},
+		dataDirectory: t.TempDir(),
+	}
 	start := func() (string, func()) {
 		ctx, cancel := context.WithCancel(context.Background())
 		ready := make(chan string, 1)
@@ -38,6 +50,7 @@ func TestServiceRestartPreservesReviews(t *testing.T) {
 		case <-time.After(5 * time.Second):
 			t.Fatal("startup timed out")
 		}
+
 		stop := func() {
 			cancel()
 			select {
@@ -49,6 +62,7 @@ func TestServiceRestartPreservesReviews(t *testing.T) {
 				t.Error("shutdown timed out")
 			}
 		}
+
 		return address, stop
 	}
 	request := func(base, method, path, body string) map[string]any {
@@ -59,15 +73,18 @@ func TestServiceRestartPreservesReviews(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		defer resp.Body.Close()
 		if resp.StatusCode != 200 {
 			data, _ := io.ReadAll(resp.Body)
 			t.Fatalf("%d %s", resp.StatusCode, data)
 		}
+
 		var out map[string]any
 		if err = json.NewDecoder(resp.Body).Decode(&out); err != nil {
 			t.Fatal(err)
 		}
+
 		return out
 	}
 	base, stop := start()

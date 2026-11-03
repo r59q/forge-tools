@@ -42,6 +42,7 @@ func (c gitlabCommit) commit() (Commit, error) {
 	if err != nil {
 		return Commit{}, err
 	}
+
 	out := Commit{
 		ID:        id,
 		Parents:   make([]OID, 0, len(c.ParentIDs)),
@@ -54,8 +55,10 @@ func (c gitlabCommit) commit() (Commit, error) {
 		if err != nil {
 			return Commit{}, err
 		}
+
 		out.Parents = append(out.Parents, pid)
 	}
+
 	return out, nil
 }
 
@@ -78,19 +81,24 @@ func (r gitlabRef) ref(prefix string) (Ref, error) {
 		if err != nil {
 			return Ref{}, err
 		}
+
 		out.Commit = id
 	}
+
 	out.Target = out.Commit
 	if r.Target != "" {
 		id, err := parseOID(r.Target)
 		if err != nil {
 			return Ref{}, err
 		}
+
 		out.Target = id
 	}
+
 	if r.Name == "" || out.Target == "" {
 		return Ref{}, fmt.Errorf("code: forge sent incomplete ref %q", out.Name)
 	}
+
 	return out, nil
 }
 
@@ -109,6 +117,7 @@ func (e gitlabEntry) entry() (Entry, error) {
 	if err != nil {
 		return Entry{}, fmt.Errorf("code: forge sent mode %q for %q", e.Mode, e.Path)
 	}
+
 	id, err := parseOID(e.ID)
 	if err != nil {
 		return Entry{}, err
@@ -117,7 +126,15 @@ func (e gitlabEntry) entry() (Entry, error) {
 		e.Path[strings.LastIndexByte(e.Path, '/')+1:] != e.Name {
 		return Entry{}, fmt.Errorf("code: forge sent bad tree entry %q", e.Path)
 	}
-	return Entry{Name: e.Name, Path: e.Path, Mode: mode, Type: typeOf(mode), ID: id, Size: -1}, nil
+
+	return Entry{
+		Name: e.Name,
+		Path: e.Path,
+		Mode: mode,
+		Type: typeOf(mode),
+		ID:   id,
+		Size: -1,
+	}, nil
 }
 
 // gitlabHidden reports whether err is GitLab's "404 Project Not Found":
@@ -133,6 +150,7 @@ func gitlabMissing(err, notFound error) error {
 	if gitlabHidden(err) {
 		return err
 	}
+
 	return missing(err, notFound)
 }
 
@@ -155,6 +173,7 @@ func (g gitlabBackend) defaultBranch(o *op) (string, error) {
 	if p.DefaultBranch == nil || p.EmptyRepo {
 		return "", nil
 	}
+
 	return *p.DefaultBranch, nil
 }
 
@@ -164,6 +183,7 @@ func (g gitlabBackend) commit(o *op, id OID) (Commit, error) {
 	if err != nil {
 		return Commit{}, gitlabMissing(err, objectMissing(id))
 	}
+
 	got, err := c.commit()
 	if err != nil {
 		return Commit{}, err
@@ -172,6 +192,7 @@ func (g gitlabBackend) commit(o *op, id OID) (Commit, error) {
 		// GitLab peels a tag ID to its commit; id is not a commit.
 		return Commit{}, objectMissing(id)
 	}
+
 	return got, nil
 }
 
@@ -180,6 +201,7 @@ func (g gitlabBackend) ref(o *op, name string) (Ref, bool, error) {
 	if strings.HasPrefix(name, tagsPrefix) {
 		route, prefix = "/repository/tags/", tagsPrefix
 	}
+
 	short := strings.TrimPrefix(name, prefix)
 	var r gitlabRef
 	err := forgerest.Send(o.ctx, o.s, http.MethodGet, g.project(o)+route+url.PathEscape(short), nil, &r)
@@ -187,8 +209,10 @@ func (g gitlabBackend) ref(o *op, name string) (Ref, bool, error) {
 		if !gitlabHidden(err) && isMissing(err) {
 			return Ref{}, false, nil
 		}
+
 		return Ref{}, false, err
 	}
+
 	ref, err := r.ref(prefix)
 	if err != nil {
 		return Ref{}, false, err
@@ -196,17 +220,19 @@ func (g gitlabBackend) ref(o *op, name string) (Ref, bool, error) {
 	if ref.Name != name {
 		return Ref{}, false, fmt.Errorf("code: forge sent ref %q for %q", ref.Name, name)
 	}
+
 	return ref, true, nil
 }
 
 func (g gitlabBackend) refs(o *op, prefix string, limit int) ([]Ref, bool, error) {
-	q := url.Values{"per_page": {strconv.Itoa(min(limit+1, gitlabMaxPage))}}
+	q := url.Values{paramPerPage: {strconv.Itoa(min(limit+1, gitlabMaxPage))}}
 	route := "/repository/branches?"
 	if prefix == tagsPrefix {
 		route = "/repository/tags?"
 		q.Set("order_by", "name")
 		q.Set("sort", "asc")
 	}
+
 	var out []Ref
 	truncated := false
 	err := forgerest.Each(o.ctx, o.s, g.project(o)+route+q.Encode(), func(raw json.RawMessage) (bool, error) {
@@ -214,15 +240,19 @@ func (g gitlabBackend) refs(o *op, prefix string, limit int) ([]Ref, bool, error
 			truncated = true
 			return false, nil
 		}
+
 		var r gitlabRef
 		if err := json.Unmarshal(raw, &r); err != nil {
 			return false, err
 		}
+
 		ref, err := r.ref(prefix)
 		if err != nil {
 			return false, err
 		}
+
 		out = append(out, ref)
+
 		return true, nil
 	})
 	if exhausted(err) {
@@ -231,6 +261,7 @@ func (g gitlabBackend) refs(o *op, prefix string, limit int) ([]Ref, bool, error
 	if err != nil {
 		return nil, false, err
 	}
+
 	return out, truncated, nil
 }
 
@@ -240,14 +271,15 @@ func (g gitlabBackend) refs(o *op, prefix string, limit int) ([]Ref, bool, error
 func (g gitlabBackend) history(o *op, tip OID, path string, n int, pos historyPos) ([]Commit, historyPos, bool, error) {
 	page := max(pos.Page, 1)
 	q := url.Values{
-		"ref_name": {string(tip)},
-		"per_page": {strconv.Itoa(n)},
-		"page":     {strconv.Itoa(page)},
+		"ref_name":   {string(tip)},
+		paramPerPage: {strconv.Itoa(n)},
+		"page":       {strconv.Itoa(page)},
 	}
 	if path != "" {
 		q.Set("path", path)
 		q.Set("follow", "false")
 	}
+
 	var raw []gitlabCommit
 	if err := forgerest.Send(o.ctx, o.s, http.MethodGet, g.project(o)+"/repository/commits?"+q.Encode(), nil, &raw); err != nil {
 		return nil, historyPos{}, false, err
@@ -255,14 +287,17 @@ func (g gitlabBackend) history(o *op, tip OID, path string, n int, pos historyPo
 	if len(raw) > n {
 		return nil, historyPos{}, false, fmt.Errorf("code: forge sent %d commits for a page of %d", len(raw), n)
 	}
+
 	commits := make([]Commit, 0, len(raw))
 	for _, c := range raw {
 		cm, err := c.commit()
 		if err != nil {
 			return nil, historyPos{}, false, err
 		}
+
 		commits = append(commits, cm)
 	}
+
 	return commits, historyPos{Page: page + 1}, len(raw) == n, nil
 }
 
@@ -274,7 +309,7 @@ func (g gitlabBackend) list(o *op, commit OID, dir string, recursive bool, perPa
 	q := url.Values{
 		"ref":        {string(commit)},
 		"pagination": {"keyset"},
-		"per_page":   {strconv.Itoa(min(max(perPage, 1), gitlabMaxPage))},
+		paramPerPage: {strconv.Itoa(min(max(perPage, 1), gitlabMaxPage))},
 	}
 	if dir != "" {
 		q.Set("path", dir)
@@ -282,11 +317,13 @@ func (g gitlabBackend) list(o *op, commit OID, dir string, recursive bool, perPa
 	if recursive {
 		q.Set("recursive", "true")
 	}
+
 	err := forgerest.Each(o.ctx, o.s, g.project(o)+"/repository/tree?"+q.Encode(), func(raw json.RawMessage) (bool, error) {
 		var ge gitlabEntry
 		if err := json.Unmarshal(raw, &ge); err != nil {
 			return false, err
 		}
+
 		e, err := ge.entry()
 		if err != nil {
 			return false, err
@@ -294,11 +331,13 @@ func (g gitlabBackend) list(o *op, commit OID, dir string, recursive bool, perPa
 		if dir != "" && !strings.HasPrefix(e.Path, dir+"/") {
 			return false, fmt.Errorf("code: forge sent entry %q outside %q", e.Path, dir)
 		}
+
 		return fn(e), nil
 	})
 	if err != nil {
 		return gitlabMissing(err, notFound)
 	}
+
 	return nil
 }
 
@@ -311,7 +350,9 @@ func (g gitlabBackend) tree(o *op, commit OID, path string, recursive bool, max 
 				t.Truncated = true
 				return false
 			}
+
 			t.Entries = append(t.Entries, e)
+
 			return true
 		})
 		if exhausted(err) {
@@ -325,6 +366,7 @@ func (g gitlabBackend) tree(o *op, commit OID, path string, recursive bool, max 
 		if path != "" && len(t.Entries) == 0 {
 			return Tree{}, pathMissing(path)
 		}
+
 		return t, nil
 	})
 }
@@ -335,12 +377,14 @@ func (g gitlabBackend) stat(o *op, commit OID, path string) (Entry, error) {
 	if i := strings.LastIndexByte(path, '/'); i >= 0 {
 		dir = path[:i]
 	}
+
 	var got *Entry
 	err := g.list(o, commit, dir, false, gitlabMaxPage, pathMissing(path), func(e Entry) bool {
 		if e.Path == path {
 			got = &e
 			return false
 		}
+
 		return true
 	})
 	if err != nil {
@@ -349,6 +393,7 @@ func (g gitlabBackend) stat(o *op, commit OID, path string) (Entry, error) {
 	if got == nil {
 		return Entry{}, pathMissing(path)
 	}
+
 	return *got, nil
 }
 
@@ -364,15 +409,18 @@ func (g gitlabBackend) readFile(o *op, commit OID, path string) (*Reader, error)
 	if e.Type != ObjectBlob {
 		return nil, fmt.Errorf("%w: %q is a %s", ErrNotFile, path, e.Type)
 	}
+
 	return g.readBlob(o, e.ID)
 }
 
 func (g gitlabBackend) readBlob(o *op, id OID) (*Reader, error) {
-	resp, err := forgerest.Open(o.ctx, o.s, http.MethodGet, g.project(o)+"/repository/blobs/"+string(id)+"/raw", nil)
+	path := g.project(o) + "/repository/blobs/" + string(id) + "/raw"
+	resp, err := forgerest.Open(o.ctx, o.s, http.MethodGet, path, nil) //nolint:bodyclose // the returned Reader owns the body.
 	if err != nil {
 		return nil, gitlabMissing(err, objectMissing(id))
 	}
-	return &Reader{Blob: Blob{ID: id, Size: resp.ContentLength}, ReadCloser: resp.Body}, nil
+
+	return bodyReader(id, resp), nil
 }
 
 func (g gitlabBackend) mergeBase(o *op, a, b OID) (OID, error) {
@@ -386,7 +434,9 @@ func (g gitlabBackend) mergeBase(o *op, a, b OID) (OID, error) {
 		if errors.As(err, &fe) && fe.StatusCode == http.StatusNotFound && strings.Contains(fe.Message, "Merge Base") {
 			return "", errNoMergeBase
 		}
+
 		return "", err
 	}
+
 	return parseOID(c.ID)
 }

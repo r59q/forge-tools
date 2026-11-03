@@ -24,6 +24,7 @@ func (l Link) HasRel(rel string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -37,14 +38,17 @@ func (l Link) String() string {
 	if l.Rel != "" {
 		writeParam(&b, "rel", l.Rel)
 	}
+
 	names := make([]string, 0, len(l.Params))
 	for name := range l.Params {
 		names = append(names, name)
 	}
+
 	sort.Strings(names)
 	for _, name := range names {
 		writeParam(&b, name, l.Params[name])
 	}
+
 	return b.String()
 }
 
@@ -56,8 +60,10 @@ func writeParam(b *strings.Builder, name, value string) {
 		if value[i] == '"' || value[i] == '\\' {
 			b.WriteByte('\\')
 		}
+
 		b.WriteByte(value[i])
 	}
+
 	b.WriteByte('"')
 }
 
@@ -71,6 +77,7 @@ func (ls Links) Get(rel string) (string, bool) {
 			return l.URL, true
 		}
 	}
+
 	return "", false
 }
 
@@ -80,6 +87,7 @@ func (ls Links) String() string {
 	for i, l := range ls {
 		parts[i] = l.String()
 	}
+
 	return strings.Join(parts, ", ")
 }
 
@@ -89,6 +97,7 @@ func ParseLinks(h http.Header) Links {
 	for _, v := range h.Values("Link") {
 		links = append(links, parseLinkValue(v)...)
 	}
+
 	return links
 }
 
@@ -111,6 +120,7 @@ func parseLinkValue(s string) Links {
 		} else {
 			p.skipEntry()
 		}
+
 		p.skipSpace()
 		if !p.done() && p.s[p.i] == ',' {
 			p.i++
@@ -147,6 +157,7 @@ func (p *linkParser) skipEntry() {
 				continue
 			}
 		}
+
 		p.i++
 	}
 }
@@ -156,10 +167,12 @@ func (p *linkParser) link() (Link, bool) {
 	if p.s[p.i] != '<' {
 		return Link{}, false
 	}
+
 	end := strings.IndexByte(p.s[p.i:], '>')
 	if end < 0 {
 		return Link{}, false
 	}
+
 	l := Link{URL: strings.TrimSpace(p.s[p.i+1 : p.i+end])}
 	p.i += end + 1
 	for {
@@ -170,40 +183,58 @@ func (p *linkParser) link() (Link, bool) {
 		if p.s[p.i] != ';' {
 			return Link{}, false
 		}
+
 		p.i++
-		p.skipSpace()
-		name := strings.ToLower(p.token())
-		if name == "" {
+		name, value, ok := p.param()
+		if !ok {
 			return Link{}, false
 		}
-		var value string
-		p.skipSpace()
-		if !p.done() && p.s[p.i] == '=' {
-			p.i++
-			p.skipSpace()
-			if !p.done() && p.s[p.i] == '"' {
-				v, ok := p.quoted()
-				if !ok {
-					return Link{}, false
-				}
-				value = v
-			} else {
-				value = p.token()
-			}
+
+		addParam(&l, name, value)
+	}
+}
+
+// param parses `name[=value]` after a ';'. The name is lowercased.
+func (p *linkParser) param() (name, value string, ok bool) {
+	p.skipSpace()
+	name = strings.ToLower(p.token())
+	if name == "" {
+		return "", "", false
+	}
+
+	p.skipSpace()
+	if p.done() || p.s[p.i] != '=' {
+		return name, "", true
+	}
+
+	p.i++
+	p.skipSpace()
+	if p.done() || p.s[p.i] != '"' {
+		return name, p.token(), true
+	}
+
+	value, ok = p.quoted()
+
+	return name, value, ok
+}
+
+// addParam stores a parameter in l. Only the first of each name counts, as
+// RFC 8288 requires for rel.
+func addParam(l *Link, name, value string) {
+	if name == "rel" {
+		if l.Rel == "" {
+			l.Rel = value
 		}
-		if name == "rel" {
-			// RFC 8288: only the first rel parameter counts.
-			if l.Rel == "" {
-				l.Rel = value
-			}
-			continue
-		}
-		if l.Params == nil {
-			l.Params = map[string]string{}
-		}
-		if _, dup := l.Params[name]; !dup {
-			l.Params[name] = value
-		}
+
+		return
+	}
+
+	if l.Params == nil {
+		l.Params = map[string]string{}
+	}
+
+	if _, dup := l.Params[name]; !dup {
+		l.Params[name] = value
 	}
 }
 
@@ -213,6 +244,7 @@ func (p *linkParser) token() string {
 	for !p.done() && !strings.ContainsRune(" \t;,=\"", rune(p.s[p.i])) {
 		p.i++
 	}
+
 	return p.s[start:p.i]
 }
 
@@ -233,5 +265,6 @@ func (p *linkParser) quoted() (string, bool) {
 			b.WriteByte(c)
 		}
 	}
+
 	return "", false
 }

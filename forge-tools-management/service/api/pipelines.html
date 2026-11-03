@@ -1,0 +1,163 @@
+{{define "title"}}Pipelines{{end}}
+{{define "execution-status"}}{{.Phase}}{{if .Result}} · {{.Result}}{{end}}{{end}}
+
+{{define "content"}}
+  <div class="heading">
+    <h1>Pipelines</h1>
+    <a href="/pipelines?source={{.Query.Source}}&amp;repository={{.Query.Repository}}">Pipeline listing</a>
+  </div>
+
+  {{if not .Configured}}
+    <section>
+      <h2>No pipeline capability configured</h2>
+      <p>Pipeline browsing is unavailable.</p>
+    </section>
+  {{else}}
+    {{if .Problem}}
+      <section role="alert">
+        <h2>Pipeline request failed</h2>
+        <p>{{.Problem}}</p>
+      </section>
+    {{end}}
+
+    {{if .Job}}
+      <h2>{{.Job.Name}}</h2>
+      <p>{{template "execution-status" .Job.Status}}
+        {{- if .Job.Stage}} · Stage: {{.Job.Stage}}{{end}}
+        {{- if .Job.Runner}} · Runner: {{.Job.Runner}}{{end}}
+        {{- if .Job.AllowFailure}} · Failure allowed{{end}}
+      </p>
+      <p>{{.Query.Repository}}
+        {{- if .Job.PipelineId}} ·
+          <a href="/pipelines/{{.Job.PipelineId}}?source={{.Query.Source}}&amp;repository={{.Query.Repository}}">Pipeline {{.Job.PipelineId}}</a>
+        {{- end}}
+        {{- if .Job.WebUrl}} · <a href="{{.Job.WebUrl}}" rel="noreferrer">Open on forge</a>{{end}}
+      </p>
+      {{if .Job.StepsKnown}}
+        <h3>Steps</h3>
+        <ol>
+          {{range .Job.Steps}}
+            <li>{{.Name}} — {{.Status.Phase}}{{if .Status.Result}} · {{.Status.Result}}{{end}}</li>
+          {{else}}
+            <li>No steps reported.</li>
+          {{end}}
+        </ol>
+      {{else}}
+        <p>Step details are unavailable.</p>
+      {{end}}
+
+      <h3>Job log</h3>
+      {{if .LogProblem}}
+        <p role="alert">{{.LogProblem}}</p>
+      {{else if .Log}}
+        {{if .Log.Truncated}}
+          <p role="status">Showing the first part of the log. Open the job on the forge for the complete log.</p>
+        {{end}}
+        <pre class="job-log">{{.Log.Text}}</pre>
+      {{end}}
+    {{else if .Pipeline}}
+      <h2>{{.Pipeline.Name}}</h2>
+      <p>{{template "execution-status" .Pipeline.Status}} · {{.Pipeline.Event}}</p>
+      <p>{{.Query.Repository}} · {{.Pipeline.Branch}} · <code>{{.Pipeline.Commit}}</code>
+        {{- if .Pipeline.WebUrl}} · <a href="{{.Pipeline.WebUrl}}" rel="noreferrer">Open on forge</a>{{end}}
+      </p>
+      {{if .Pipeline.StartedAt}}
+        <p>Started {{.Pipeline.StartedAt.AsTime.Format "2006-01-02 15:04:05 MST"}}
+          {{- if .Pipeline.FinishedAt}} · Finished {{.Pipeline.FinishedAt.AsTime.Format "2006-01-02 15:04:05 MST"}}{{end}}
+        </p>
+      {{end}}
+
+      {{if .Jobs}}
+        <div class="table">
+          <table>
+            <caption>Latest jobs</caption>
+            <thead>
+              <tr>
+                <th>Job</th>
+                <th>Stage</th>
+                <th>Progress</th>
+                <th>Result</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{range .Jobs.Jobs}}
+                <tr>
+                  <td><a href="/pipeline-jobs/{{.Ref.Id}}?source={{.Ref.Source}}&amp;repository={{.Ref.Repository}}">{{.Name}}</a></td>
+                  <td>{{.Stage}}</td>
+                  <td>{{.Status.Phase}}</td>
+                  <td>{{.Status.Result}}{{if .AllowFailure}} (allowed){{end}}</td>
+                </tr>
+              {{else}}
+                <tr>
+                  <td colspan="4">No jobs reported.</td>
+                </tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+      {{end}}
+    {{else}}
+      <form class="filter" method="get" action="/pipelines">
+        <label>Source <input name="source" value="{{.Query.Source}}" required></label>
+        <label>Repository <input name="repository" value="{{.Query.Repository}}" placeholder="owner/repository" required></label>
+        <label>Branch <input name="branch" value="{{.Query.Branch}}"></label>
+        <label>Commit <input name="commit" value="{{.Query.Commit}}"></label>
+        {{if .Query.DefinitionId}}<input type="hidden" name="definition_id" value="{{.Query.DefinitionId}}">{{end}}
+        <label>Progress
+          <select name="phase">
+            <option value="">All</option>
+            {{range $v := phases}}
+              <option value="{{$v}}"{{if eq $.Query.Phase $v}} selected{{end}}>{{$v}}</option>
+            {{end}}
+          </select>
+        </label>
+        <label>Result
+          <select name="result">
+            <option value="">All</option>
+            {{range $v := results}}
+              <option value="{{$v}}"{{if eq $.Query.Result $v}} selected{{end}}>{{$v}}</option>
+            {{end}}
+          </select>
+        </label>
+        <button type="submit">Show pipelines</button>
+      </form>
+
+      {{if .Listing}}
+        <div class="table">
+          <table>
+            <caption>Pipeline executions</caption>
+            <thead>
+              <tr>
+                <th>Pipeline</th>
+                <th>Branch / commit</th>
+                <th>Progress</th>
+                <th>Result</th>
+                <th>Created</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{range .Listing.Pipelines}}
+                <tr>
+                  <td><a href="/pipelines/{{.Ref.Id}}?source={{.Ref.Source}}&amp;repository={{.Ref.Repository}}">#{{.Ref.Id}} {{.Name}}</a></td>
+                  <td>{{.Branch}}<br><code>{{.Commit}}</code></td>
+                  <td>{{.Status.Phase}}</td>
+                  <td>{{.Status.Result}}</td>
+                  <td>{{if .CreatedAt}}{{.CreatedAt.AsTime.Format "2006-01-02 15:04 MST"}}{{end}}</td>
+                </tr>
+              {{else}}
+                <tr>
+                  <td colspan="5">No matching pipelines on this page.</td>
+                </tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+        {{if .Listing.NextPage}}
+          <p><a href="{{.NextURL}}">Next page</a></p>
+        {{end}}
+      {{else if not .Problem}}
+        <p>Choose a repository from <a href="/">Repositories</a>, or enter its source and path above.</p>
+      {{end}}
+    {{end}}
+  {{end}}
+{{end}}

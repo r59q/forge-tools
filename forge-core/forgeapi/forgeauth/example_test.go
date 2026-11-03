@@ -12,9 +12,12 @@ import (
 
 func ExampleRegistry() {
 	var reg forgeauth.Registry
-	reg.Register(github.Provider{})
-	reg.Register(gitlab.Provider{})
-	reg.Register(forgejo.Provider{})
+	for _, p := range []forgeauth.Provider{github.Provider{}, gitlab.Provider{}, forgejo.Provider{}} {
+		if err := reg.Register(p); err != nil {
+			fmt.Println(err)
+			return
+		}
+	}
 
 	ctx := context.Background()
 	s, err := reg.Open(ctx, forgeauth.Connection{
@@ -25,11 +28,13 @@ func ExampleRegistry() {
 		fmt.Println(err)
 		return
 	}
+
 	me, err := reg.Whoami(ctx, s)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
+
 	fmt.Println(me.Login)
 }
 
@@ -39,16 +44,19 @@ func ExampleNewGitRemote() {
 		fmt.Println(err)
 		return
 	}
+
 	g, err := forgeauth.NewGitRemote(base, forgeauth.EnvToken("GITHUB_TOKEN"), github.SetGitToken, nil)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
+
 	repo, err := g.URL("octocat/Hello-World")
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
+
 	fmt.Println(repo)
 	// Output: https://github.com/octocat/Hello-World.git
 }

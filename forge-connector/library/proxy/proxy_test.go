@@ -45,6 +45,7 @@ func (b *fakeBroker) Connection(_ context.Context, id broker.ID) (forgeauth.Conn
 	if id != "conn" {
 		return forgeauth.Connection{}, broker.ErrNotFound
 	}
+
 	return b.conn, b.connectionErr
 }
 
@@ -53,6 +54,7 @@ func (b *fakeBroker) VerifyClient(_ context.Context, token forgeauth.StaticToken
 	if string(token) != clientToken || id != "conn" {
 		return broker.Client{}, broker.ErrUnauthorized
 	}
+
 	return broker.Client{}, b.verifyErr
 }
 
@@ -64,7 +66,13 @@ func (b *fakeBroker) IssueToken(_ context.Context, id broker.ID) (broker.IssuedT
 	if b.issued != nil {
 		return *b.issued, b.issueErr
 	}
-	return broker.IssuedToken{Kind: b.conn.Kind, BaseURL: b.conn.BaseURL, GitBaseURL: b.gitBase, Token: forgeToken}, b.issueErr
+
+	return broker.IssuedToken{
+		Kind:       b.conn.Kind,
+		BaseURL:    b.conn.BaseURL,
+		GitBaseURL: b.gitBase,
+		Token:      forgeToken,
+	}, b.issueErr
 }
 
 func config(t *testing.T, b *fakeBroker) proxy.Config {
@@ -75,6 +83,7 @@ func config(t *testing.T, b *fakeBroker) proxy.Config {
 			t.Fatal(err)
 		}
 	}
+
 	return proxy.Config{Verifier: b, TokenIssuer: b, Registry: &reg}
 }
 
@@ -84,6 +93,7 @@ func handler(t *testing.T, c proxy.Config) *proxy.Handler {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return h
 }
 
@@ -91,6 +101,7 @@ func serve(t *testing.T, h http.Handler) *httptest.Server {
 	t.Helper()
 	s := httptest.NewServer(h)
 	t.Cleanup(s.Close)
+
 	return s
 }
 
@@ -101,6 +112,7 @@ func readResponse(t *testing.T, resp *http.Response) string {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return string(body)
 }
 
@@ -110,7 +122,8 @@ func TestReplacesCredentials(t *testing.T) {
 			var requests atomic.Int32
 			forge := serve(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				requests.Add(1)
-				if r.Method != http.MethodPost || r.URL.EscapedPath() != "/api/v1/projects/group%2Frepo/issues" || r.URL.RawQuery != "page=2&name=a%2Bb" {
+				if r.Method != http.MethodPost ||
+					r.URL.EscapedPath() != "/api/v1/projects/group%2Frepo/issues" || r.URL.RawQuery != "page=2&name=a%2Bb" {
 					t.Errorf("unexpected method or URL: %s %s", r.Method, r.URL)
 				}
 				if r.Host == "proxy.example" {
@@ -119,6 +132,7 @@ func TestReplacesCredentials(t *testing.T) {
 				if token, ok := p.TokenFromHeader(r.Header); !ok || token != forgeToken {
 					t.Error("forge did not receive its credential")
 				}
+
 				for name, values := range r.Header {
 					for _, value := range values {
 						if strings.Contains(value, clientToken) {
@@ -126,27 +140,37 @@ func TestReplacesCredentials(t *testing.T) {
 						}
 					}
 				}
+
 				for _, name := range []string{"Cookie", "Cookie2", "Proxy-Authorization", "Forwarded", "X-Forwarded-Host", "X-Hop"} {
 					if r.Header.Get(name) != "" {
 						t.Errorf("%s reached forge", name)
 					}
 				}
-				if p.Kind() == forgeauth.GitLab && r.Header.Get("Authorization") != "" || p.Kind() != forgeauth.GitLab && r.Header.Get("Private-Token") != "" {
+
+				if p.Kind() == forgeauth.GitLab &&
+					r.Header.Get("Authorization") != "" || p.Kind() != forgeauth.GitLab &&
+					r.Header.Get("Private-Token") != "" {
 					t.Error("unused credential header reached forge")
 				}
 				if got, _ := io.ReadAll(r.Body); string(got) != "request body" || r.Header.Get("X-Request") != "kept" {
 					t.Error("request data changed")
 				}
+
 				w.Header().Set("X-Forge", "kept")
 				w.WriteHeader(http.StatusCreated)
 				_, _ = io.WriteString(w, "response body")
 			}))
 			b := &fakeBroker{conn: forgeauth.Connection{Kind: p.Kind(), BaseURL: forge.URL + "/api/v1/"}}
 			server := serve(t, handler(t, config(t, b)))
-			req, err := http.NewRequest(http.MethodPost, server.URL+"/c/conn/projects/group%2Frepo/issues?page=2&name=a%2Bb", strings.NewReader("request body"))
+			req, err := http.NewRequest(
+				http.MethodPost,
+				server.URL+"/c/conn/projects/group%2Frepo/issues?page=2&name=a%2Bb",
+				strings.NewReader("request body"),
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			req.Host = "proxy.example"
 			req.Header.Set("Authorization", "Bearer "+clientToken)
 			req.Header.Set("Private-Token", clientToken)
@@ -163,6 +187,7 @@ func TestReplacesCredentials(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			body := readResponse(t, resp)
 			if resp.StatusCode != http.StatusCreated || body != "response body" || resp.Header.Get("X-Forge") != "kept" {
 				t.Fatalf("unexpected response: %d %q", resp.StatusCode, body)
@@ -188,27 +213,112 @@ func TestProxyErrors(t *testing.T) {
 		issued    int32
 	}{
 		{name: "missing token", status: 401},
-		{name: "wrong scheme", header: http.Header{"Authorization": {"Basic " + clientToken}}, status: 401},
-		{name: "repeated token", header: http.Header{"Authorization": {"Bearer " + clientToken, "Bearer " + clientToken}}, status: 401},
-		{name: "unknown token", header: http.Header{"Authorization": {"Bearer unknown"}}, status: 401, verified: 1},
-		{name: "unknown connection", path: "/c/unknown/user", status: 404},
-		{name: "broker lookup down", lookupErr: secretErr, status: 503},
-		{name: "forbidden", verifyErr: fmt.Errorf("wrapped: %w", broker.ErrForbidden), status: 403, verified: 1},
-		{name: "unauthorized", verifyErr: broker.ErrUnauthorized, status: 401, verified: 1},
-		{name: "deleted connection", verifyErr: broker.ErrNotFound, status: 404, verified: 1},
-		{name: "unhealthy connection", verifyErr: broker.ErrUnavailable, status: 503, verified: 1},
-		{name: "verify failed", verifyErr: secretErr, status: 503, verified: 1},
-		{name: "verify timeout", verifyErr: context.DeadlineExceeded, status: 504, verified: 1},
-		{name: "issue failed", issueErr: secretErr, status: 503, verified: 1, issued: 1},
-		{name: "issue unauthorized", issueErr: broker.ErrUnauthorized, status: 401, verified: 1, issued: 1},
-		{name: "issue forbidden", issueErr: broker.ErrForbidden, status: 403, verified: 1, issued: 1},
-		{name: "issue missing", issueErr: broker.ErrNotFound, status: 404, verified: 1, issued: 1},
-		{name: "issue timeout", issueErr: context.DeadlineExceeded, status: 504, verified: 1, issued: 1},
+		{
+			name:   "wrong scheme",
+			header: http.Header{"Authorization": {"Basic " + clientToken}},
+			status: 401,
+		},
+		{
+			name:   "repeated token",
+			header: http.Header{"Authorization": {"Bearer " + clientToken, "Bearer " + clientToken}},
+			status: 401,
+		},
+		{
+			name:     "unknown token",
+			header:   http.Header{"Authorization": {"Bearer unknown"}},
+			status:   401,
+			verified: 1,
+		},
+		{
+			name:   "unknown connection",
+			path:   "/c/unknown/user",
+			status: 404,
+		},
+		{
+			name:      "broker lookup down",
+			lookupErr: secretErr,
+			status:    503,
+		},
+		{
+			name:      "forbidden",
+			verifyErr: fmt.Errorf("wrapped: %w", broker.ErrForbidden),
+			status:    403,
+			verified:  1,
+		},
+		{
+			name:      "unauthorized",
+			verifyErr: broker.ErrUnauthorized,
+			status:    401,
+			verified:  1,
+		},
+		{
+			name:      "deleted connection",
+			verifyErr: broker.ErrNotFound,
+			status:    404,
+			verified:  1,
+		},
+		{
+			name:      "unhealthy connection",
+			verifyErr: broker.ErrUnavailable,
+			status:    503,
+			verified:  1,
+		},
+		{
+			name:      "verify failed",
+			verifyErr: secretErr,
+			status:    503,
+			verified:  1,
+		},
+		{
+			name:      "verify timeout",
+			verifyErr: context.DeadlineExceeded,
+			status:    504,
+			verified:  1,
+		},
+		{
+			name:     "issue failed",
+			issueErr: secretErr,
+			status:   503,
+			verified: 1,
+			issued:   1,
+		},
+		{
+			name:     "issue unauthorized",
+			issueErr: broker.ErrUnauthorized,
+			status:   401,
+			verified: 1,
+			issued:   1,
+		},
+		{
+			name:     "issue forbidden",
+			issueErr: broker.ErrForbidden,
+			status:   403,
+			verified: 1,
+			issued:   1,
+		},
+		{
+			name:     "issue missing",
+			issueErr: broker.ErrNotFound,
+			status:   404,
+			verified: 1,
+			issued:   1,
+		},
+		{
+			name:     "issue timeout",
+			issueErr: context.DeadlineExceeded,
+			status:   504,
+			verified: 1,
+			issued:   1,
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			b := &fakeBroker{conn: forgeauth.Connection{Kind: forgeauth.GitHub, BaseURL: "https://forge.example/api"},
-				connectionErr: tc.lookupErr, verifyErr: tc.verifyErr, issueErr: tc.issueErr}
+			b := &fakeBroker{
+				conn:          forgeauth.Connection{Kind: forgeauth.GitHub, BaseURL: "https://forge.example/api"},
+				connectionErr: tc.lookupErr,
+				verifyErr:     tc.verifyErr,
+				issueErr:      tc.issueErr,
+			}
 			c := config(t, b)
 			c.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) {
 				t.Error("unauthorized request reached transport")
@@ -218,6 +328,7 @@ func TestProxyErrors(t *testing.T) {
 			if path == "" {
 				path = "/c/conn/user"
 			}
+
 			r := httptest.NewRequest(http.MethodGet, path, nil)
 			r.Header.Set("Authorization", "Bearer "+clientToken)
 			if tc.header != nil {
@@ -226,6 +337,7 @@ func TestProxyErrors(t *testing.T) {
 			if tc.name == "missing token" {
 				r.Header = http.Header{}
 			}
+
 			w := httptest.NewRecorder()
 			handler(t, c).ServeHTTP(w, r)
 			if w.Code != tc.status || !strings.HasPrefix(w.Body.String(), "proxy: ") || w.Header().Get("Cache-Control") != "no-store" {
@@ -278,6 +390,7 @@ func TestTransportErrorIsSanitized(t *testing.T) {
 	if w.Code != 502 || w.Body.String() != "proxy: Bad Gateway\n" {
 		t.Fatalf("response = %d %q", w.Code, w.Body.String())
 	}
+
 	for _, verb := range []string{"%v", "%+v", "%#v", "%s"} {
 		if got := fmt.Sprintf(verb, h); got != "proxy.Handler" {
 			t.Error("handler formatting exposed internals")
@@ -326,7 +439,8 @@ func TestForgeErrorsPassThrough(t *testing.T) {
 			r.Header.Set("Authorization", "Bearer "+clientToken)
 			w := httptest.NewRecorder()
 			handler(t, config(t, b)).ServeHTTP(w, r)
-			if w.Code != code || w.Body.String() != body || w.Header().Get("Content-Type") != "application/json" || w.Header().Get("Retry-After") != "60" {
+			if w.Code != code ||
+				w.Body.String() != body || w.Header().Get("Content-Type") != "application/json" || w.Header().Get("Retry-After") != "60" {
 				t.Error("forge error response changed")
 			}
 		})
@@ -341,10 +455,15 @@ func TestPublicURLAndOriginMatching(t *testing.T) {
 		if r.URL.String() != "https://Forge.EXAMPLE/api/user" || r.Host != "Forge.EXAMPLE" {
 			t.Error("transport did not use the connection endpoint")
 		}
-		return &http.Response{StatusCode: 302, Body: io.NopCloser(strings.NewReader("")), Header: http.Header{
-			"Location": {"https://forge.example:443/api/next?x=1#part"},
-			"Link":     {`<//FORGE.EXAMPLE:443/api/projects/a%2Fb?page=2>; rel="next"`},
-		}}, nil
+
+		return &http.Response{
+			StatusCode: 302,
+			Body:       io.NopCloser(strings.NewReader("")),
+			Header: http.Header{
+				"Location": {"https://forge.example:443/api/next?x=1#part"},
+				"Link":     {`<//FORGE.EXAMPLE:443/api/projects/a%2Fb?page=2>; rel="next"`},
+			},
+		}, nil
 	})
 	r := httptest.NewRequest(http.MethodGet, "/c/conn/user", nil)
 	r.Host = "internal.example"
@@ -365,9 +484,13 @@ func TestRepeatedLocationIsDropped(t *testing.T) {
 	b := &fakeBroker{conn: forgeauth.Connection{Kind: forgeauth.GitHub, BaseURL: "https://forge.example/api"}}
 	c := config(t, b)
 	c.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) {
-		return &http.Response{StatusCode: 302, Body: io.NopCloser(strings.NewReader("")), Header: http.Header{
-			"Location": {"/api/a", "https://other.example/steal"},
-		}}, nil
+		return &http.Response{
+			StatusCode: 302,
+			Body:       io.NopCloser(strings.NewReader("")),
+			Header: http.Header{
+				"Location": {"/api/a", "https://other.example/steal"},
+			},
+		}, nil
 	})
 	r := httptest.NewRequest(http.MethodGet, "/c/conn/user", nil)
 	r.Header.Set("Authorization", "Bearer "+clientToken)

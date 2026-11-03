@@ -61,15 +61,18 @@ func (e *Error) Error() string {
 		b.WriteString(e.Method)
 		b.WriteByte(' ')
 	}
+
 	if e.URL != "" {
 		b.WriteString(e.URL)
 		b.WriteString(": ")
 	}
+
 	fmt.Fprintf(&b, "%d %s", e.StatusCode, http.StatusText(e.StatusCode))
 	if e.Message != "" {
 		b.WriteString(": ")
 		b.WriteString(e.Message)
 	}
+
 	return b.String()
 }
 
@@ -85,6 +88,7 @@ func CheckResponse(resp *http.Response) error {
 	if resp.StatusCode < 400 {
 		return nil
 	}
+
 	e := &Error{StatusCode: resp.StatusCode}
 	if resp.Request != nil {
 		e.Method = resp.Request.Method
@@ -92,6 +96,7 @@ func CheckResponse(resp *http.Response) error {
 			e.URL = RedactURL(resp.Request.URL)
 		}
 	}
+
 	if rl, ok := ParseRateLimit(resp.Header); ok {
 		e.RateLimit = &rl
 	}
@@ -103,7 +108,9 @@ func CheckResponse(resp *http.Response) error {
 		}{io.MultiReader(bytes.NewReader(data), resp.Body), resp.Body}
 		e.Message = errorMessage(resp.Header.Get("Content-Type"), data)
 	}
+
 	e.Err = sentinel(e)
+
 	return e
 }
 
@@ -123,6 +130,7 @@ func sentinel(e *Error) error {
 	case http.StatusTooManyRequests:
 		return ErrRateLimited
 	}
+
 	return nil
 }
 
@@ -133,6 +141,7 @@ func isRateLimited(e *Error) bool {
 	if rl := e.RateLimit; rl != nil && (rl.Remaining == 0 || rl.RetryAfter > 0) {
 		return true
 	}
+
 	return strings.Contains(strings.ToLower(e.Message), "rate limit")
 }
 
@@ -143,6 +152,7 @@ func errorMessage(contentType string, body []byte) string {
 	if len(body) == 0 {
 		return ""
 	}
+
 	mt, _, _ := mime.ParseMediaType(contentType)
 	var msg string
 	switch {
@@ -161,10 +171,12 @@ func errorMessage(contentType string, body []byte) string {
 	case mt == "text/plain":
 		msg = string(body)
 	}
+
 	msg = strings.Join(strings.Fields(msg), " ")
 	if len(msg) > maxMessage {
 		msg = msg[:maxMessage] + "..."
 	}
+
 	return msg
 }
 
@@ -174,20 +186,29 @@ func rawString(raw json.RawMessage) string {
 	if len(raw) == 0 || string(raw) == "null" {
 		return ""
 	}
+
 	var s string
 	if json.Unmarshal(raw, &s) == nil {
 		return s
 	}
+
 	var b bytes.Buffer
 	if json.Compact(&b, raw) != nil {
 		return ""
 	}
+
 	return b.String()
 }
 
 // RedactURL returns u without user info, query or fragment, so it is safe
 // to put in errors and logs.
 func RedactURL(u *url.URL) string {
-	r := url.URL{Scheme: u.Scheme, Host: u.Host, Path: u.Path, RawPath: u.RawPath, Opaque: u.Opaque}
+	r := url.URL{
+		Scheme:  u.Scheme,
+		Host:    u.Host,
+		Path:    u.Path,
+		RawPath: u.RawPath,
+		Opaque:  u.Opaque,
+	}
 	return r.String()
 }

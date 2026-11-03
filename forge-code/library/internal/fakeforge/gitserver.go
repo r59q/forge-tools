@@ -61,6 +61,7 @@ func GitFront(opts GitOptions) Front {
 	if opts.ObjectFormat == "" {
 		opts.ObjectFormat = "sha1"
 	}
+
 	return func(f *Forge) http.Handler {
 		g := &gitFront{f: f, opts: opts}
 		return http.HandlerFunc(g.serve)
@@ -78,6 +79,7 @@ func (g *gitFront) serve(w http.ResponseWriter, r *http.Request) {
 		WriteMessage(w, http.StatusNotFound, "Not Found")
 		return
 	}
+
 	service := r.URL.Query().Get("service")
 	switch {
 	case r.Method == http.MethodGet && endpoint == "info/refs" && service == "git-receive-pack":
@@ -120,9 +122,12 @@ func splitGitPath(p string) (repo, endpoint string, ok bool) {
 		if !found {
 			continue
 		}
+
 		repo, ok = strings.CutSuffix(strings.TrimPrefix(rest, "/"), ".git")
+
 		return repo, ep, ok && repo != ""
 	}
+
 	return "", "", false
 }
 
@@ -132,6 +137,7 @@ func (g *gitFront) authorize(w http.ResponseWriter, path string, write bool) *Re
 		WriteMessage(w, status, http.StatusText(status))
 		return nil
 	}
+
 	return repo
 }
 
@@ -144,6 +150,7 @@ func (g *gitFront) caps() []string {
 	if !g.opts.NoAtomic {
 		caps = append(caps, "atomic")
 	}
+
 	return append(caps, "object-format="+g.opts.ObjectFormat, "agent=fakeforge")
 }
 
@@ -153,6 +160,7 @@ func (g *gitFront) advertise(w http.ResponseWriter, repo *Repo) {
 	for name, id := range repo.refs {
 		refs[name] = id
 	}
+
 	repo.mu.RUnlock()
 	w.Header().Set("Content-Type", "application/x-git-receive-pack-advertisement")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -164,6 +172,7 @@ func (g *gitFront) advertiseV2(w http.ResponseWriter) {
 	if g.opts.NoFilter {
 		fetch = "fetch=shallow"
 	}
+
 	w.Header().Set("Content-Type", "application/x-git-upload-pack-advertisement")
 	w.Header().Set("Cache-Control", "no-cache")
 	_ = gitwire.WriteV2Advertisement(w, []string{"agent=fakeforge", "ls-refs", fetch, "object-format=" + g.opts.ObjectFormat})
@@ -176,6 +185,7 @@ func (g *gitFront) receive(w http.ResponseWriter, r *http.Request, repo *Repo) {
 		WriteMessage(w, http.StatusBadRequest, err.Error())
 		return
 	}
+
 	// A pack comes unless every command is a delete.
 	var objs []gitobj.Object
 	unpackErr := ""
@@ -188,10 +198,12 @@ func (g *gitFront) receive(w http.ResponseWriter, r *http.Request, repo *Repo) {
 	if g.opts.BeforeReceive != nil {
 		g.opts.BeforeReceive(repo, cmds)
 	}
+
 	rep := g.apply(repo, cmds, caps, objs, unpackErr)
 	if g.opts.AbortAfterApply {
 		panic(http.ErrAbortHandler)
 	}
+
 	w.Header().Set("Content-Type", "application/x-git-receive-pack-result")
 	w.Header().Set("Cache-Control", "no-cache")
 	_ = gitwire.WriteReport(w, rep, caps.Has("side-band-64k"))
@@ -204,6 +216,7 @@ func unpack(r io.Reader) ([]gitobj.Object, string) {
 	if err != nil {
 		return nil, err.Error()
 	}
+
 	for _, o := range objs {
 		if err := checkObject(o); err != nil {
 			return nil, "fsck error: " + err.Error()
@@ -216,17 +229,25 @@ func unpack(r io.Reader) ([]gitobj.Object, string) {
 			}
 		}
 	}
+
 	return objs, ""
 }
 
 // apply checks and applies cmds under the repository lock and returns
 // the report.
-func (g *gitFront) apply(repo *Repo, cmds []gitwire.Command, caps gitwire.Capabilities, objs []gitobj.Object, unpackErr string) *gitwire.Report {
+func (g *gitFront) apply(
+	repo *Repo,
+	cmds []gitwire.Command,
+	caps gitwire.Capabilities,
+	objs []gitobj.Object,
+	unpackErr string,
+) *gitwire.Report {
 	rep := &gitwire.Report{UnpackOK: unpackErr == "", Unpack: unpackErr, Refs: map[string]gitwire.RefStatus{}}
 	fail := func(reason string) *gitwire.Report {
 		for _, c := range cmds {
 			rep.Refs[c.Name] = gitwire.RefStatus{Reason: reason}
 		}
+
 		return rep
 	}
 	if unpackErr != "" {
@@ -235,6 +256,7 @@ func (g *gitFront) apply(repo *Repo, cmds []gitwire.Command, caps gitwire.Capabi
 	if g.opts.Decline != nil && g.opts.Decline(cmds) {
 		return fail("pre-receive hook declined")
 	}
+
 	quarantine := make(map[gitobj.ID]gitobj.Object, len(objs))
 	for _, o := range objs {
 		quarantine[o.ID()] = o
@@ -246,30 +268,37 @@ func (g *gitFront) apply(repo *Repo, cmds []gitwire.Command, caps gitwire.Capabi
 	for i, c := range cmds {
 		reasons[i] = repo.check(c, quarantine, g.opts.NoDeleteRefs)
 	}
+
 	atomic := !g.opts.NoAtomic && caps.Has("atomic")
 	if atomic && slices.ContainsFunc(reasons, func(s string) bool { return s != "" }) {
 		for i, c := range cmds {
 			if reasons[i] == "" {
 				reasons[i] = "atomic push failure"
 			}
+
 			rep.Refs[c.Name] = gitwire.RefStatus{Reason: reasons[i]}
 		}
+
 		return rep
 	}
+
 	applied := false
 	for i, c := range cmds {
 		if reasons[i] != "" {
 			rep.Refs[c.Name] = gitwire.RefStatus{Reason: reasons[i]}
 			continue
 		}
+
 		if c.New.IsZero() {
 			delete(repo.refs, c.Name)
 		} else {
 			repo.refs[c.Name] = c.New
 		}
+
 		applied = true
 		rep.Refs[c.Name] = gitwire.RefStatus{OK: true}
 	}
+
 	if applied {
 		for id, o := range quarantine {
 			if _, ok := repo.objects[id]; !ok {
@@ -277,30 +306,42 @@ func (g *gitFront) apply(repo *Repo, cmds []gitwire.Command, caps gitwire.Capabi
 			}
 		}
 	}
+
 	return rep
 }
 
 // check returns why c cannot apply, or "". The caller holds r.mu.
 func (r *Repo) check(c gitwire.Command, quarantine map[gitobj.ID]gitobj.Object, noDeletes bool) string {
-	if c.New.IsZero() {
-		if noDeletes {
-			return "deletion prohibited"
-		}
-	} else {
-		o, ok := quarantine[c.New]
-		if !ok {
-			o, ok = r.objects[c.New]
-		}
-		if !ok || !r.connected(c.New, quarantine) {
-			return "missing necessary objects"
-		}
-		if strings.HasPrefix(c.Name, "refs/heads/") && o.Type != gitobj.TypeCommit {
-			return "non-commit object for a branch"
+	if c.New.IsZero() && noDeletes {
+		return "deletion prohibited"
+	}
+	if !c.New.IsZero() {
+		if reason := r.checkNew(c, quarantine); reason != "" {
+			return reason
 		}
 	}
+
 	if r.refs[c.Name] != c.Old {
 		return "failed to update ref"
 	}
+
+	return ""
+}
+
+// checkNew returns why c's new value cannot apply, or "". The caller
+// holds r.mu.
+func (r *Repo) checkNew(c gitwire.Command, quarantine map[gitobj.ID]gitobj.Object) string {
+	o, ok := quarantine[c.New]
+	if !ok {
+		o, ok = r.objects[c.New]
+	}
+	if !ok || !r.connected(c.New, quarantine) {
+		return "missing necessary objects"
+	}
+	if strings.HasPrefix(c.Name, "refs/heads/") && o.Type != gitobj.TypeCommit {
+		return "non-commit object for a branch"
+	}
+
 	return ""
 }
 
@@ -316,14 +357,17 @@ func (r *Repo) connected(id gitobj.ID, quarantine map[gitobj.ID]gitobj.Object) b
 		if seen[id] {
 			continue
 		}
+
 		seen[id] = true
 		o, ok := quarantine[id]
 		if !ok {
 			if _, stored := r.objects[id]; stored {
 				continue
 			}
+
 			return false
 		}
+
 		switch o.Type {
 		case gitobj.TypeCommit:
 			c, _ := gitobj.DecodeCommit(o.Data)
@@ -340,6 +384,7 @@ func (r *Repo) connected(id gitobj.ID, quarantine map[gitobj.ID]gitobj.Object) b
 			stack = append(stack, t.Object)
 		}
 	}
+
 	return true
 }
 
@@ -351,12 +396,14 @@ func (g *gitFront) upload(w http.ResponseWriter, r *http.Request, repo *Repo) {
 		WriteMessage(w, http.StatusBadRequest, err.Error())
 		return
 	}
+
 	w.Header().Set("Content-Type", "application/x-git-upload-pack-result")
 	w.Header().Set("Cache-Control", "no-cache")
 	if req.Command != "fetch" {
 		_ = gitwire.WriteError(w, "fakeforge: only fetch is supported")
 		return
 	}
+
 	var wants []gitobj.ID
 	deepen, filter := false, false
 	for _, a := range req.Args {
@@ -374,10 +421,12 @@ func (g *gitFront) upload(w http.ResponseWriter, r *http.Request, repo *Repo) {
 			filter = !g.opts.NoFilter
 		}
 	}
+
 	if len(wants) == 0 || !deepen || !filter {
 		_ = gitwire.WriteError(w, "fakeforge: only single-commit fetches with deepen 1 and filter tree:0")
 		return
 	}
+
 	var objs []gitobj.Object
 	var shallow []gitobj.ID
 	for _, id := range wants {
@@ -386,12 +435,14 @@ func (g *gitFront) upload(w http.ResponseWriter, r *http.Request, repo *Repo) {
 			_ = gitwire.WriteError(w, "upload-pack: not our ref "+id.String())
 			return
 		}
+
 		o, _ := repo.Object(id)
 		objs = append(objs, o)
 		if len(c.Parents) > 0 {
 			shallow = append(shallow, id)
 		}
 	}
+
 	_ = gitwire.WriteFetchResponse(w, shallow, objs)
 }
 
@@ -402,5 +453,6 @@ func (r *Repo) reachable(id gitobj.ID) bool {
 			return true
 		}
 	}
+
 	return false
 }

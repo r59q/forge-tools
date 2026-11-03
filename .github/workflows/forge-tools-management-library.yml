@@ -9,18 +9,22 @@ on:
       - forge-connector/library/**
       - forge-repositories/library/**
       - forge-issues/library/**
+      - forge-actions/library/**
       - forge-core/forgeapi/**
       - .github/workflows/forge-tools-management-library.yml
       - .github/workflows/reusable-go.yml
+      - .golangci.yml
   pull_request:
     paths:
       - forge-tools-management/library/**
       - forge-connector/library/**
       - forge-repositories/library/**
       - forge-issues/library/**
+      - forge-actions/library/**
       - forge-core/forgeapi/**
       - .github/workflows/forge-tools-management-library.yml
       - .github/workflows/reusable-go.yml
+      - .golangci.yml
   workflow_dispatch:
 
 permissions:

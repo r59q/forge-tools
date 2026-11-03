@@ -19,14 +19,24 @@ func (l fakeLister) ClientConnections(_ context.Context, token forgeauth.StaticT
 	if string(token) != clientToken {
 		return nil, broker.ErrUnauthorized
 	}
+
 	return l.connections, l.err
 }
 
 func TestListConnections(t *testing.T) {
 	c := config(t, &fakeBroker{})
 	c.Connections = fakeLister{connections: []broker.ClientConnection{
-		{ID: "a", Name: "Work", Kind: forgeauth.GitLab, Status: broker.StatusOK},
-		{ID: "b", Kind: forgeauth.GitHub, Status: broker.StatusRevoked},
+		{
+			ID:     "a",
+			Name:   "Work",
+			Kind:   forgeauth.GitLab,
+			Status: broker.StatusOK,
+		},
+		{
+			ID:     "b",
+			Kind:   forgeauth.GitHub,
+			Status: broker.StatusRevoked,
+		},
 	}}
 	empty := config(t, &fakeBroker{})
 	empty.Connections = fakeLister{}
@@ -81,5 +91,6 @@ func request(t *testing.T, method, url, auth string) *http.Request {
 	if auth != "" {
 		req.Header.Set("Authorization", auth)
 	}
+
 	return req
 }

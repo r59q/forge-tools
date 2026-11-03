@@ -15,6 +15,9 @@ connection.
   assigned to or created by the connected accounts, or one repository's
   issues, filtered by state.
 
+- **Pipelines** browses repository executions, jobs, steps and logs through
+  [forge-actions](../forge-actions/). The capability is optional.
+
 Projects:
 
 - [library](library/) holds connection management, repository and issue

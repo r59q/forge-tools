@@ -35,8 +35,6 @@ type limits struct {
 	work    int
 }
 
-var defaultLimits = limits{minCost: minCost, work: maxWork}
-
 // Hunks returns the unified diff hunks from a to b without file headers,
 // like the patch fields of forge APIs, and the number of added and deleted
 // lines. Each hunk has up to context unchanged lines around its changes; a
@@ -44,17 +42,19 @@ var defaultLimits = limits{minCost: minCost, work: maxWork}
 // lines apart are merged. Headers use git's form "@@ -l,s +l,s @@", where
 // ",s" is left out when s is 1. Identical inputs give "".
 func Hunks(a, b []byte, context int) (patch string, additions, deletions int) {
-	return hunks(a, b, context, defaultLimits)
+	return hunks(a, b, context, limits{minCost: minCost, work: maxWork})
 }
 
 func hunks(a, b []byte, context int, lim limits) (string, int, int) {
 	if bytes.Equal(a, b) {
 		return "", 0, 0
 	}
+
 	context = max(context, 0)
 	la, lb := splitLines(a), splitLines(b)
 	d := newDiffer(la, lb, lim)
 	d.run()
+
 	return encode(la, lb, d.delA, d.insB, context)
 }
 
@@ -67,9 +67,11 @@ func splitLines(s []byte) [][]byte {
 			ls = append(ls, s)
 			break
 		}
+
 		ls = append(ls, s[:i+1])
 		s = s[i+1:]
 	}
+
 	return ls
 }
 
@@ -92,11 +94,14 @@ func newDiffer(la, lb [][]byte, lim limits) *differ {
 				id = len(ids)
 				ids[string(l)] = id
 			}
+
 			out[i] = id
 		}
+
 		return out
 	}
 	n := len(la) + len(lb)
+
 	return &differ{
 		a:       intern(la),
 		b:       intern(lb),
@@ -121,19 +126,23 @@ func (d *differ) run() {
 			aLo++
 			bLo++
 		}
+
 		for aLo < aHi && bLo < bHi && d.a[aHi-1] == d.b[bHi-1] {
 			aHi--
 			bHi--
 		}
+
 		if aLo == aHi || bLo == bHi {
 			d.replace(aLo, aHi, bLo, bHi)
 			continue
 		}
+
 		x, y, ok := d.split(aLo, aHi, bLo, bHi)
 		if !ok {
 			d.replace(aLo, aHi, bLo, bHi)
 			continue
 		}
+
 		stack = append(stack, [4]int{x, aHi, y, bHi}, [4]int{aLo, x, bLo, y})
 	}
 }
@@ -143,126 +152,9 @@ func (d *differ) replace(aLo, aHi, bLo, bHi int) {
 	for i := aLo; i < aHi; i++ {
 		d.delA[i] = true
 	}
+
 	for j := bLo; j < bHi; j++ {
 		d.insB[j] = true
-	}
-}
-
-// split finds a point (x, y) on a shortest edit path through the box
-// a[aLo:aHi], b[bLo:bHi], whose first and last lines differ. It searches
-// forward and backward at once, as in Myers' linear-space algorithm and
-// git's xdiff. Diagonal k holds the points with x-y == k. After maxCost
-// rounds it returns the furthest point reached. It reports false when the
-// work budget runs out or the point would not shrink the box.
-func (d *differ) split(aLo, aHi, bLo, bHi int) (x, y int, ok bool) {
-	off := len(d.b) + 1
-	vf, vb := d.vf, d.vb
-	dmin, dmax := aLo-bHi, aHi-bLo
-	fmid, bmid := aLo-bLo, aHi-bHi
-	fmin, fmax, bmin, bmax := fmid, fmid, bmid, bmid
-	odd := (fmid-bmid)&1 != 0
-	vf[off+fmid] = aLo
-	vb[off+bmid] = aHi
-	inside := func(x, y int) bool {
-		return x >= aLo && x <= aHi && y >= bLo && y <= bHi &&
-			x+y > aLo+bLo && x+y < aHi+bHi
-	}
-	for ec := 1; ; ec++ {
-		if d.work <= 0 {
-			return 0, 0, false
-		}
-		if fmin > dmin {
-			fmin--
-			vf[off+fmin-1] = -1
-		} else {
-			fmin++
-		}
-		if fmax < dmax {
-			fmax++
-			vf[off+fmax+1] = -1
-		} else {
-			fmax--
-		}
-		for k := fmax; k >= fmin; k -= 2 {
-			if vf[off+k-1] >= vf[off+k+1] {
-				x = vf[off+k-1] + 1
-			} else {
-				x = vf[off+k+1]
-			}
-			x0 := x
-			y = x - k
-			for x < aHi && y < bHi && d.a[x] == d.b[y] {
-				x++
-				y++
-			}
-			d.work -= 1 + x - x0
-			vf[off+k] = x
-			if odd && bmin <= k && k <= bmax && vb[off+k] <= x {
-				return x, y, inside(x, y)
-			}
-		}
-
-		if bmin > dmin {
-			bmin--
-			vb[off+bmin-1] = math.MaxInt
-		} else {
-			bmin++
-		}
-		if bmax < dmax {
-			bmax++
-			vb[off+bmax+1] = math.MaxInt
-		} else {
-			bmax--
-		}
-		for k := bmax; k >= bmin; k -= 2 {
-			if vb[off+k-1] < vb[off+k+1] {
-				x = vb[off+k-1]
-			} else {
-				x = vb[off+k+1] - 1
-			}
-			x0 := x
-			y = x - k
-			for x > aLo && y > bLo && d.a[x-1] == d.b[y-1] {
-				x--
-				y--
-			}
-			d.work -= 1 + x0 - x
-			vb[off+k] = x
-			if !odd && fmin <= k && k <= fmax && x <= vf[off+k] {
-				return x, y, inside(x, y)
-			}
-		}
-
-		if ec >= d.maxCost {
-			fbest, fx := -1, 0
-			for k := fmax; k >= fmin; k -= 2 {
-				x := min(vf[off+k], aHi)
-				y := x - k
-				if y > bHi {
-					x, y = bHi+k, bHi
-				}
-				if x+y > fbest {
-					fbest, fx = x+y, x
-				}
-			}
-			bbest, bx := math.MaxInt, 0
-			for k := bmax; k >= bmin; k -= 2 {
-				x := max(aLo, vb[off+k])
-				y := x - k
-				if y < bLo {
-					x, y = bLo+k, bLo
-				}
-				if x+y < bbest {
-					bbest, bx = x+y, x
-				}
-			}
-			if (aHi+bHi)-bbest < fbest-(aLo+bLo) {
-				x, y = fx, fbest-fx
-			} else {
-				x, y = bx, bbest-bx
-			}
-			return x, y, inside(x, y)
-		}
 	}
 }
 
@@ -274,6 +166,36 @@ type op struct {
 
 // encode writes the marked lines as unified hunks.
 func encode(la, lb [][]byte, delA, insB []bool, context int) (string, int, int) {
+	ops, adds, dels := editScript(la, lb, delA, insB)
+
+	var sb strings.Builder
+	n := len(ops)
+	aPos, bPos := 0, 0 // lines of a and b before ops[i]
+	for i := 0; ; {
+		c := i
+		for c < n && ops[c].kind == ' ' {
+			c++
+		}
+
+		if c == n {
+			break
+		}
+
+		start := max(i, c-context)
+		aPos += start - i
+		bPos += start - i
+		stop := hunkStop(ops, c, context)
+		oldN, newN := writeHunk(&sb, ops[start:stop], aPos, bPos)
+
+		aPos += oldN
+		bPos += newN
+		i = stop
+	}
+
+	return sb.String(), adds, dels
+}
+
+func editScript(la, lb [][]byte, delA, insB []bool) ([]op, int, int) {
 	ops := make([]op, 0, max(len(la), len(lb)))
 	adds, dels := 0, 0
 	for i, j := 0, 0; i < len(la) || j < len(lb); {
@@ -293,64 +215,58 @@ func encode(la, lb [][]byte, delA, insB []bool, context int) (string, int, int) 
 		}
 	}
 
-	var sb strings.Builder
-	n := len(ops)
-	aPos, bPos := 0, 0 // lines of a and b before ops[i]
-	for i := 0; ; {
-		c := i
-		for c < n && ops[c].kind == ' ' {
-			c++
+	return ops, adds, dels
+}
+
+func hunkStop(ops []op, change, context int) int {
+	end := change
+	for next := change; next < len(ops); {
+		if ops[next].kind != ' ' {
+			next++
+			end = next
+			continue
 		}
-		if c == n {
+
+		unchanged := next
+		for unchanged < len(ops) && ops[unchanged].kind == ' ' {
+			unchanged++
+		}
+
+		if unchanged == len(ops) || unchanged-next > 2*context {
 			break
 		}
-		start := max(i, c-context)
-		aPos += start - i
-		bPos += start - i
-		end := c // just past the last change
-		for e := c; e < n; {
-			if ops[e].kind != ' ' {
-				e++
-				end = e
-				continue
-			}
-			r := e
-			for r < n && ops[r].kind == ' ' {
-				r++
-			}
-			if r == n || r-e > 2*context {
-				break
-			}
-			e = r
-		}
-		stop := min(n, end+context)
 
-		oldN, newN := 0, 0
-		for _, o := range ops[start:stop] {
-			if o.kind != '+' {
-				oldN++
-			}
-			if o.kind != '-' {
-				newN++
-			}
-		}
-		sb.WriteString("@@ -")
-		writeRange(&sb, aPos, oldN)
-		sb.WriteString(" +")
-		writeRange(&sb, bPos, newN)
-		sb.WriteString(" @@\n")
-		for _, o := range ops[start:stop] {
-			sb.WriteByte(o.kind)
-			sb.Write(o.line)
-			if len(o.line) == 0 || o.line[len(o.line)-1] != '\n' {
-				sb.WriteString("\n\\ No newline at end of file\n")
-			}
-		}
-		aPos += oldN
-		bPos += newN
-		i = stop
+		next = unchanged
 	}
-	return sb.String(), adds, dels
+
+	return min(len(ops), end+context)
+}
+
+func writeHunk(sb *strings.Builder, ops []op, oldPos, newPos int) (int, int) {
+	oldCount, newCount := 0, 0
+	for _, operation := range ops {
+		if operation.kind != '+' {
+			oldCount++
+		}
+		if operation.kind != '-' {
+			newCount++
+		}
+	}
+
+	sb.WriteString("@@ -")
+	writeRange(sb, oldPos, oldCount)
+	sb.WriteString(" +")
+	writeRange(sb, newPos, newCount)
+	sb.WriteString(" @@\n")
+	for _, operation := range ops {
+		sb.WriteByte(operation.kind)
+		sb.Write(operation.line)
+		if len(operation.line) == 0 || operation.line[len(operation.line)-1] != '\n' {
+			sb.WriteString("\n\\ No newline at end of file\n")
+		}
+	}
+
+	return oldCount, newCount
 }
 
 // writeRange writes "l,s" for s lines after line before, as git does: l is
@@ -361,6 +277,7 @@ func writeRange(sb *strings.Builder, before, s int) {
 	if s > 0 {
 		l++
 	}
+
 	sb.WriteString(strconv.Itoa(l))
 	if s != 1 {
 		sb.WriteByte(',')

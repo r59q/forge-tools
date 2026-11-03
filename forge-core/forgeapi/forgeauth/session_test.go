@@ -27,6 +27,7 @@ func openTest(t *testing.T, base string, creds Credentials, rt http.RoundTripper
 	if err != nil {
 		t.Fatalf("OpenSession() error = %v", err)
 	}
+
 	return s
 }
 
@@ -48,28 +49,45 @@ func newRecorder(t *testing.T, h http.HandlerFunc) *recorder {
 		}
 	}))
 	t.Cleanup(r.Close)
+
 	return r
 }
 
 func (r *recorder) seen(path string) []string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	return r.tokens[path]
 }
 
-func get(t *testing.T, s *Session, path string) *http.Response {
+// get sends a GET request for path on s, reads and closes the response, and
+// returns the final URL after redirects.
+func get(t *testing.T, s *Session, path string) *url.URL {
 	t.Helper()
 	req, err := s.NewRequest(context.Background(), http.MethodGet, path, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	resp, err := s.Client.Do(req)
 	if err != nil {
 		t.Fatalf("GET %s: %v", path, err)
 	}
-	io.Copy(io.Discard, resp.Body)
-	resp.Body.Close()
-	return resp
+
+	_, _ = io.Copy(io.Discard, resp.Body)
+	_ = resp.Body.Close()
+
+	return resp.Request.URL
+}
+
+// doErr sends req with c and returns the error. A response is closed.
+func doErr(c *http.Client, req *http.Request) error {
+	resp, err := c.Do(req)
+	if resp != nil {
+		_ = resp.Body.Close()
+	}
+
+	return err
 }
 
 func TestTokenSentToOwnHost(t *testing.T) {
@@ -78,6 +96,7 @@ func TestTokenSentToOwnHost(t *testing.T) {
 	if s.BaseURL != srv.URL+"/api/v1" {
 		t.Errorf("BaseURL = %q", s.BaseURL)
 	}
+
 	get(t, s, "/user")
 	get(t, s, srv.URL+"/absolute")
 	if got := srv.seen("/api/v1/user"); len(got) != 1 || got[0] != secret {
@@ -136,6 +155,7 @@ func TestTokenNotSentToOtherHost(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		resp.Body.Close()
 		if got := other.seen("/landed307"); len(got) != 1 || got[0] != "" {
 			t.Errorf("other host got tokens %q", got)
@@ -162,6 +182,7 @@ func TestTokenNotSentToOtherHost(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		resp.Body.Close()
 		if v := req.Header.Get(testHeader); v != "" {
 			t.Errorf("caller's request has token header %q", v)
@@ -180,11 +201,17 @@ func (f *fakeTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	f.mu.Lock()
 	f.seen[req.URL.String()] = req.Header.Get(testHeader)
 	f.mu.Unlock()
-	resp := &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: http.NoBody, Request: req}
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{},
+		Body:       http.NoBody,
+		Request:    req,
+	}
 	if to := req.URL.Query().Get("to"); to != "" {
 		resp.StatusCode = http.StatusFound
 		resp.Header.Set("Location", to)
 	}
+
 	return resp, nil
 }
 
@@ -212,10 +239,12 @@ func TestTokenOriginRules(t *testing.T) {
 				if via == "redirect" {
 					path = "/redirect?to=" + url.QueryEscape(tt.target)
 				}
-				resp := get(t, s, path)
-				if resp.Request.URL.String() != tt.target {
-					t.Fatalf("%s: final URL = %s", via, resp.Request.URL)
+
+				final := get(t, s, path)
+				if final.String() != tt.target {
+					t.Fatalf("%s: final URL = %s", via, final)
 				}
+
 				want := ""
 				if tt.want {
 					want = secret
@@ -265,8 +294,10 @@ func (r *rotating) Token(context.Context) (string, error) {
 	if len(r.toks) == 0 {
 		return "", ErrNoToken
 	}
+
 	tok := r.toks[0]
 	r.toks = r.toks[1:]
+
 	return tok, nil
 }
 
@@ -279,9 +310,10 @@ func TestTokenReadPerRequest(t *testing.T) {
 	if got := srv.seen("/a"); len(got) != 2 || got[0] != "first" || got[1] != "second" {
 		t.Errorf("tokens = %q", got)
 	}
+
 	// Credentials now fail: the request is not sent.
 	req, _ := s.NewRequest(context.Background(), http.MethodPost, "/a", io.NopCloser(strings.NewReader("x")))
-	if _, err := s.Client.Do(req); !errors.Is(err, ErrNoToken) {
+	if err := doErr(s.Client, req); !errors.Is(err, ErrNoToken) {
 		t.Errorf("Do() error = %v, want ErrNoToken", err)
 	}
 	if got := srv.seen("/a"); len(got) != 2 {
@@ -294,7 +326,7 @@ func TestTokenInvalidAtRequest(t *testing.T) {
 	creds := &rotating{toks: []string{"ok", "bad\r\nX-Evil: 1"}}
 	s := openTest(t, srv.URL, creds, nil)
 	req, _ := s.NewRequest(context.Background(), http.MethodGet, "/a", nil)
-	_, err := s.Client.Do(req)
+	err := doErr(s.Client, req)
 	if err == nil || strings.Contains(err.Error(), "bad") {
 		t.Errorf("Do() error = %v", err)
 	}
@@ -398,6 +430,7 @@ func TestGetJSON(t *testing.T) {
 	if err := s.GetJSON(ctx, "/bad?x=1", &v); err == nil || !strings.Contains(err.Error(), "decode") || strings.Contains(err.Error(), "x=1") {
 		t.Errorf("GetJSON(/bad) error = %v", err)
 	}
+
 	err := s.GetJSON(ctx, "/denied", &v)
 	var herr *forgehttp.Error
 	if !errors.Is(err, forgehttp.ErrUnauthorized) || !errors.As(err, &herr) || herr.Message != "Bad credentials" {
@@ -434,6 +467,7 @@ func TestDefaultBaseURL(t *testing.T) {
 			t.Errorf("DefaultBaseURL(%s, %q) = %q, %v, want %q", tt.kind, tt.host, got, err, tt.want)
 		}
 	}
+
 	if _, err := DefaultBaseURL(GitLab, ""); !errors.Is(err, ErrNoBaseURL) {
 		t.Errorf("error = %v, want ErrNoBaseURL", err)
 	}

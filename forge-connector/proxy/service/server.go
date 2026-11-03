@@ -27,6 +27,8 @@ type Config struct {
 	AllowGitPush bool
 	// MaxGitPushBytes caps a push body. Zero uses the proxy default.
 	MaxGitPushBytes int64
+	// DownloadHosts allows credential-free HTTPS downloads. See proxy.Config.
+	DownloadHosts []string
 	// Logger receives request logs. Nil discards them.
 	Logger *slog.Logger
 }
@@ -46,22 +48,32 @@ func New(c Config) (*Server, error) {
 	if c.Broker == nil {
 		return nil, broker.ErrInvalid
 	}
+
 	transport := c.Transport
 	if transport == nil {
 		transport = http.DefaultTransport
 	}
+
 	h, err := proxy.New(proxy.Config{
-		Verifier: c.Broker, TokenIssuer: c.Broker, Connections: c.Broker, Registry: c.Registry,
-		Transport: &dropOn401{base: transport, drop: c.Broker.DropToken},
-		PublicURL: c.PublicURL, AllowGitPush: c.AllowGitPush, MaxGitPushBytes: c.MaxGitPushBytes,
+		Verifier:        c.Broker,
+		TokenIssuer:     c.Broker,
+		Connections:     c.Broker,
+		Registry:        c.Registry,
+		Transport:       &dropOn401{base: transport, drop: c.Broker.DropToken},
+		PublicURL:       c.PublicURL,
+		AllowGitPush:    c.AllowGitPush,
+		MaxGitPushBytes: c.MaxGitPushBytes,
+		DownloadHosts:   c.DownloadHosts,
 	})
 	if err != nil {
 		return nil, err
 	}
+
 	logger := c.Logger
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
 	}
+
 	return &Server{handler: h, log: logger}, nil
 }
 
@@ -78,6 +90,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.healthz(w, r)
 		return
 	}
+
 	start := time.Now()
 	id := connectionID(r.URL.EscapedPath())
 	rec := &recorder{ResponseWriter: w, status: http.StatusOK}
@@ -92,13 +105,16 @@ func (s *Server) healthz(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "GET, HEAD")
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+
 		return
 	}
+
 	w.Header().Set("Cache-Control", "no-store")
 	if !s.Healthy() {
 		http.Error(w, "stopping", http.StatusServiceUnavailable)
 		return
 	}
+
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	if r.Method == http.MethodGet {
 		_, _ = w.Write([]byte("ok\n"))
@@ -117,13 +133,20 @@ func connectionID(escapedPath string) broker.ID {
 			return ""
 		}
 	}
+
 	id, _, _ := strings.Cut(rest, "/")
 	for _, c := range id {
-		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '_') {
+		if !isIDChar(c) {
 			return ""
 		}
 	}
+
 	return broker.ID(id)
+}
+
+// isIDChar reports whether c is in [A-Za-z0-9_-].
+func isIDChar(c rune) bool {
+	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '_'
 }
 
 // dropOn401 forgets the connection's cached token when the forge answers 401.
@@ -140,6 +163,7 @@ func (t *dropOn401) RoundTrip(req *http.Request) (*http.Response, error) {
 			t.drop(id)
 		}
 	}
+
 	return resp, err
 }
 
@@ -164,6 +188,7 @@ func (r *recorder) WriteHeader(code int) {
 	if !r.wrote && (code < 100 || code >= 200 || code == http.StatusSwitchingProtocols) {
 		r.status, r.wrote = code, true
 	}
+
 	r.ResponseWriter.WriteHeader(code)
 }
 

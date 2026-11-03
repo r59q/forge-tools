@@ -15,7 +15,9 @@ func response(status int, header http.Header, body string) *http.Response {
 	if header == nil {
 		header = http.Header{}
 	}
+
 	u, _ := url.Parse("https://user:pass@forge.example/api/v1/user?access_token=secret#frag")
+
 	return &http.Response{
 		StatusCode: status,
 		Header:     header,
@@ -59,13 +61,18 @@ func TestCheckResponse(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := CheckResponse(response(tt.status, tt.header, tt.body))
+			resp := response(tt.status, tt.header, tt.body)
+			defer resp.Body.Close()
+
+			err := CheckResponse(resp)
 			if tt.status < 400 {
 				if err != nil {
 					t.Fatalf("CheckResponse() = %v, want nil", err)
 				}
+
 				return
 			}
+
 			var e *Error
 			if !errors.As(err, &e) {
 				t.Fatalf("CheckResponse() = %v, want *Error", err)
@@ -73,7 +80,7 @@ func TestCheckResponse(t *testing.T) {
 			if e.StatusCode != tt.status {
 				t.Errorf("StatusCode = %d, want %d", e.StatusCode, tt.status)
 			}
-			if e.Err != tt.want {
+			if !errors.Is(e.Err, tt.want) {
 				t.Errorf("Err = %v, want %v", e.Err, tt.want)
 			}
 			if tt.want != nil && !errors.Is(err, tt.want) {
@@ -85,6 +92,7 @@ func TestCheckResponse(t *testing.T) {
 			if e.URL != "https://forge.example/api/v1/user" {
 				t.Errorf("URL = %q, want it without user info, query and fragment", e.URL)
 			}
+
 			for _, secret := range []string{"secret", "pass"} {
 				if strings.Contains(err.Error(), secret) {
 					t.Errorf("Error() = %q contains %q", err.Error(), secret)
@@ -100,6 +108,7 @@ func TestCheckResponseKeepsBody(t *testing.T) {
 	if err := CheckResponse(resp); err == nil {
 		t.Fatal("CheckResponse() = nil, want error")
 	}
+
 	got, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatal(err)
@@ -114,7 +123,10 @@ func TestCheckResponseKeepsBody(t *testing.T) {
 
 func TestCheckResponseLongMessage(t *testing.T) {
 	long := strings.Repeat("x", 1000)
-	err := CheckResponse(response(500, http.Header{"Content-Type": {"text/plain"}}, long))
+	resp := response(500, http.Header{"Content-Type": {"text/plain"}}, long)
+	defer resp.Body.Close()
+
+	err := CheckResponse(resp)
 	var e *Error
 	if !errors.As(err, &e) {
 		t.Fatalf("CheckResponse() = %v, want *Error", err)
@@ -125,7 +137,13 @@ func TestCheckResponseLongMessage(t *testing.T) {
 }
 
 func TestErrorString(t *testing.T) {
-	e := &Error{StatusCode: 401, Method: "GET", URL: "https://forge.example/user", Message: "Bad credentials", Err: ErrUnauthorized}
+	e := &Error{
+		StatusCode: 401,
+		Method:     "GET",
+		URL:        "https://forge.example/user",
+		Message:    "Bad credentials",
+		Err:        ErrUnauthorized,
+	}
 	want := "forgehttp: GET https://forge.example/user: 401 Unauthorized: Bad credentials"
 	if got := e.Error(); got != want {
 		t.Errorf("Error() = %q, want %q", got, want)

@@ -18,10 +18,14 @@ func ExampleNewManager() {
 		panic(err)
 	}
 	if err := store.CreateForge(ctx, broker.Forge{
-		ID: "github", Kind: forgeauth.GitHub, BaseURL: "https://api.github.com", Name: "GitHub",
+		ID:      "github",
+		Kind:    forgeauth.GitHub,
+		BaseURL: "https://api.github.com",
+		Name:    "GitHub",
 	}); err != nil {
 		panic(err)
 	}
+
 	// This example is ephemeral. For persistent stores, retain the key separately.
 	key := make([]byte, 32)
 	_, _ = rand.Read(key)
@@ -29,10 +33,12 @@ func ExampleNewManager() {
 	if err != nil {
 		panic(err)
 	}
+
 	manager, err := broker.NewManager(&store, sealer, &registry)
 	if err != nil {
 		panic(err)
 	}
+
 	fmt.Println(manager)
 	// Output: broker.Manager
 }

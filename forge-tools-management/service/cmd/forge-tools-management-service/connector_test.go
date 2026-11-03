@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -35,6 +36,7 @@ func startBroker(t *testing.T, delay time.Duration) (*broker.Manager, string, st
 			http.Error(w, "denied", http.StatusUnauthorized)
 			return
 		}
+
 		_ = json.NewEncoder(w).Encode(map[string]any{"id": 1, "login": "owner"})
 	}))
 	t.Cleanup(forge.Close)
@@ -42,28 +44,34 @@ func startBroker(t *testing.T, delay time.Duration) (*broker.Manager, string, st
 	if err := registry.Register(github.Provider{}); err != nil {
 		t.Fatal(err)
 	}
+
 	sealer, err := broker.NewAESGCMSealer(bytes.Repeat([]byte{1}, 32))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	m, err := broker.NewManager(&broker.MemoryStore{}, sealer, registry)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	server, err := brokerapi.New(m, forgeauth.StaticToken("admin-synthetic"), 5*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	g := grpc.NewServer()
-	brokerpb.RegisterBrokerServer(g, server)
+	brokerpb.RegisterBrokerServiceServer(g, server)
 	address := l.Addr().String()
 	if delay > 0 {
 		_ = l.Close()
 	}
+
 	go func(l net.Listener) {
 		if delay > 0 {
 			time.Sleep(delay)
@@ -73,9 +81,11 @@ func startBroker(t *testing.T, delay time.Duration) (*broker.Manager, string, st
 				return
 			}
 		}
+
 		_ = g.Serve(l)
 	}(l)
 	t.Cleanup(g.Stop)
+
 	return m, address, forge.URL
 }
 
@@ -90,13 +100,14 @@ func waitForClient(t *testing.T, m *broker.Manager, token string) {
 		if time.Now().After(deadline) {
 			t.Fatal("client token was not registered")
 		}
+
 		time.Sleep(20 * time.Millisecond)
 	}
 }
 
 func TestRegisterServiceClients(t *testing.T) {
-	logf = t.Logf
-	t.Cleanup(func() { logf = log.Printf })
+	log.SetOutput(t.Output())
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
 	proxyToken, reposToken, issuesToken := strings.Repeat("p", 40), strings.Repeat("r", 40), strings.Repeat("i", 40)
 	// The broker starts after management, which retries until it answers.
 	m, address, _ := startBroker(t, 1500*time.Millisecond)
@@ -109,6 +120,7 @@ func TestRegisterServiceClients(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	startManagement(t, s)
 	waitForClient(t, m, proxyToken)
 	waitForClient(t, m, reposToken)
@@ -117,6 +129,7 @@ func TestRegisterServiceClients(t *testing.T) {
 	if err != nil || len(clients) != 3 {
 		t.Fatalf("clients = %+v, %v", clients, err)
 	}
+
 	for _, c := range clients {
 		if !c.AllConnections || c.CanIssueTokens != (c.Name == "forge-connector-proxy") {
 			t.Fatalf("client grants = %+v", c)
@@ -150,7 +163,12 @@ func TestClientTokenChecks(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := run(context.Background(), s, nil); err == nil || strings.Contains(err.Error(), "synthetic") || strings.Contains(err.Error(), "sss") {
+		if err := run(
+			context.Background(),
+			s,
+			nil,
+		); err == nil ||
+			strings.Contains(err.Error(), "synthetic") || strings.Contains(err.Error(), "sss") {
 			t.Fatalf("%s: %v", name, err)
 		}
 	}
@@ -164,21 +182,29 @@ func TestRunWithConnector(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	a := startManagement(t, s)
-	r, err := http.NewRequest("POST", "http://"+a[1].String()+"/v1/connections", strings.NewReader(`{"forge":"github","host":"`+forge+`","credential":"forge-synthetic"}`))
+	r, err := http.NewRequest(
+		"POST",
+		"http://"+a[1].String()+"/v1/connections",
+		strings.NewReader(`{"forge":"github","host":"`+forge+`","credential":"forge-synthetic"}`),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	r.Header.Set("Authorization", "Bearer operator-synthetic")
 	resp, err := http.DefaultClient.Do(r)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if resp.StatusCode != 200 || strings.Contains(string(body), "synthetic") {
 		t.Fatalf("add: %d %s", resp.StatusCode, body)
 	}
+
 	var added pb.Connection
 	if err := protojson.Unmarshal(body, &added); err != nil || added.Login != "owner" {
 		t.Fatalf("added = %v, %v", &added, err)
@@ -186,9 +212,16 @@ func TestRunWithConnector(t *testing.T) {
 	if conns, _ := m.ListConnections(context.Background()); len(conns) != 1 || string(conns[0].ID) != added.Id {
 		t.Fatalf("broker connections = %+v", conns)
 	}
-	if code, body := httpGet(t, a[1], "/connections", true); code != 200 || !strings.Contains(body, added.Id) || strings.Contains(body, "synthetic") {
+	if code, body := httpGet(
+		t,
+		a[1],
+		"/connections",
+		true,
+	); code != 200 ||
+		!strings.Contains(body, added.Id) || strings.Contains(body, "synthetic") {
 		t.Fatalf("web: %d %s", code, body)
 	}
+
 	t.Setenv("MANAGEMENT_TEST_ADMIN", "operator-synthetic")
 	if code, _ := httpGet(t, a[1], "/v1/connections", false); code != 503 {
 		t.Fatal("operator token was accepted as the admin token")

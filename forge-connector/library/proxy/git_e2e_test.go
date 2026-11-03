@@ -22,6 +22,7 @@ func TestGitEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Skip("git not found")
 	}
+
 	dir := t.TempDir()
 	env := append(os.Environ(),
 		"HOME="+dir, "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+filepath.Join(dir, "gitconfig"),
@@ -36,6 +37,7 @@ func TestGitEndToEnd(t *testing.T) {
 		if err != nil {
 			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
 		}
+
 		return strings.TrimSpace(string(out))
 	}
 	execPath := git(dir, "--exec-path")
@@ -43,6 +45,7 @@ func TestGitEndToEnd(t *testing.T) {
 	if _, err := os.Stat(backend); err != nil {
 		t.Skip("git-http-backend not found")
 	}
+
 	root := filepath.Join(dir, "repos")
 	bare := filepath.Join(root, "group", "sub", "project.git")
 	git(dir, "init", "--bare", "-b", "main", bare)
@@ -58,8 +61,10 @@ func TestGitEndToEnd(t *testing.T) {
 		if r.Header.Get("Authorization") != want.Get("Authorization") {
 			w.Header().Set("WWW-Authenticate", `Basic realm="forge"`)
 			http.Error(w, "denied", http.StatusUnauthorized)
+
 			return
 		}
+
 		mu.Lock()
 		protocols = append(protocols, r.Header.Get("Git-Protocol"))
 		mu.Unlock()
@@ -77,6 +82,7 @@ func TestGitEndToEnd(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(work, "file.txt"), []byte("hello\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+
 	git(work, "add", "file.txt")
 	git(work, "commit", "-m", "first")
 	head := git(work, "rev-parse", "HEAD")
@@ -90,6 +96,7 @@ func TestGitEndToEnd(t *testing.T) {
 	if got := git(clone, "rev-parse", "HEAD"); got != head {
 		t.Fatalf("fetched %s, want %s", got, head)
 	}
+
 	mu.Lock()
 	v2 := slices.Contains(protocols, "version=2")
 	mu.Unlock()

@@ -21,6 +21,7 @@ func (p fakeProvider) Whoami(ctx context.Context, s *Session) (Identity, error) 
 	if err := CheckSession(s, p.kind); err != nil {
 		return Identity{}, err
 	}
+
 	return Identity{ID: "1", Login: string(p.kind)}, nil
 }
 
@@ -39,11 +40,13 @@ func TestRegistry(t *testing.T) {
 	if _, err := r.Provider(GitHub); !errors.Is(err, ErrUnknownKind) {
 		t.Errorf("Provider() error = %v, want ErrUnknownKind", err)
 	}
+
 	for _, k := range []Kind{GitLab, GitHub} {
 		if err := r.Register(fakeProvider{k}); err != nil {
 			t.Fatal(err)
 		}
 	}
+
 	if err := r.Register(fakeProvider{GitHub}); err == nil {
 		t.Error("duplicate Register() succeeded")
 	}
@@ -61,6 +64,7 @@ func TestRegistry(t *testing.T) {
 	if s.Kind != GitLab {
 		t.Errorf("session kind = %s", s.Kind)
 	}
+
 	id, err := r.Whoami(ctx, s)
 	if err != nil || id.Login != "gitlab" {
 		t.Errorf("Whoami() = %+v, %v", id, err)
@@ -78,9 +82,20 @@ func TestRegistryConcurrent(t *testing.T) {
 	var wg sync.WaitGroup
 	for _, k := range []Kind{GitHub, GitLab, Forgejo} {
 		wg.Add(2)
-		go func() { defer wg.Done(); r.Register(fakeProvider{k}) }()
-		go func() { defer wg.Done(); r.Provider(k); r.Kinds() }()
+		go func() {
+			defer wg.Done()
+			if err := r.Register(fakeProvider{k}); err != nil {
+				t.Error(err)
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			// The provider may not be registered yet.
+			_, _ = r.Provider(k)
+			r.Kinds()
+		}()
 	}
+
 	wg.Wait()
 	if len(r.Kinds()) != 3 {
 		t.Errorf("Kinds() = %v", r.Kinds())
@@ -153,6 +168,7 @@ func TestHeaderToken(t *testing.T) {
 			for _, v := range tt.values {
 				h.Add("Private-Token", v)
 			}
+
 			got, ok := HeaderToken(h, "PRIVATE-TOKEN")
 			if got != tt.want || ok != tt.wantOK {
 				t.Errorf("HeaderToken() = %q, %v, want %q, %v", got, ok, tt.want, tt.wantOK)

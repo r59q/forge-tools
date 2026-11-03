@@ -84,7 +84,7 @@ type Fault struct {
 	Status int
 	// Header is added to the response.
 	Header http.Header
-	// Body is the response body. Empty means {"message": status text}.
+	// Body is the response body. Empty means {keyMessage: status text}.
 	Body string
 	// Times is how often the fault fires; 0 means always.
 	Times int
@@ -134,16 +134,19 @@ func (f *Forge) AddRepo(path string, r *Repo) *Repo {
 	if path == "" || slices.Contains(strings.Split(path, "/"), "") {
 		panic(fmt.Sprintf("fakeforge: bad repository path %q", path))
 	}
+
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if _, ok := f.repos[path]; ok {
 		panic(fmt.Sprintf("fakeforge: repository %q exists", path))
 	}
+
 	f.nextID++
 	r.mu.Lock()
 	r.id = f.nextID
 	r.mu.Unlock()
 	f.repos[path] = r
+
 	return r
 }
 
@@ -155,6 +158,7 @@ func (f *Forge) Repo(path string) (*Repo, bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	r, ok := f.repos[path]
+
 	return r, ok
 }
 
@@ -167,6 +171,7 @@ func (f *Forge) RepoByID(id int) (string, *Repo, bool) {
 			return p, r, true
 		}
 	}
+
 	return "", nil, false
 }
 
@@ -174,6 +179,7 @@ func (f *Forge) RepoByID(id int) (string, *Repo, bool) {
 func (f *Forge) Repos() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
 	return slices.Sorted(maps.Keys(f.repos))
 }
 
@@ -201,6 +207,7 @@ func (f *Forge) Authorize(path string, write bool) (*Repo, int) {
 	case write && a != AccessWrite:
 		return nil, http.StatusForbidden
 	}
+
 	return r, 0
 }
 
@@ -244,6 +251,7 @@ func (f *Forge) Calls(method, path string) int {
 			n += c
 		}
 	}
+
 	return n
 }
 
@@ -251,6 +259,7 @@ func (f *Forge) Calls(method, path string) int {
 func (f *Forge) Requests() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
 	return slices.Clone(f.requests)
 }
 
@@ -279,22 +288,28 @@ func (f *Forge) Handler(front http.Handler) http.Handler {
 			for k, vs := range ft.Header {
 				w.Header()[k] = slices.Clone(vs)
 			}
+
 			if ft.Body == "" {
 				WriteMessage(w, ft.Status, http.StatusText(ft.Status))
 				return
 			}
+
 			w.WriteHeader(ft.Status)
 			_, _ = w.Write([]byte(ft.Body))
+
 			return
 		}
+
 		if !f.authenticated(r) {
 			WriteMessage(w, http.StatusUnauthorized, f.unauthorizedMessage())
 			return
 		}
+
 		if front == nil {
 			WriteMessage(w, http.StatusNotFound, "Not Found")
 			return
 		}
+
 		front.ServeHTTP(w, r)
 	})
 }
@@ -314,8 +329,10 @@ func (f *Forge) fault(method, path string) *Fault {
 				f.faults = slices.Delete(f.faults, i, i+1)
 			}
 		}
+
 		return ft
 	}
+
 	return nil
 }
 
@@ -335,9 +352,11 @@ func (f *Forge) authenticated(r *http.Request) bool {
 	case forgeauth.Forgejo:
 		got, ok = forgejo.TokenFromHeader(r.Header)
 	}
+
 	if !ok {
 		got, ok = basicPassword(r.Header)
 	}
+
 	return ok && got == want
 }
 
@@ -348,15 +367,19 @@ func basicPassword(h http.Header) (string, bool) {
 	if len(vals) != 1 {
 		return "", false
 	}
+
 	scheme, enc, ok := strings.Cut(vals[0], " ")
 	if !ok || !strings.EqualFold(scheme, "Basic") {
 		return "", false
 	}
+
 	raw, err := base64.StdEncoding.DecodeString(enc)
 	if err != nil {
 		return "", false
 	}
+
 	_, pw, ok := strings.Cut(string(raw), ":")
+
 	return pw, ok && pw != ""
 }
 
@@ -367,6 +390,7 @@ func (f *Forge) unauthorizedMessage() string {
 	case forgeauth.GitLab:
 		return "401 Unauthorized"
 	}
+
 	return "token is required"
 }
 
@@ -380,6 +404,7 @@ func Match(pattern, s string) bool {
 	if !strings.HasPrefix(s, parts[0]) {
 		return false
 	}
+
 	s = s[len(parts[0]):]
 	last := parts[len(parts)-1]
 	for _, p := range parts[1 : len(parts)-1] {
@@ -387,7 +412,9 @@ func Match(pattern, s string) bool {
 		if i < 0 {
 			return false
 		}
+
 		s = s[i+len(p):]
 	}
+
 	return len(s) >= len(last) && strings.HasSuffix(s, last)
 }

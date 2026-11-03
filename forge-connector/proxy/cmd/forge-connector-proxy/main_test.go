@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"flag"
 	"io"
 	"log/slog"
@@ -46,6 +47,7 @@ func TestParseGitPush(t *testing.T) {
 	if err != nil || !s.allowGitPush || s.maxGitPushBytes != 1024 {
 		t.Fatalf("settings = %+v, %v", s, err)
 	}
+
 	s, err = parse([]string{"--allow-git-push=false"}, env, io.Discard)
 	if err != nil || s.allowGitPush {
 		t.Fatalf("flag did not override env: %+v, %v", s, err)
@@ -55,7 +57,9 @@ func TestParseGitPush(t *testing.T) {
 func TestParseEnvAndFlagPrecedence(t *testing.T) {
 	env := func(key string) string {
 		return map[string]string{
-			"FORGE_PROXY_BROKER_ADDR": "broker:1", "FORGE_PROXY_TOKEN_TTL": "2m", "FORGE_PROXY_TOKEN_FILE": "/run/token",
+			"FORGE_PROXY_BROKER_ADDR": "broker:1",
+			"FORGE_PROXY_TOKEN_TTL":   "2m",
+			"FORGE_PROXY_TOKEN_FILE":  "/run/token",
 		}[key]
 	}
 	s, err := parse([]string{"--broker-addr", "other:2", "--verify-ttl", "5s"}, env, io.Discard)
@@ -95,7 +99,7 @@ func TestParseRejects(t *testing.T) {
 
 func TestParseHelp(t *testing.T) {
 	var out bytes.Buffer
-	if _, err := parse([]string{"--help"}, noEnv, &out); err != flag.ErrHelp {
+	if _, err := parse([]string{"--help"}, noEnv, &out); !errors.Is(err, flag.ErrHelp) {
 		t.Fatalf("err = %v", err)
 	}
 	if !strings.Contains(out.String(), "--token-ttl") && !strings.Contains(out.String(), "-token-ttl") {
@@ -104,9 +108,16 @@ func TestParseHelp(t *testing.T) {
 }
 
 func TestRunRequiresToken(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	s, _ := parse([]string{"--token-env", "FORGE_PROXY_TEST_UNSET_TOKEN"}, noEnv, io.Discard)
-	if err := run(context.Background(), s, slog.New(slog.NewTextHandler(io.Discard, nil))); err == nil {
+	if err := run(context.Background(), s, logger); err == nil {
 		t.Error("run started without a token")
+	}
+
+	t.Setenv("FORGE_PROXY_TEST_BAD_TOKEN", "bad secret-sentinel")
+	s, _ = parse([]string{"--token-env", "FORGE_PROXY_TEST_BAD_TOKEN"}, noEnv, io.Discard)
+	if err := run(context.Background(), s, logger); err == nil || strings.Contains(err.Error(), "sentinel") {
+		t.Error("run accepted an invalid bearer token, or leaked it")
 	}
 }
 
@@ -116,7 +127,9 @@ func freeAddr(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer l.Close()
+
 	return l.Addr().String()
 }
 
@@ -127,6 +140,7 @@ func TestRunServesHealthAndStops(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	var logs bytes.Buffer
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
@@ -137,11 +151,14 @@ func TestRunServesHealthAndStops(t *testing.T) {
 		if resp, err = http.Get("http://" + httpAddr + "/healthz"); err == nil {
 			break
 		}
+
 		time.Sleep(20 * time.Millisecond)
 	}
+
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("healthz = %d", resp.StatusCode)
@@ -151,6 +168,7 @@ func TestRunServesHealthAndStops(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer conn.Close()
 	rctx, rcancel := context.WithTimeout(ctx, 3*time.Second)
 	defer rcancel()
@@ -168,6 +186,7 @@ func TestRunServesHealthAndStops(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("run did not stop")
 	}
+
 	if strings.Contains(logs.String(), "proxy-secret") {
 		t.Error("logs contain the proxy token")
 	}

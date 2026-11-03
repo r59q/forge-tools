@@ -39,6 +39,7 @@ func TestTokenFromHeader(t *testing.T) {
 			t.Errorf("TokenFromHeader(%q) = %q, %v, want %q, %v", tt.auth, got, ok, tt.want, tt.wantOK)
 		}
 	}
+
 	if _, ok := TokenFromHeader(http.Header{"Private-Token": {"abc"}}); ok {
 		t.Error("TokenFromHeader accepted PRIVATE-TOKEN")
 	}
@@ -61,6 +62,7 @@ func TestSetGitToken(t *testing.T) {
 	if got := h.Get("Authorization"); got != "Basic "+base64.StdEncoding.EncodeToString([]byte("x-access-token:tok-123")) {
 		t.Fatalf("Authorization = %q", got)
 	}
+
 	r := &http.Request{Header: h}
 	if user, pass, ok := r.BasicAuth(); !ok || user != "x-access-token" || pass != "tok-123" {
 		t.Errorf("BasicAuth() = %q, %q, %v", user, pass, ok)

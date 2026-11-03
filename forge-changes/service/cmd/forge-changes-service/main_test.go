@@ -20,39 +20,61 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 func TestSettings(t *testing.T) {
-	values := map[string]string{"FORGE_CHANGES_CONNECTOR_URL": "http://env", "FORGE_CHANGES_GRPC_LISTEN": "127.0.0.1:9001", "FORGE_CHANGES_HTTP_LISTEN": "127.0.0.1:9002", "FORGE_CHANGES_REQUEST_TIMEOUT": "2s"}
+	values := map[string]string{
+		"FORGE_CHANGES_CONNECTOR_URL":   "http://env",
+		"FORGE_CHANGES_GRPC_LISTEN":     "127.0.0.1:9001",
+		"FORGE_CHANGES_HTTP_LISTEN":     "127.0.0.1:9002",
+		"FORGE_CHANGES_REQUEST_TIMEOUT": "2s",
+	}
 	getenv := func(name string) string { return values[name] }
 	s, err := parse([]string{"--connector-url=http://flag", "--request-timeout=3s"}, getenv, io.Discard)
-	if err != nil || s.connectorURL != "http://flag" || s.timeout != 3*time.Second || s.grpcAddress != "127.0.0.1:9001" || s.httpAddress != "127.0.0.1:9002" ||
-		s.tokenEnv != "FORGE_CHANGES_TOKEN" || s.connectorTokenEnv != "FORGE_CHANGES_CONNECTOR_TOKEN" {
+	if err != nil ||
+		s.ConnectorURL != "http://flag" || s.Timeout != 3*time.Second || s.GRPCAddress != "127.0.0.1:9001" || s.HTTPAddress != "127.0.0.1:9002" ||
+		s.TokenEnv != "FORGE_CHANGES_TOKEN" || s.ConnectorTokenEnv != "FORGE_CHANGES_CONNECTOR_TOKEN" {
 		t.Fatalf("settings: %+v %v", s, err)
 	}
+
 	for _, args := range [][]string{{"--token-file=t", "--token-env=T"}, {"--connector-token-file=t", "--connector-token-env=T"}, {"--request-timeout=0"}, {"--connector-url="}, {"extra"}, {"--unexpected=secret-sentinel"}} {
 		if _, err := parse(args, getenv, io.Discard); err == nil || strings.Contains(err.Error(), "secret-sentinel") {
 			t.Fatalf("parse(%q) accepted or echoed input: %v", args, err)
 		}
 	}
+
 	values["FORGE_CHANGES_REQUEST_TIMEOUT"] = "invalid-secret-sentinel"
 	if _, err := parse(nil, getenv, io.Discard); err == nil || strings.Contains(err.Error(), "sentinel") {
 		t.Fatal("invalid environment timeout accepted or echoed")
 	}
+
 	var help bytes.Buffer
-	if _, err := parse([]string{"--help"}, getenv, &help); !errors.Is(err, flag.ErrHelp) || !strings.Contains(help.String(), "-connector-url") {
+	if _, err := parse(
+		[]string{"--help"},
+		getenv,
+		&help,
+	); !errors.Is(err, flag.ErrHelp) ||
+		!strings.Contains(help.String(), "-connector-url") {
 		t.Fatal("missing flag help")
 	}
 }
 
 func TestDefaults(t *testing.T) {
-	s, err := parse([]string{"--connector-url=http://p", "--token-file=t", "--connector-token-env=C"}, func(string) string { return "" }, io.Discard)
-	if err != nil || s.grpcAddress != "127.0.0.1:9096" || s.httpAddress != "127.0.0.1:8086" || s.timeout != 30*time.Second ||
-		s.tokenFile != "t" || s.tokenEnv != "" || s.connectorTokenEnv != "C" {
+	s, err := parse(
+		[]string{"--connector-url=http://p", "--token-file=t", "--connector-token-env=C"},
+		func(string) string { return "" },
+		io.Discard,
+	)
+	if err != nil || s.GRPCAddress != "127.0.0.1:9096" || s.HTTPAddress != "127.0.0.1:8086" || s.Timeout != 30*time.Second ||
+		s.TokenFile != "t" || s.TokenEnv != "" || s.ConnectorTokenEnv != "C" {
 		t.Fatalf("defaults: %+v %v", s, err)
 	}
-	if _, err := parse(nil, func(string) string { return "" }, io.Discard); err == nil || !strings.Contains(err.Error(), "FORGE_CHANGES_CONNECTOR_URL") {
+	if _, err := parse(
+		nil,
+		func(string) string { return "" },
+		io.Discard,
+	); err == nil ||
+		!strings.Contains(err.Error(), "FORGE_CHANGES_CONNECTOR_URL") {
 		t.Fatalf("missing connector URL: %v", err)
 	}
 }
@@ -67,6 +89,7 @@ func fakeProxy(t *testing.T) *httptest.Server {
 			http.Error(w, "proxy: Unauthorized", http.StatusUnauthorized)
 			return
 		}
+
 		switch r.URL.Path {
 		case "/connections":
 			fmt.Fprint(w, `{"connections":[
@@ -83,6 +106,7 @@ func fakeProxy(t *testing.T) *httptest.Server {
 		}
 	}))
 	t.Cleanup(s.Close)
+
 	return s
 }
 
@@ -92,6 +116,7 @@ func writeFile(t *testing.T, name, content string) string {
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
+
 	return path
 }
 
@@ -99,7 +124,11 @@ func TestRun(t *testing.T) {
 	p := fakeProxy(t)
 	t.Setenv("TEST_CONNECTOR_TOKEN", "client")
 	tokenFile := writeFile(t, "token", "service\n")
-	s, err := parse([]string{"--connector-url=" + p.URL, "--connector-token-env=TEST_CONNECTOR_TOKEN", "--token-file=" + tokenFile, "--grpc-listen=127.0.0.1:0", "--http-listen=127.0.0.1:0"}, func(string) string { return "" }, io.Discard)
+	s, err := parse(
+		[]string{"--connector-url=" + p.URL, "--connector-token-env=TEST_CONNECTOR_TOKEN", "--token-file=" + tokenFile, "--grpc-listen=127.0.0.1:0", "--http-listen=127.0.0.1:0"},
+		func(string) string { return "" },
+		io.Discard,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,6 +150,7 @@ func TestRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if resp.StatusCode != 200 || !strings.Contains(string(body), `"repository":"mrbean/teddy"`) {
@@ -131,9 +161,10 @@ func TestRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer conn.Close()
 	rpcCtx := metadata.AppendToOutgoingContext(context.Background(), "authorization", "Bearer service")
-	sources, err := pb.NewChangesClient(conn).ListSources(rpcCtx, &emptypb.Empty{})
+	sources, err := pb.NewChangesServiceClient(conn).ListSources(rpcCtx, &pb.ListSourcesRequest{})
 	if err != nil || len(sources.GetSources()) != 2 || sources.GetSources()[0].GetId() != "conn" {
 		t.Fatalf("gRPC: %v %v", sources, err)
 	}
@@ -147,11 +178,26 @@ func TestRun(t *testing.T) {
 func TestRunRequiresTokens(t *testing.T) {
 	t.Setenv("TEST_CONNECTOR_TOKEN", "client")
 	for _, token := range []string{"", "two words"} {
-		s := settings{connectorURL: "http://p", tokenFile: writeFile(t, "token", token), connectorTokenEnv: "TEST_CONNECTOR_TOKEN", grpcAddress: "127.0.0.1:0", httpAddress: "127.0.0.1:0", timeout: time.Second}
+		s := settings{
+			ConnectorURL:      "http://p",
+			TokenFile:         writeFile(t, "token", token),
+			ConnectorTokenEnv: "TEST_CONNECTOR_TOKEN",
+			GRPCAddress:       "127.0.0.1:0",
+			HTTPAddress:       "127.0.0.1:0",
+			Timeout:           time.Second,
+		}
 		if err := run(context.Background(), s, nil); err == nil || !strings.Contains(err.Error(), "service token") {
 			t.Errorf("service token %q: %v", token, err)
 		}
-		s = settings{connectorURL: "http://p", tokenFile: writeFile(t, "token", "service"), connectorTokenFile: writeFile(t, "connector", token), grpcAddress: "127.0.0.1:0", httpAddress: "127.0.0.1:0", timeout: time.Second}
+
+		s = settings{
+			ConnectorURL:       "http://p",
+			TokenFile:          writeFile(t, "token", "service"),
+			ConnectorTokenFile: writeFile(t, "connector", token),
+			GRPCAddress:        "127.0.0.1:0",
+			HTTPAddress:        "127.0.0.1:0",
+			Timeout:            time.Second,
+		}
 		if err := run(context.Background(), s, nil); err == nil || !strings.Contains(err.Error(), "connector token") {
 			t.Errorf("connector token %q: %v", token, err)
 		}
@@ -160,7 +206,14 @@ func TestRunRequiresTokens(t *testing.T) {
 
 func TestRunRejectsBadConnectorURL(t *testing.T) {
 	t.Setenv("TEST_TOKEN", "service")
-	s := settings{connectorURL: "ftp://p", tokenEnv: "TEST_TOKEN", connectorTokenEnv: "TEST_TOKEN", grpcAddress: "127.0.0.1:0", httpAddress: "127.0.0.1:0", timeout: time.Second}
+	s := settings{
+		ConnectorURL:      "ftp://p",
+		TokenEnv:          "TEST_TOKEN",
+		ConnectorTokenEnv: "TEST_TOKEN",
+		GRPCAddress:       "127.0.0.1:0",
+		HTTPAddress:       "127.0.0.1:0",
+		Timeout:           time.Second,
+	}
 	if err := run(context.Background(), s, nil); err == nil || !strings.Contains(err.Error(), "connector URL") {
 		t.Fatalf("ftp connector URL: %v", err)
 	}

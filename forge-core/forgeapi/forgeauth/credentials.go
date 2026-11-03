@@ -34,6 +34,7 @@ func (t StaticToken) Token(context.Context) (string, error) {
 	if t == "" {
 		return "", fmt.Errorf("%w: static token is empty", ErrNoToken)
 	}
+
 	return string(t), nil
 }
 
@@ -67,6 +68,7 @@ func (e EnvToken) Token(context.Context) (string, error) {
 	if v == "" {
 		return "", fmt.Errorf("%w: environment variable %s is empty", ErrNoToken, string(e))
 	}
+
 	return v, nil
 }
 
@@ -84,6 +86,7 @@ func (p FileToken) Token(context.Context) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("%w: %w", ErrNoToken, err)
 	}
+
 	defer f.Close()
 	data, err := io.ReadAll(io.LimitReader(f, maxTokenFile+1))
 	if err != nil {
@@ -92,10 +95,12 @@ func (p FileToken) Token(context.Context) (string, error) {
 	if len(data) > maxTokenFile {
 		return "", fmt.Errorf("%w: token file %s is too large", ErrNoToken, string(p))
 	}
+
 	tok := strings.TrimSpace(string(data))
 	if tok == "" {
 		return "", fmt.Errorf("%w: token file %s is empty", ErrNoToken, string(p))
 	}
+
 	return tok, nil
 }
 
@@ -105,10 +110,12 @@ func checkToken(tok string) error {
 	if tok == "" {
 		return ErrNoToken
 	}
+
 	for i := 0; i < len(tok); i++ {
 		if c := tok[i]; c <= ' ' || c == 0x7f {
 			return errors.New("forgeauth: token contains whitespace or control characters")
 		}
 	}
+
 	return nil
 }

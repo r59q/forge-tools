@@ -68,15 +68,19 @@ func DefaultBaseURL(kind Kind, host string) (string, error) {
 		if kind == GitHub {
 			return "https://api.github.com", nil
 		}
+
 		return "", fmt.Errorf("%w for %s", ErrNoBaseURL, kind)
 	}
+
 	if !strings.Contains(host, "://") {
 		host = "https://" + host
 	}
+
 	u, err := parseBaseURL(host)
 	if err != nil {
 		return "", err
 	}
+
 	base := strings.TrimRight(u.String(), "/")
 	switch kind {
 	case GitHub:
@@ -89,6 +93,7 @@ func DefaultBaseURL(kind Kind, host string) (string, error) {
 	case Forgejo:
 		return base + "/api/v1", nil
 	}
+
 	return "", fmt.Errorf("forgeauth: unknown kind %q", kind)
 }
 
@@ -101,6 +106,7 @@ func parseBaseURL(raw string) (*url.URL, error) {
 		// message short.
 		return nil, fmt.Errorf("forgeauth: invalid base URL: %w", errors.Unwrap(err))
 	}
+
 	switch {
 	case u.Scheme != "http" && u.Scheme != "https":
 		return nil, fmt.Errorf("forgeauth: base URL %q must use http or https", redact(u))
@@ -111,6 +117,7 @@ func parseBaseURL(raw string) (*url.URL, error) {
 	case u.RawQuery != "" || u.Fragment != "":
 		return nil, fmt.Errorf("forgeauth: base URL %q must not have a query or fragment", redact(u))
 	}
+
 	return u, nil
 }
 

@@ -17,6 +17,7 @@ func discussionPath(s Source, api string) string {
 	if s.Session.Kind == forgeauth.GitLab {
 		return api + "/notes"
 	}
+
 	return strings.Replace(api, "/pulls/", "/issues/", 1) + "/comments"
 }
 
@@ -35,8 +36,11 @@ type wireComment struct {
 }
 
 func (w wireComment) general() bool {
-	return !w.System && w.Type != "DiffNote" && w.Type != "DiscussionNote" && w.PullRequestReviewID == nil && (len(w.Position) == 0 || string(w.Position) == "null")
+	return !w.System &&
+		w.Type != "DiffNote" && w.Type != "DiscussionNote" && w.PullRequestReviewID == nil && (len(w.Position) == 0 ||
+		string(w.Position) == "null")
 }
+
 func (w wireComment) comment(s Source, web string) Comment {
 	u := w.User.user()
 	link := w.HTMLURL
@@ -44,6 +48,7 @@ func (w wireComment) comment(s Source, web string) Comment {
 		u = w.Author.user()
 		link = web + "#note_" + strconv.FormatInt(w.ID, 10)
 	}
+
 	return Comment{strconv.FormatInt(w.ID, 10), u, w.Body, link, w.CreatedAt, w.UpdatedAt}
 }
 
@@ -54,24 +59,30 @@ func (c *Client) Comments(ctx context.Context, r Ref) ([]Comment, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	proposal, err := c.Get(ctx, r)
 	if err != nil {
 		return nil, err
 	}
-	items, err := forgerest.Pages(ctx, s.Session, discussionPath(s, api)+"?per_page=100&limit=100&sort=asc&order_by=created_at", func(raw json.RawMessage) (wireComment, error) {
+
+	const query = "?per_page=100&limit=100&sort=asc&order_by=created_at"
+	items, err := forgerest.Pages(ctx, s.Session, discussionPath(s, api)+query, func(raw json.RawMessage) (wireComment, error) {
 		var w wireComment
 		err := json.Unmarshal(raw, &w)
+
 		return w, err
 	})
 	if err != nil {
 		return nil, err
 	}
+
 	var out []Comment
 	for _, w := range items {
 		if w.general() {
 			out = append(out, w.comment(s, proposal.WebURL))
 		}
 	}
+
 	return out, nil
 }
 
@@ -81,14 +92,17 @@ func (c *Client) AddComment(ctx context.Context, r Ref, body string) (Comment, e
 	if strings.TrimSpace(body) == "" {
 		return Comment{}, ErrInvalid
 	}
+
 	s, api, _, err := c.locate(r)
 	if err != nil {
 		return Comment{}, err
 	}
+
 	proposal, err := c.Get(ctx, r)
 	if err != nil {
 		return Comment{}, err
 	}
+
 	var w wireComment
 	if err := forgerest.Send(ctx, s.Session, "POST", discussionPath(s, api), map[string]string{"body": body}, &w); err != nil {
 		return Comment{}, err
@@ -96,6 +110,7 @@ func (c *Client) AddComment(ctx context.Context, r Ref, body string) (Comment, e
 	if w.ID == 0 {
 		return Comment{}, nil
 	}
+
 	return w.comment(s, proposal.WebURL), nil
 }
 
@@ -107,10 +122,12 @@ func (c *Client) Commits(ctx context.Context, r Ref) ([]Commit, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	before, err := c.Get(ctx, r)
 	if err != nil {
 		return nil, err
 	}
+
 	out, err := forgerest.Pages(ctx, s.Session, api+"/commits?per_page=100&limit=100", func(raw json.RawMessage) (Commit, error) {
 		var w struct {
 			SHA          string
@@ -134,6 +151,7 @@ func (c *Client) Commits(ctx context.Context, r Ref) ([]Commit, error) {
 		if s.Session.Kind == forgeauth.GitLab {
 			return Commit{w.ID, w.Message, w.AuthorName, w.AuthorEmail, w.AuthoredDate}, nil
 		}
+
 		return Commit{w.SHA, w.Commit.Message, w.Commit.Author.Name, w.Commit.Author.Email, w.Commit.Author.Date}, nil
 	})
 	if err != nil {
@@ -145,6 +163,7 @@ func (c *Client) Commits(ctx context.Context, r Ref) ([]Commit, error) {
 	if err = c.unchanged(ctx, r, before.Revision); err != nil {
 		return nil, err
 	}
+
 	return out, nil
 }
 
@@ -156,67 +175,19 @@ func (c *Client) Files(ctx context.Context, r Ref) (Files, error) {
 	if err != nil {
 		return Files{}, err
 	}
+
 	before, err := c.read(ctx, r)
 	if err != nil {
 		return Files{}, err
 	}
+
 	endpoint := api + "/files?per_page=100&limit=100"
 	if s.Session.Kind == forgeauth.GitLab {
 		endpoint = api + "/diffs?per_page=100"
 	}
+
 	items, err := forgerest.Pages(ctx, s.Session, endpoint, func(raw json.RawMessage) (ChangedFile, error) {
-		var w struct {
-			Filename         string
-			PreviousFilename string `json:"previous_filename"`
-			Status           string
-			Patch            *string
-			OldPath          string `json:"old_path"`
-			NewPath          string `json:"new_path"`
-			Diff             *string
-			NewFile          bool `json:"new_file"`
-			DeletedFile      bool `json:"deleted_file"`
-			RenamedFile      bool `json:"renamed_file"`
-			Collapsed        bool
-			TooLarge         bool `json:"too_large"`
-		}
-		if err := json.Unmarshal(raw, &w); err != nil {
-			return ChangedFile{}, err
-		}
-		v := ChangedFile{Path: w.Filename, OldPath: w.Filename, Status: w.Status, PatchUnavailable: w.Patch == nil}
-		if w.Patch != nil {
-			v.Patch = *w.Patch
-		}
-		if w.PreviousFilename != "" {
-			v.OldPath = w.PreviousFilename
-		}
-		if s.Session.Kind == forgeauth.GitLab {
-			v = ChangedFile{Path: w.NewPath, OldPath: w.OldPath, Status: "modified", PatchUnavailable: w.Diff == nil || w.Collapsed || w.TooLarge}
-			if w.Diff != nil {
-				v.Patch = *w.Diff
-				if *w.Diff == "" {
-					v.PatchUnavailable = true
-				}
-			}
-			switch {
-			case w.NewFile:
-				v.Status = "added"
-			case w.DeletedFile:
-				v.Status = "deleted"
-			case w.RenamedFile:
-				v.Status = "renamed"
-			}
-		}
-		switch v.Status {
-		case "added":
-			v.OldPath = ""
-		case "removed", "deleted":
-			v.Status = "deleted"
-			v.Path = ""
-		case "modified", "renamed", "copied":
-		default:
-			v.Status = "unknown"
-		}
-		return v, nil
+		return decodeFile(s.Session.Kind, raw)
 	})
 	if err != nil {
 		return Files{}, err
@@ -224,18 +195,119 @@ func (c *Client) Files(ctx context.Context, r Ref) (Files, error) {
 	if err = c.unchanged(ctx, r, before.change.Revision); err != nil {
 		return Files{}, err
 	}
-	completeness := "unknown"
-	if before.files != nil {
-		if len(items) == *before.files {
-			completeness = "complete"
-		} else {
-			completeness = "truncated"
+
+	return Files{before.change.Revision, items, completeness(s.Session.Kind, items, before.files)}, nil
+}
+
+// wireFile is a changed file of a pull request, or a GitLab diff.
+type wireFile struct {
+	Filename         string
+	PreviousFilename string `json:"previous_filename"`
+	Status           string
+	Patch            *string
+	OldPath          string `json:"old_path"`
+	NewPath          string `json:"new_path"`
+	Diff             *string
+	NewFile          bool `json:"new_file"`
+	DeletedFile      bool `json:"deleted_file"`
+	RenamedFile      bool `json:"renamed_file"`
+	Collapsed        bool
+	TooLarge         bool `json:"too_large"`
+}
+
+// decodeFile reads a changed file from a forge of kind.
+func decodeFile(kind forgeauth.Kind, raw json.RawMessage) (ChangedFile, error) {
+	var w wireFile
+	if err := json.Unmarshal(raw, &w); err != nil {
+		return ChangedFile{}, err
+	}
+
+	v := w.file()
+	if kind == forgeauth.GitLab {
+		v = w.gitlab()
+	}
+
+	return normalizeFile(v), nil
+}
+
+// file reads the GitHub and Forgejo fields of w.
+func (w wireFile) file() ChangedFile {
+	v := ChangedFile{
+		Path:             w.Filename,
+		OldPath:          w.Filename,
+		Status:           w.Status,
+		PatchUnavailable: w.Patch == nil,
+	}
+	if w.Patch != nil {
+		v.Patch = *w.Patch
+	}
+	if w.PreviousFilename != "" {
+		v.OldPath = w.PreviousFilename
+	}
+
+	return v
+}
+
+// gitlab reads the GitLab fields of w.
+func (w wireFile) gitlab() ChangedFile {
+	v := ChangedFile{
+		Path:             w.NewPath,
+		OldPath:          w.OldPath,
+		Status:           "modified",
+		PatchUnavailable: w.Diff == nil || w.Collapsed || w.TooLarge,
+	}
+	if w.Diff != nil {
+		v.Patch = *w.Diff
+		if *w.Diff == "" {
+			v.PatchUnavailable = true
 		}
 	}
-	if s.Session.Kind == forgeauth.GitHub && len(items) >= 3000 {
-		completeness = "truncated"
+
+	switch {
+	case w.NewFile:
+		v.Status = "added"
+	case w.DeletedFile:
+		v.Status = "deleted"
+	case w.RenamedFile:
+		v.Status = "renamed"
 	}
-	return Files{before.change.Revision, items, completeness}, nil
+
+	return v
+}
+
+// normalizeFile maps native statuses to the shared ones and clears the
+// path a status leaves empty.
+func normalizeFile(v ChangedFile) ChangedFile {
+	switch v.Status {
+	case "added":
+		v.OldPath = ""
+	case "removed", "deleted":
+		v.Status = "deleted"
+		v.Path = ""
+	case "modified", "renamed", "copied":
+	default:
+		v.Status = statusUnknown
+	}
+
+	return v
+}
+
+// completeness compares the files read with the count the forge reported,
+// if any. GitHub lists at most 3000 files.
+func completeness(kind forgeauth.Kind, items []ChangedFile, reported *int) string {
+	out := statusUnknown
+	if reported != nil {
+		if len(items) == *reported {
+			out = "complete"
+		} else {
+			out = "truncated"
+		}
+	}
+	if kind == forgeauth.GitHub && len(items) >= 3000 {
+		out = "truncated"
+	}
+
+	return out
 }
 
 // Diff reads at most 16 MiB of the native unified diff. Larger responses fail
@@ -245,10 +317,12 @@ func (c *Client) Diff(ctx context.Context, r Ref) (Diff, error) {
 	if err != nil {
 		return Diff{}, err
 	}
+
 	before, err := c.Get(ctx, r)
 	if err != nil {
 		return Diff{}, err
 	}
+
 	h := http.Header{}
 	switch s.Session.Kind {
 	case forgeauth.GitHub:
@@ -258,10 +332,12 @@ func (c *Client) Diff(ctx context.Context, r Ref) (Diff, error) {
 	case forgeauth.Forgejo:
 		api += ".diff?binary=true"
 	}
+
 	resp, err := forgerest.Open(ctx, s.Session, "GET", api, h)
 	if err != nil {
 		return Diff{}, err
 	}
+
 	defer resp.Body.Close()
 	const limit = 16 << 20
 	data, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
@@ -274,7 +350,8 @@ func (c *Client) Diff(ctx context.Context, r Ref) (Diff, error) {
 	if err = c.unchanged(ctx, r, before.Revision); err != nil {
 		return Diff{}, err
 	}
-	return Diff{before.Revision, string(data), "unknown"}, nil
+
+	return Diff{before.Revision, string(data), statusUnknown}, nil
 }
 
 func (c *Client) unchanged(ctx context.Context, r Ref, revision Revision) error {
@@ -285,5 +362,6 @@ func (c *Client) unchanged(ctx context.Context, r Ref, revision Revision) error 
 	if after.Revision != revision {
 		return ErrHeadChanged
 	}
+
 	return nil
 }

@@ -31,14 +31,17 @@ func New(sources ...Source) (*Client, error) {
 		if _, ok := c.byID[s.ID]; ok {
 			return nil, ErrInvalid
 		}
+
 		switch s.Session.Kind {
 		case forgeauth.GitHub, forgeauth.GitLab, forgeauth.Forgejo:
 		default:
 			return nil, ErrUnsupported
 		}
+
 		c.byID[s.ID] = s
 		c.sources = append(c.sources, s)
 	}
+
 	return c, nil
 }
 
@@ -51,6 +54,7 @@ func (c *Client) Capabilities(id string) (Capabilities, error) {
 	if !ok {
 		return Capabilities{}, ErrUnknownSource
 	}
+
 	m := []string{"merge", "squash", "rebase"}
 	switch s.Session.Kind {
 	case forgeauth.GitLab:
@@ -58,6 +62,7 @@ func (c *Client) Capabilities(id string) (Capabilities, error) {
 	case forgeauth.Forgejo:
 		m = append(m, "rebase-merge", "fast-forward-only")
 	}
+
 	return Capabilities{DraftTransition: true, MergeMethods: m, ExpectedHead: true}, nil
 }
 
@@ -65,10 +70,12 @@ func (c *Client) repository(r RepositoryRef) (Source, string, string, error) {
 	if r.Source == "" {
 		return Source{}, "", "", fmt.Errorf("%w: source required", ErrInvalid)
 	}
+
 	s, ok := c.byID[r.Source]
 	if !ok {
 		return Source{}, "", "", ErrUnknownSource
 	}
+
 	p, ok := forgerest.CleanPath(r.Repository)
 	if !ok {
 		return Source{}, "", "", fmt.Errorf("%w: repository path", ErrInvalid)
@@ -76,10 +83,12 @@ func (c *Client) repository(r RepositoryRef) (Source, string, string, error) {
 	if s.Session.Kind == forgeauth.GitLab {
 		return s, "/projects/" + url.PathEscape(p), p, nil
 	}
+
 	parts := strings.Split(p, "/")
 	if len(parts) != 2 {
 		return Source{}, "", "", fmt.Errorf("%w: owner/name required", ErrInvalid)
 	}
+
 	return s, "/repos/" + url.PathEscape(parts[0]) + "/" + url.PathEscape(parts[1]), p, nil
 }
 
@@ -87,6 +96,7 @@ func proposalPath(s Source, repo string) string {
 	if s.Session.Kind == forgeauth.GitLab {
 		return repo + "/merge_requests"
 	}
+
 	return repo + "/pulls"
 }
 
@@ -94,10 +104,12 @@ func (c *Client) locate(r Ref) (Source, string, string, error) {
 	if r.Number <= 0 {
 		return Source{}, "", "", fmt.Errorf("%w: positive number required", ErrInvalid)
 	}
+
 	s, repo, path, err := c.repository(RepositoryRef{r.Source, r.Repository})
 	if err != nil {
 		return Source{}, "", "", err
 	}
+
 	return s, proposalPath(s, repo) + "/" + strconv.FormatInt(r.Number, 10), path, nil
 }
 
@@ -109,67 +121,117 @@ func (c *Client) List(ctx context.Context, o ListOptions) ([]ChangeRequest, erro
 		return nil, fmt.Errorf("%w: repository required", ErrInvalid)
 	}
 	if o.State == "" {
-		o.State = "open"
+		o.State = string(Open)
 	}
-	if o.State != "all" && o.State != "open" && o.State != "closed" && o.State != "merged" {
+	if !listState(o.State) {
 		return nil, ErrInvalid
 	}
-	sources := c.sources
-	if o.Source != "" {
-		s, ok := c.byID[o.Source]
-		if !ok {
-			return nil, ErrUnknownSource
-		}
-		sources = []Source{s}
+
+	sources, err := c.listSources(o.Source)
+	if err != nil {
+		return nil, err
 	}
+
 	var out []ChangeRequest
 	found := false
 	for _, src := range sources {
 		if src.Session.Kind != forgeauth.GitLab && strings.Count(path, "/") != 1 {
 			continue
 		}
-		s, repo, _, err := c.repository(RepositoryRef{src.ID, path})
+
+		items, err := c.listSource(ctx, src, path, o.State)
+		if o.Source == "" && errors.Is(err, forgehttp.ErrNotFound) {
+			continue
+		}
 		if err != nil {
 			return nil, err
 		}
-		state := o.State
-		q := url.Values{"per_page": {"100"}, "limit": {"100"}, "state": {state}}
-		if s.Session.Kind == forgeauth.GitLab {
-			if state == "open" {
-				q.Set("state", "opened")
-			}
-			q.Set("scope", "all")
-		} else if state == "merged" {
-			q.Set("state", "closed")
-		}
-		items, err := forgerest.Pages(ctx, s.Session, proposalPath(s, repo)+"?"+q.Encode(), func(raw json.RawMessage) (ChangeRequest, error) {
-			v, err := decode(s, path, raw)
-			return v.change, err
-		})
-		if err != nil {
-			if o.Source == "" && errors.Is(err, forgehttp.ErrNotFound) {
-				continue
-			}
-			return nil, fmt.Errorf("changes: source %s: %w", s.ID, err)
-		}
+
 		found = true
 		for _, i := range items {
-			if o.State != "all" && string(i.State) != o.State {
-				continue
+			if o.matches(i) {
+				out = append(out, i)
 			}
-			if o.Author != "" && !strings.EqualFold(o.Author, i.Author.Login) {
-				continue
-			}
-			if o.Draft != nil && *o.Draft != i.Draft {
-				continue
-			}
-			out = append(out, i)
 		}
 	}
+
 	if !found && len(sources) > 0 {
 		return nil, forgehttp.ErrNotFound
 	}
+
 	return out, nil
+}
+
+// listState reports whether List accepts state.
+func listState(state string) bool {
+	switch State(state) {
+	case "all", Open, Closed, Merged:
+		return true
+	}
+
+	return false
+}
+
+// listSources returns the sources List reads: all of them, or the one
+// named.
+func (c *Client) listSources(id string) ([]Source, error) {
+	if id == "" {
+		return c.sources, nil
+	}
+
+	s, ok := c.byID[id]
+	if !ok {
+		return nil, ErrUnknownSource
+	}
+
+	return []Source{s}, nil
+}
+
+// listSource reads every proposal of path on src in state.
+func (c *Client) listSource(ctx context.Context, src Source, path, state string) ([]ChangeRequest, error) {
+	s, repo, _, err := c.repository(RepositoryRef{src.ID, path})
+	if err != nil {
+		return nil, err
+	}
+
+	endpoint := proposalPath(s, repo) + "?" + listQuery(s.Session.Kind, state).Encode()
+	items, err := forgerest.Pages(ctx, s.Session, endpoint, func(raw json.RawMessage) (ChangeRequest, error) {
+		v, err := decode(s, path, raw)
+		return v.change, err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("changes: source %s: %w", s.ID, err)
+	}
+
+	return items, nil
+}
+
+// listQuery is the query that lists proposals in state on a forge of kind.
+func listQuery(kind forgeauth.Kind, state string) url.Values {
+	q := url.Values{"per_page": {"100"}, "limit": {"100"}, "state": {state}}
+	if kind == forgeauth.GitLab {
+		if state == string(Open) {
+			q.Set("state", "opened")
+		}
+
+		q.Set("scope", "all")
+	} else if state == string(Merged) {
+		q.Set("state", string(Closed))
+	}
+
+	return q
+}
+
+// matches reports whether a listed proposal passes the filters of o.
+func (o ListOptions) matches(c ChangeRequest) bool {
+	if o.State != "all" && string(c.State) != o.State {
+		return false
+	}
+	if o.Author != "" && !strings.EqualFold(o.Author, c.Author.Login) {
+		return false
+	}
+
+	return o.Draft == nil || *o.Draft == c.Draft
 }
 
 // Get reads a proposal on the required source.
@@ -183,10 +245,12 @@ func (c *Client) read(ctx context.Context, r Ref) (proposal, error) {
 	if err != nil {
 		return proposal{}, err
 	}
+
 	var raw json.RawMessage
 	if err = forgerest.Send(ctx, s.Session, "GET", api, nil, &raw); err != nil {
 		return proposal{}, err
 	}
+
 	return decode(s, path, raw)
 }
 
@@ -195,19 +259,32 @@ func (c *Client) Create(ctx context.Context, r RepositoryRef, n NewChange) (Chan
 	if strings.TrimSpace(n.Title) == "" || !branch(n.SourceBranch) || !branch(n.TargetBranch) {
 		return ChangeRequest{}, ErrInvalid
 	}
+
 	s, repo, path, err := c.repository(r)
 	if err != nil {
 		return ChangeRequest{}, err
 	}
-	b := map[string]any{"title": n.Title, "body": n.Description, "head": n.SourceBranch, "base": n.TargetBranch}
+
+	b := map[string]any{
+		"title": n.Title,
+		"body":  n.Description,
+		"head":  n.SourceBranch,
+		"base":  n.TargetBranch,
+	}
 	switch s.Session.Kind {
 	case forgeauth.GitHub:
 		b["draft"] = n.Draft
 	case forgeauth.GitLab:
-		b = map[string]any{"title": draftTitle(n.Title, n.Draft), "description": n.Description, "source_branch": n.SourceBranch, "target_branch": n.TargetBranch}
+		b = map[string]any{
+			"title":         draftTitle(n.Title, n.Draft),
+			"description":   n.Description,
+			"source_branch": n.SourceBranch,
+			"target_branch": n.TargetBranch,
+		}
 	case forgeauth.Forgejo:
 		b["title"] = draftTitle(n.Title, n.Draft)
 	}
+
 	return sendProposal(ctx, s, path, "POST", proposalPath(s, repo), b)
 }
 
@@ -226,6 +303,7 @@ func (c *Client) Update(ctx context.Context, r Ref, u Update) (ChangeRequest, er
 	if u.State != nil && *u.State != Open && *u.State != Closed {
 		return ChangeRequest{}, ErrInvalid
 	}
+
 	s, api, path, err := c.locate(r)
 	if err != nil {
 		return ChangeRequest{}, err
@@ -242,10 +320,12 @@ func (c *Client) Update(ctx context.Context, r Ref, u Update) (ChangeRequest, er
 			return ChangeRequest{}, fmt.Errorf("%w: merged proposal", forgehttp.ErrConflict)
 		}
 	}
+
 	b := map[string]any{}
 	if u.Title != nil {
 		b["title"] = *u.Title
 	}
+
 	method, desc, target, state := "PATCH", "body", "base", "state"
 	if s.Session.Kind == forgeauth.GitLab {
 		method, desc, target, state = "PUT", "description", "target_branch", "state_event"
@@ -265,8 +345,10 @@ func (c *Client) Update(ctx context.Context, r Ref, u Update) (ChangeRequest, er
 				v = "close"
 			}
 		}
+
 		b[state] = v
 	}
+
 	return sendProposal(ctx, s, path, method, api, b)
 }
 
@@ -275,7 +357,9 @@ func sendProposal(ctx context.Context, s Source, path, method, api string, body 
 	if err := forgerest.Send(ctx, s.Session, method, api, body, &raw); err != nil {
 		return ChangeRequest{}, err
 	}
+
 	v, err := decode(s, path, raw)
+
 	return v.change, err
 }
 

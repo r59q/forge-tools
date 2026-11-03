@@ -18,6 +18,7 @@ func TestRunPages(t *testing.T) {
 			http.Error(w, `{"message":"bad credentials"}`, http.StatusUnauthorized)
 			return
 		}
+
 		switch {
 		case r.URL.Path == "/user":
 			fmt.Fprint(w, `{"id":1,"login":"octocat"}`)
@@ -37,6 +38,7 @@ func TestRunPages(t *testing.T) {
 	if err := run(context.Background(), conn, forgeauth.StaticToken("secret"), &out); err != nil {
 		t.Fatal(err)
 	}
+
 	want := "Signed in as octocat\noctocat/one\noctocat/two\n"
 	if out.String() != want {
 		t.Fatalf("output = %q, want %q", out.String(), want)

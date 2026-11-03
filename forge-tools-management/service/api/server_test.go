@@ -23,7 +23,6 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 const operatorToken = "operator-synthetic-token"
@@ -34,31 +33,43 @@ func (f readerFunc) List(ctx context.Context, o repositories.ListOptions) ([]rep
 	return f(ctx, o)
 }
 
-func setup(t *testing.T, reader management.RepositoryReader, timeout time.Duration) (*Server, http.Handler, pb.ManagementClient) {
+func setup(t *testing.T, reader management.RepositoryReader, timeout time.Duration) (*Server, http.Handler, pb.ManagementServiceClient) {
 	t.Helper()
 	return setupConfig(t, management.Config{Repositories: reader}, timeout)
 }
 
-func setupConfig(t *testing.T, config management.Config, timeout time.Duration) (*Server, http.Handler, pb.ManagementClient) {
+func setupConfig(t *testing.T, config management.Config, timeout time.Duration) (*Server, http.Handler, pb.ManagementServiceClient) {
 	t.Helper()
 	s, err := New(management.New(config), forgeauth.StaticToken(operatorToken), timeout)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	h, err := s.HTTP(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	l := bufconn.Listen(1 << 20)
 	g := grpc.NewServer()
-	pb.RegisterManagementServer(g, s)
+	pb.RegisterManagementServiceServer(g, s)
 	go func() { _ = g.Serve(l) }()
-	conn, err := grpc.NewClient("passthrough:///management", grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return l.Dial() }))
+	conn, err := grpc.NewClient(
+		"passthrough:///management",
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return l.Dial() }),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = conn.Close(); g.Stop(); _ = l.Close() })
-	return s, h, pb.NewManagementClient(conn)
+
+	t.Cleanup(func() {
+		_ = conn.Close()
+		g.Stop()
+		_ = l.Close()
+	})
+
+	return s, h, pb.NewManagementServiceClient(conn)
 }
 
 func rpcContext() (context.Context, context.CancelFunc) {
@@ -73,15 +84,33 @@ func request(h http.Handler, path, auth string) *httptest.ResponseRecorder {
 	} else {
 		r.Header.Set("Authorization", "Bearer "+auth)
 	}
+
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
+
 	return w
 }
 
 func TestListingStates(t *testing.T) {
 	repos := []repositories.Repository{
-		{Source: repositories.SourceInfo{ID: "personal", Kind: forgeauth.GitHub, Host: "github.com"}, Path: "group/sub/repo", Visibility: repositories.Private},
-		{Source: repositories.SourceInfo{ID: "work", Kind: forgeauth.GitLab, Host: "gitlab.example"}, Path: "group/sub/repo", Visibility: repositories.Internal},
+		{
+			Source: repositories.SourceInfo{
+				ID:   "personal",
+				Kind: forgeauth.GitHub,
+				Host: "github.com",
+			},
+			Path:       "group/sub/repo",
+			Visibility: repositories.Private,
+		},
+		{
+			Source: repositories.SourceInfo{
+				ID:   "work",
+				Kind: forgeauth.GitLab,
+				Host: "gitlab.example",
+			},
+			Path:       "group/sub/repo",
+			Visibility: repositories.Internal,
+		},
 	}
 	for _, tc := range []struct {
 		name       string
@@ -92,21 +121,45 @@ func TestListingStates(t *testing.T) {
 		httpCode   int
 		message    string
 	}{
-		{name: "unconfigured", httpCode: 200, message: "No repository capability configured"},
-		{name: "empty", reader: readerFunc(func(context.Context, repositories.ListOptions) ([]repositories.Repository, error) { return nil, nil }), configured: true, httpCode: 200, message: "No repositories found"},
-		{name: "repositories", reader: readerFunc(func(context.Context, repositories.ListOptions) ([]repositories.Repository, error) { return repos, nil }), configured: true, count: 2, httpCode: 200, message: "Complete repository listing"},
-		{name: "failure", reader: readerFunc(func(context.Context, repositories.ListOptions) ([]repositories.Repository, error) {
-			return repos, errors.New("backend-secret-sentinel")
-		}), code: codes.Unavailable, httpCode: 503, message: "Repository listing failed"},
+		{
+			name:     "unconfigured",
+			httpCode: 200,
+			message:  "No repository capability configured",
+		},
+		{
+			name:       "empty",
+			reader:     readerFunc(func(context.Context, repositories.ListOptions) ([]repositories.Repository, error) { return nil, nil }),
+			configured: true,
+			httpCode:   200,
+			message:    "No repositories found",
+		},
+		{
+			name:       "repositories",
+			reader:     readerFunc(func(context.Context, repositories.ListOptions) ([]repositories.Repository, error) { return repos, nil }),
+			configured: true,
+			count:      2,
+			httpCode:   200,
+			message:    "Complete repository listing",
+		},
+		{
+			name: "failure",
+			reader: readerFunc(func(context.Context, repositories.ListOptions) ([]repositories.Repository, error) {
+				return repos, errors.New("backend-secret-sentinel")
+			}),
+			code:     codes.Unavailable,
+			httpCode: 503,
+			message:  "Repository listing failed",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, h, client := setup(t, tc.reader, time.Second)
 			ctx, cancel := rpcContext()
 			defer cancel()
-			got, err := client.ListRepositories(ctx, &emptypb.Empty{})
+			got, err := client.ListRepositories(ctx, &pb.ListRepositoriesRequest{})
 			if status.Code(err) != tc.code {
 				t.Fatalf("gRPC: %v", err)
 			}
+
 			w := request(h, "/v1/repositories", operatorToken)
 			if w.Code != tc.httpCode {
 				t.Fatalf("REST: %d %s", w.Code, w.Body)
@@ -119,12 +172,14 @@ func TestListingStates(t *testing.T) {
 				if !proto.Equal(got, &rest) || got.Configured != tc.configured || len(got.Repositories) != tc.count {
 					t.Fatalf("transport mismatch: %v / %v", got, &rest)
 				}
-				if tc.count == 2 && (got.Repositories[0].SourceId != "personal" || got.Repositories[1].SourceId != "work" || got.Repositories[1].Path != "group/sub/repo" || got.Repositories[0].Visibility != "private") {
+				if tc.count == 2 && (got.Repositories[0].SourceId != "personal" ||
+					got.Repositories[1].SourceId != "work" || got.Repositories[1].Path != "group/sub/repo" || got.Repositories[0].Visibility != "private") {
 					t.Fatal(got)
 				}
 			} else if strings.Contains(w.Body.String(), "group/sub/repo") || strings.Contains(w.Body.String(), "sentinel") {
 				t.Fatal("failure exposed partial results or error details")
 			}
+
 			web := request(h, "/", operatorToken)
 			if web.Code != tc.httpCode || !strings.Contains(web.Body.String(), tc.message) || strings.Contains(web.Body.String(), "sentinel") {
 				t.Fatalf("web: %d %s", web.Code, web.Body)
@@ -132,6 +187,7 @@ func TestListingStates(t *testing.T) {
 			if tc.code != codes.OK && strings.Contains(web.Body.String(), "group/sub/repo") {
 				t.Fatal("web exposed partial results")
 			}
+
 			for _, response := range []*httptest.ResponseRecorder{w, web} {
 				if response.Header().Get("Cache-Control") != "no-store" || response.Header().Get("X-Content-Type-Options") != "nosniff" {
 					t.Fatal("missing protective headers")
@@ -150,11 +206,12 @@ func TestAccessProtection(t *testing.T) {
 	for _, token := range []string{"", "wrong", "backend-secret"} {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs("authorization", "Bearer "+token))
-		_, err := client.ListRepositories(ctx, &emptypb.Empty{})
+		_, err := client.ListRepositories(ctx, &pb.ListRepositoriesRequest{})
 		cancel()
 		if status.Code(err) != codes.Unauthenticated {
 			t.Fatalf("gRPC accepted %q: %v", token, err)
 		}
+
 		for _, path := range []string{"/", "/style.css", "/v1/repositories"} {
 			w := request(h, path, token)
 			if w.Code != 401 {
@@ -165,6 +222,7 @@ func TestAccessProtection(t *testing.T) {
 			}
 		}
 	}
+
 	for _, path := range []string{"/", "/v1/repositories?token=" + operatorToken} {
 		r := httptest.NewRequest("GET", path, nil)
 		r.Header.Set("Grpc-Metadata-Authorization", "Bearer "+operatorToken)
@@ -175,6 +233,7 @@ func TestAccessProtection(t *testing.T) {
 			t.Fatal("trusted injected credentials")
 		}
 	}
+
 	ctx, cancel := rpcContext()
 	defer cancel()
 	ctx = metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+operatorToken)
@@ -192,15 +251,28 @@ func TestAccessProtection(t *testing.T) {
 func TestSafeRendering(t *testing.T) {
 	const attack = `<img src=x onerror="alert(1)">`
 	_, h, _ := setup(t, readerFunc(func(context.Context, repositories.ListOptions) ([]repositories.Repository, error) {
-		return []repositories.Repository{{Source: repositories.SourceInfo{ID: attack, Kind: forgeauth.Kind(attack), Host: attack}, Path: attack, Description: attack, Visibility: repositories.Visibility(attack), WebURL: "javascript:alert(1)", CloneURL: "https://user:backend-secret@example.com"}}, nil
+		return []repositories.Repository{{
+			Source: repositories.SourceInfo{
+				ID:   attack,
+				Kind: forgeauth.Kind(attack),
+				Host: attack,
+			},
+			Path:        attack,
+			Description: attack,
+			Visibility:  repositories.Visibility(attack),
+			WebURL:      "javascript:alert(1)",
+			CloneURL:    "https://user:backend-secret@example.com",
+		}}, nil
 	}), time.Second)
 	w := request(h, "/", operatorToken)
-	if w.Code != 200 || strings.Contains(w.Body.String(), attack) || !strings.Contains(w.Body.String(), "&lt;img") || strings.Contains(w.Body.String(), "backend-secret") || strings.Contains(w.Body.String(), "javascript:") || strings.Contains(w.Body.String(), operatorToken) {
+	if w.Code != 200 ||
+		strings.Contains(w.Body.String(), attack) || !strings.Contains(w.Body.String(), "&lt;img") || strings.Contains(w.Body.String(), "backend-secret") || strings.Contains(w.Body.String(), "javascript:") || strings.Contains(w.Body.String(), operatorToken) {
 		t.Fatalf("unsafe web content: %s", w.Body)
 	}
 	if !strings.Contains(w.Header().Get("Content-Security-Policy"), "default-src 'none'") {
 		t.Fatal("missing CSP")
 	}
+
 	for _, method := range []string{"POST", "PATCH", "DELETE"} {
 		for _, path := range []string{"/", "/v1/repositories"} {
 			r := httptest.NewRequest(method, path, nil)
@@ -209,6 +281,7 @@ func TestSafeRendering(t *testing.T) {
 			} else {
 				r.Header.Set("Authorization", "Bearer "+operatorToken)
 			}
+
 			w := httptest.NewRecorder()
 			h.ServeHTTP(w, r)
 			if w.Code != 405 {
@@ -228,12 +301,14 @@ func TestDeadlineAndTokenRotation(t *testing.T) {
 	if _, err := client.ListRepositories(ctx, nil); status.Code(err) != codes.DeadlineExceeded {
 		t.Fatal(err)
 	}
+
 	t.Setenv("MANAGEMENT_TEST_OPERATOR", operatorToken)
 	s.token = forgeauth.EnvToken("MANAGEMENT_TEST_OPERATOR")
 	h, err := s.HTTP(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	t.Setenv("MANAGEMENT_TEST_OPERATOR", "rotated")
 	if w := request(h, "/", operatorToken); w.Code != 401 {
 		t.Fatal("accepted old operator token")
@@ -241,6 +316,7 @@ func TestDeadlineAndTokenRotation(t *testing.T) {
 	if w := request(h, "/style.css", "rotated"); w.Code != 200 {
 		t.Fatal("rejected rotated operator token")
 	}
+
 	t.Setenv("MANAGEMENT_TEST_OPERATOR", "")
 	if w := request(h, "/style.css", "rotated"); w.Code != 401 {
 		t.Fatal("missing token failed open")

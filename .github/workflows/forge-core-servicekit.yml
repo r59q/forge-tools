@@ -1,0 +1,29 @@
+name: forge-core-servicekit
+
+# Libraries are published as Go modules through git, so there is no deploy job.
+on:
+  push:
+    branches: [master]
+    paths:
+      - forge-core/servicekit/**
+      - forge-core/forgeapi/**
+      - .github/workflows/forge-core-servicekit.yml
+      - .github/workflows/reusable-go.yml
+      - .golangci.yml
+  pull_request:
+    paths:
+      - forge-core/servicekit/**
+      - forge-core/forgeapi/**
+      - .github/workflows/forge-core-servicekit.yml
+      - .github/workflows/reusable-go.yml
+      - .golangci.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: ./.github/workflows/reusable-go.yml
+    with:
+      dir: forge-core/servicekit

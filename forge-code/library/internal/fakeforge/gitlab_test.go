@@ -22,23 +22,34 @@ func newGitLab(t *testing.T) (*Server, *Repo, Fixture) {
 	t.Helper()
 	s := NewServer(t, forgeauth.GitLab, GitLab)
 	r := s.NewRepo("group/sub/proj")
+
 	return s, r, Seed(r)
 }
 
-// gitlabGet sends a request and returns the response with its body read.
-func gitlabGet(t *testing.T, s *Server, method, path string) (*http.Response, string) {
+// gitlabReply is a response whose body was read and closed.
+type gitlabReply struct {
+	StatusCode    int
+	Header        http.Header
+	ContentLength int64
+}
+
+// gitlabGet sends a request and returns the response and its body.
+func gitlabGet(t *testing.T, s *Server, method, path string) (gitlabReply, string) {
 	t.Helper()
 	req, err := s.Session.NewRequest(context.Background(), method, path, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	resp, err := s.Session.Client.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
-	return resp, string(body)
+
+	return gitlabReply{resp.StatusCode, resp.Header, resp.ContentLength}, string(body)
 }
 
 func TestGitLabProject(t *testing.T) {
@@ -55,15 +66,18 @@ func TestGitLabProject(t *testing.T) {
 			t.Fatalf("%s: %+v, %v", id, p, err)
 		}
 	}
+
 	s.NewRepo("g/empty")
 	if err := s.Session.GetJSON(context.Background(), "/projects/g%2Fempty", &p); err != nil || !p.EmptyRepo {
 		t.Fatalf("empty: %+v, %v", p, err)
 	}
+
 	// An unencoded path does not match the route.
 	resp, _ := gitlabGet(t, s, "GET", "/projects/group/sub/proj")
 	if resp.StatusCode != 404 {
 		t.Errorf("unencoded: %d", resp.StatusCode)
 	}
+
 	r.SetPrivate(true)
 	s.SetAccess("group/sub/proj", AccessNone)
 	err := s.Session.GetJSON(context.Background(), gitlabProj+"/repository/branches/main", &p)
@@ -90,6 +104,7 @@ func TestGitLabCommits(t *testing.T) {
 			t.Errorf("%s: %+v, %v", rev, c, err)
 		}
 	}
+
 	if c.Date != "2024-01-01T04:00:00.000+00:00" || len(c.ParentIDs) != 1 || c.Message != "Rename and add unicode name\n" {
 		t.Errorf("commit = %+v", c)
 	}
@@ -97,6 +112,7 @@ func TestGitLabCommits(t *testing.T) {
 	if err := s.Session.GetJSON(context.Background(), gitlabProj+"/repository/commits/clash", &c); err != nil || c.ID != fx.ClashTag.String() {
 		t.Errorf("clash: %+v, %v", c, err)
 	}
+
 	for _, rev := range []string{"nope", fx.Blobs[PathReadme].String(), "abcd"} {
 		err := s.Session.GetJSON(context.Background(), gitlabProj+"/repository/commits/"+rev, &c)
 		var fe *forgehttp.Error
@@ -118,6 +134,7 @@ func TestGitLabCommits(t *testing.T) {
 	if n := s.Calls("GET", "*/repository/commits"); n != 2 {
 		t.Errorf("%d pages, want 2 (the last one empty)", n)
 	}
+
 	resp, body := gitlabGet(t, s, "GET", gitlabProj+"/repository/commits?ref_name=nope")
 	if resp.StatusCode != 200 || strings.TrimSpace(body) != "[]" || resp.Header.Get("X-Total") != "" {
 		t.Errorf("unknown ref: %d %s", resp.StatusCode, body)
@@ -138,11 +155,13 @@ func TestGitLabRefs(t *testing.T) {
 		tag.Target != fx.TagOuter.String() || tag.Commit.ID != fx.Main[1].String() || tag.Message != "Outer\n" {
 		t.Fatalf("chain = %+v, %v", tag, err)
 	}
+
 	var fe *forgehttp.Error
 	err := s.Session.GetJSON(context.Background(), gitlabProj+"/repository/branches/nope", &tag)
 	if !errors.As(err, &fe) || fe.Message != "404 Branch Not Found" {
 		t.Errorf("branch: %v", err)
 	}
+
 	err = s.Session.GetJSON(context.Background(), gitlabProj+"/repository/tags/nope", &tag)
 	if !errors.As(err, &fe) || fe.Message != "404 Tag Not Found" {
 		t.Errorf("tag: %v", err)
@@ -155,10 +174,12 @@ func TestGitLabRefs(t *testing.T) {
 		if err := s.Session.GetJSON(context.Background(), path, &refs); err != nil {
 			t.Fatal(err)
 		}
+
 		var out []string
 		for _, r := range refs {
 			out = append(out, r.Name)
 		}
+
 		return out
 	}
 	for path, want := range map[string]string{
@@ -178,7 +199,11 @@ func TestGitLabRefs(t *testing.T) {
 func TestGitLabTree(t *testing.T) {
 	s, r, fx := newGitLab(t)
 	type entry struct {
-		ID, Name, Type, Path, Mode string
+		ID   string
+		Name string
+		Type string
+		Path string
+		Mode string
 	}
 	all, _ := r.ListTree(fx.Head, true)
 
@@ -189,6 +214,7 @@ func TestGitLabTree(t *testing.T) {
 			var e entry
 			err := json.Unmarshal(raw, &e)
 			got = append(got, e)
+
 			return true, err
 		})
 	if err != nil || len(got) != len(all) {
@@ -197,13 +223,18 @@ func TestGitLabTree(t *testing.T) {
 	if n, want := s.Calls("GET", "*/repository/tree"), (len(all)+4)/5; n != want {
 		t.Errorf("%d pages, want %d", n, want)
 	}
+
 	modes := map[string]string{}
 	for _, e := range got {
 		modes[e.Path] = e.Mode + " " + e.Type
 	}
+
 	for path, want := range map[string]string{
-		"docs": "040000 tree", PathSymlink: "120000 blob", PathExec: "100755 blob",
-		PathSubmodule: "160000 commit", PathNested: "100644 blob",
+		"docs":        "040000 tree",
+		PathSymlink:   "120000 blob",
+		PathExec:      "100755 blob",
+		PathSubmodule: "160000 commit",
+		PathNested:    "100644 blob",
 	} {
 		if modes[path] != want {
 			t.Errorf("%s: %q, want %q", path, modes[path], want)
@@ -215,18 +246,25 @@ func TestGitLabTree(t *testing.T) {
 		len(page) != 1 || page[0].Path != "docs/guide" {
 		t.Errorf("docs = %+v, %v", page, err)
 	}
-	if err := s.Session.GetJSON(context.Background(), gitlabProj+"/repository/tree?recursive=true&pagination=none", &page); err != nil || len(page) != len(all) {
+	if err := s.Session.GetJSON(
+		context.Background(),
+		gitlabProj+"/repository/tree?recursive=true&pagination=none",
+		&page,
+	); err != nil ||
+		len(page) != len(all) {
 		t.Errorf("unpaged: %d entries, %v", len(page), err)
 	}
 	if err := s.Session.GetJSON(context.Background(), gitlabProj+"/repository/tree?per_page=2&page=2", &page); err != nil || len(page) != 2 {
 		t.Errorf("offset: %d entries, %v", len(page), err)
 	}
+
 	for _, q := range []string{"ref=nope", "path=nope", "path=" + PathReadme, "path=" + PathSubmodule} {
 		err := s.Session.GetJSON(context.Background(), gitlabProj+"/repository/tree?"+q, &page)
 		if !errors.Is(err, forgehttp.ErrNotFound) {
 			t.Errorf("%s: %v", q, err)
 		}
 	}
+
 	bad := base64.RawURLEncoding.EncodeToString([]byte("nope"))
 	resp, _ := gitlabGet(t, s, "GET", gitlabProj+"/repository/tree?pagination=keyset&page_token="+bad)
 	if resp.StatusCode != 400 {
@@ -243,17 +281,25 @@ func TestGitLabFiles(t *testing.T) {
 		h.Get("X-Gitlab-Size") != "19" || h.Get("X-Gitlab-Execute-Filemode") != "true" || h.Get("X-Gitlab-Commit-Id") != fx.Head.String() {
 		t.Fatalf("HEAD: %d %v", resp.StatusCode, h)
 	}
+
 	var meta struct {
 		Content string `json:"content"`
 		BlobID  string `json:"blob_id"`
 	}
-	if err := s.Session.GetJSON(context.Background(), file+"?ref=main", &meta); err != nil || meta.Content != base64.StdEncoding.EncodeToString([]byte("#!/bin/sh\necho run\n")) {
+	if err := s.Session.GetJSON(
+		context.Background(),
+		file+"?ref=main",
+		&meta,
+	); err != nil ||
+		meta.Content != base64.StdEncoding.EncodeToString([]byte("#!/bin/sh\necho run\n")) {
 		t.Errorf("JSON: %+v, %v", meta, err)
 	}
+
 	resp, body = gitlabGet(t, s, "GET", file+"/raw")
 	if resp.StatusCode != 200 || body != "#!/bin/sh\necho run\n" || resp.Header.Get("X-Gitlab-Blob-Id") == "" {
 		t.Errorf("raw: %d %q", resp.StatusCode, body)
 	}
+
 	for path, status := range map[string]int{
 		file:               400, // no ref
 		file + "?ref=nope": 404,
@@ -273,17 +319,19 @@ func TestGitLabBlobs(t *testing.T) {
 	s, _, fx := newGitLab(t)
 	id := fx.Blobs[PathBinary].String()
 	resp, body := gitlabGet(t, s, "GET", gitlabProj+"/repository/blobs/"+id+"/raw")
-	if resp.StatusCode != 200 || body != string(Binary) || resp.ContentLength != int64(len(Binary)) {
+	if resp.StatusCode != 200 || body != string(Binary()) || resp.ContentLength != int64(len(Binary())) {
 		t.Fatalf("raw: %d %q", resp.StatusCode, body)
 	}
+
 	var b struct {
 		Size    int    `json:"size"`
 		Content string `json:"content"`
 	}
 	if err := s.Session.GetJSON(context.Background(), gitlabProj+"/repository/blobs/"+id, &b); err != nil ||
-		b.Size != len(Binary) || b.Content != base64.StdEncoding.EncodeToString(Binary) {
+		b.Size != len(Binary()) || b.Content != base64.StdEncoding.EncodeToString(Binary()) {
 		t.Errorf("JSON: %+v, %v", b, err)
 	}
+
 	for _, sha := range []string{fx.Head.String(), "nope"} {
 		resp, body := gitlabGet(t, s, "GET", gitlabProj+"/repository/blobs/"+sha+"/raw")
 		if resp.StatusCode != 404 || !strings.Contains(body, "404 Blob Not Found") {
@@ -294,7 +342,7 @@ func TestGitLabBlobs(t *testing.T) {
 
 func TestGitLabMergeBase(t *testing.T) {
 	s, r, fx := newGitLab(t)
-	orphan := r.CommitTree(r.BuildTree(map[string]File{"x": {Data: []byte("x")}}), Epoch, "orphan\n")
+	orphan := r.CommitTree(r.BuildTree(map[string]File{"x": {Data: []byte("x")}}), Epoch(), "orphan\n")
 	for q, want := range map[string]string{
 		"refs[]=main&refs[]=feature":                               "200 " + fx.MergeBase.String(),
 		"refs%5B%5D=feature&refs%5B%5D=" + fx.Head.String():        "200 " + fx.MergeBase.String(),

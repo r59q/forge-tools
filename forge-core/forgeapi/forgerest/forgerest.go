@@ -24,6 +24,7 @@ import (
 
 	"github.com/r59q/forge-tools/forge-core/forgeapi/forgeauth"
 	"github.com/r59q/forge-tools/forge-core/forgeapi/forgehttp"
+	"github.com/r59q/forge-tools/forge-core/forgeapi/internal/repopath"
 )
 
 // maxPages caps how many pages one Each or Pages call follows.
@@ -49,30 +50,37 @@ func Do(ctx context.Context, s *forgeauth.Session, method, target string, body, 
 	if s == nil || s.Client == nil {
 		return nil, errors.New("forgerest: no open session")
 	}
+
 	var r io.Reader
 	if body != nil {
 		data, err := json.Marshal(body)
 		if err != nil {
 			return nil, err
 		}
+
 		r = bytes.NewReader(data)
 	}
+
 	req, err := http.NewRequestWithContext(ctx, method, s.URL(target), r)
 	if err != nil {
 		return nil, err
 	}
+
 	req.Header.Set("Accept", "application/json")
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
+
 	resp, err := s.Client.Do(req)
 	if err != nil {
 		var ue *url.Error
 		if errors.As(err, &ue) {
 			ue.URL = forgehttp.RedactURL(req.URL)
 		}
+
 		return nil, err
 	}
+
 	defer resp.Body.Close()
 	if resp.Request != nil && resp.Request.Method != req.Method {
 		return nil, fmt.Errorf("forgerest: %s %s was redirected to %s %s", req.Method,
@@ -86,6 +94,7 @@ func Do(ctx context.Context, s *forgeauth.Session, method, target string, body, 
 			return nil, fmt.Errorf("decode %s: %w", forgehttp.RedactURL(req.URL), err)
 		}
 	}
+
 	return resp.Header, nil
 }
 
@@ -98,12 +107,15 @@ func Pages[T any](ctx context.Context, s *forgeauth.Session, path string, decode
 		if err != nil {
 			return false, err
 		}
+
 		out = append(out, v)
+
 		return true, nil
 	})
 	if err != nil {
 		return nil, err
 	}
+
 	return out, nil
 }
 
@@ -117,22 +129,26 @@ func Each(ctx context.Context, s *forgeauth.Session, path string, fn func(json.R
 	if s == nil {
 		return errors.New("forgerest: no open session")
 	}
+
 	base, err := url.Parse(s.BaseURL)
 	if err != nil {
 		return err
 	}
+
 	seen := map[string]bool{}
 	next := s.URL(path)
 	for page := 0; next != ""; page++ {
 		if page == maxPages {
 			return fmt.Errorf("more than %d pages", maxPages)
 		}
+
 		seen[next] = true
 		var items []json.RawMessage
 		h, err := Do(ctx, s, http.MethodGet, next, nil, &items)
 		if err != nil {
 			return err
 		}
+
 		for _, raw := range items {
 			more, err := fn(raw)
 			if err != nil {
@@ -142,6 +158,7 @@ func Each(ctx context.Context, s *forgeauth.Session, path string, fn func(json.R
 				return nil
 			}
 		}
+
 		if next, err = nextPage(h, next, base); err != nil {
 			return err
 		}
@@ -149,6 +166,7 @@ func Each(ctx context.Context, s *forgeauth.Session, path string, fn func(json.R
 			return errors.New("pagination loops")
 		}
 	}
+
 	return nil
 }
 
@@ -164,19 +182,23 @@ func Open(ctx context.Context, s *forgeauth.Session, method, target string, h ht
 	if s == nil || s.Client == nil {
 		return nil, errors.New("forgerest: no open session")
 	}
+
 	base, err := url.Parse(s.BaseURL)
 	if err != nil {
 		return nil, err
 	}
+
 	req, err := http.NewRequestWithContext(ctx, method, s.URL(target), nil)
 	if err != nil {
 		return nil, err
 	}
+
 	for k, vs := range h {
 		for _, v := range vs {
 			req.Header.Add(k, v)
 		}
 	}
+
 	c := *s.Client
 	c.CheckRedirect = stayOnBase(base, s.Client.CheckRedirect)
 	resp, err := c.Do(req)
@@ -186,12 +208,15 @@ func Open(ctx context.Context, s *forgeauth.Session, method, target string, h ht
 		if errors.As(err, &ue) {
 			ue.URL = forgehttp.RedactURL(req.URL)
 		}
+
 		return nil, err
 	}
+
 	if err := forgehttp.CheckResponse(resp); err != nil {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		return nil, err
 	}
+
 	return resp, nil
 }
 
@@ -211,9 +236,11 @@ func stayOnBase(base *url.URL, next func(*http.Request, []*http.Request) error) 
 		case !onBase(req.URL, base):
 			return fmt.Errorf("forgerest: redirect to %s leaves the source", forgehttp.RedactURL(req.URL))
 		}
+
 		if next != nil {
 			return next(req, via)
 		}
+
 		return nil
 	}
 }
@@ -225,11 +252,13 @@ func onBase(u, base *url.URL) bool {
 	if !strings.EqualFold(u.Scheme, base.Scheme) || !strings.EqualFold(u.Host, base.Host) || u.User != nil {
 		return false
 	}
+
 	for _, seg := range strings.Split(u.Path, "/") {
 		if seg == "." || seg == ".." {
 			return false
 		}
 	}
+
 	return within(u.Path, base.Path)
 }
 
@@ -240,18 +269,22 @@ func nextPage(h http.Header, current string, base *url.URL) (string, error) {
 	if !ok || link == "" {
 		return "", nil
 	}
+
 	cur, err := url.Parse(current)
 	if err != nil {
 		return "", err
 	}
+
 	ref, err := url.Parse(link)
 	if err != nil {
 		return "", errors.New("malformed pagination link")
 	}
+
 	u := cur.ResolveReference(ref)
 	if !onBase(u, base) {
 		return "", errors.New("pagination link leaves the source")
 	}
+
 	return u.String(), nil
 }
 
@@ -268,20 +301,5 @@ func within(path, root string) bool {
 // control characters, spaces and any of % ? # \, so a path is never
 // double-encoded or escapes its API route.
 func CleanPath(path string) (string, bool) {
-	p := strings.Trim(strings.TrimSpace(path), "/")
-	segments := strings.Split(p, "/")
-	if len(segments) < 2 {
-		return "", false
-	}
-	for _, seg := range segments {
-		if seg == "" || seg == "." || seg == ".." || strings.ContainsAny(seg, `%?#\`) {
-			return "", false
-		}
-		for _, r := range seg {
-			if r <= ' ' || r == 0x7f {
-				return "", false
-			}
-		}
-	}
-	return p, true
+	return repopath.Clean(path)
 }

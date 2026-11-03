@@ -4,12 +4,12 @@ import (
 	"bufio"
 	"bytes"
 	"compress/zlib"
-	"crypto/sha1"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"hash"
 	"io"
+	"math"
 
 	"github.com/r59q/forge-tools/forge-code/library/internal/gitobj"
 )
@@ -24,33 +24,69 @@ const (
 	packRefDelta = 7
 )
 
-var packTypes = map[gitobj.Type]byte{
-	gitobj.TypeCommit: packCommit,
-	gitobj.TypeTree:   packTree,
-	gitobj.TypeBlob:   packBlob,
-	gitobj.TypeTag:    packTag,
+// packCode returns the pack type code of t.
+func packCode(t gitobj.Type) (byte, bool) {
+	switch t {
+	case gitobj.TypeCommit:
+		return packCommit, true
+	case gitobj.TypeTree:
+		return packTree, true
+	case gitobj.TypeBlob:
+		return packBlob, true
+	case gitobj.TypeTag:
+		return packTag, true
+	}
+
+	return 0, false
+}
+
+// packType returns the object type of a pack type code. Deltas give
+// ErrUnsupported.
+func packType(code byte) (gitobj.Type, error) {
+	switch code {
+	case packCommit:
+		return gitobj.TypeCommit, nil
+	case packTree:
+		return gitobj.TypeTree, nil
+	case packBlob:
+		return gitobj.TypeBlob, nil
+	case packTag:
+		return gitobj.TypeTag, nil
+	case packOfsDelta, packRefDelta:
+		return "", fmt.Errorf("%w: deltified pack objects", ErrUnsupported)
+	}
+
+	return "", protoErr("bad pack object type %d", code)
 }
 
 // WritePack writes objs as a version 2 pack: undeltified, zlib-compressed
 // objects and a trailing SHA-1. No objects gives an empty pack.
 func WritePack(w io.Writer, objs []gitobj.Object) error {
-	if uint64(len(objs)) > 1<<32-1 {
+	count := int64(len(objs))
+	if count > math.MaxUint32 {
 		return errors.New("gitwire: too many objects for a pack")
 	}
-	h := sha1.New()
+
+	h := gitobj.NewHash()
 	bw := bufio.NewWriter(io.MultiWriter(w, h))
 	var hdr [12]byte
 	copy(hdr[:], "PACK")
 	binary.BigEndian.PutUint32(hdr[4:], 2)
-	binary.BigEndian.PutUint32(hdr[8:], uint32(len(objs)))
-	bw.Write(hdr[:])
+	binary.BigEndian.PutUint32(hdr[8:], uint32(count))
+	if _, err := bw.Write(hdr[:]); err != nil {
+		return err
+	}
+
 	zw := zlib.NewWriter(bw)
 	for _, o := range objs {
-		code, ok := packTypes[o.Type]
+		code, ok := packCode(o.Type)
 		if !ok {
 			return fmt.Errorf("gitwire: bad object type %q", o.Type)
 		}
-		bw.Write(objectHeader(code, uint64(len(o.Data))))
+		if _, err := bw.Write(objectHeader(code, uint64(len(o.Data)))); err != nil {
+			return err
+		}
+
 		zw.Reset(bw)
 		if _, err := zw.Write(o.Data); err != nil {
 			return err
@@ -59,10 +95,13 @@ func WritePack(w io.Writer, objs []gitobj.Object) error {
 			return err
 		}
 	}
+
 	if err := bw.Flush(); err != nil {
 		return err
 	}
+
 	_, err := w.Write(h.Sum(nil))
+
 	return err
 }
 
@@ -75,6 +114,7 @@ func objectHeader(code byte, size uint64) []byte {
 		b = append(b, byte(size&0x7f))
 		size >>= 7
 	}
+
 	return b
 }
 
@@ -90,7 +130,8 @@ func ReadPack(r io.Reader, maxBytes int64) ([]gitobj.Object, error) {
 	if maxBytes < 0 {
 		maxBytes = 0
 	}
-	hr := &hashReader{r: br, h: sha1.New()}
+
+	hr := &hashReader{r: br, h: gitobj.NewHash()}
 	var hdr [12]byte
 	if _, err := io.ReadFull(hr, hdr[:]); err != nil {
 		return nil, packErr(err, "truncated pack header")
@@ -101,48 +142,56 @@ func ReadPack(r io.Reader, maxBytes int64) ([]gitobj.Object, error) {
 	if v := binary.BigEndian.Uint32(hdr[4:]); v != 2 && v != 3 {
 		return nil, protoErr("pack version %d", v)
 	}
+
 	count := binary.BigEndian.Uint32(hdr[8:])
 	var objs []gitobj.Object
 	var total int64
 	for i := uint32(0); i < count; i++ {
-		code, size, err := readObjectHeader(hr)
+		code, size, err := readObjectSize(hr)
 		if err != nil {
 			return nil, err
 		}
-		var typ gitobj.Type
-		switch code {
-		case packCommit:
-			typ = gitobj.TypeCommit
-		case packTree:
-			typ = gitobj.TypeTree
-		case packBlob:
-			typ = gitobj.TypeBlob
-		case packTag:
-			typ = gitobj.TypeTag
-		case packOfsDelta, packRefDelta:
-			return nil, fmt.Errorf("%w: deltified pack objects", ErrUnsupported)
-		default:
-			return nil, protoErr("bad pack object type %d", code)
+
+		typ, err := packType(code)
+		if err != nil {
+			return nil, err
 		}
-		if size > uint64(maxBytes-total) {
+		if size > maxBytes-total {
 			return nil, fmt.Errorf("%w: pack objects over %d bytes", ErrTooLarge, maxBytes)
 		}
-		total += int64(size)
-		data, err := inflate(hr, int64(size))
+
+		total += size
+		data, err := inflate(hr, size)
 		if err != nil {
 			return nil, err
 		}
+
 		objs = append(objs, gitobj.Object{Type: typ, Data: data})
 	}
+
 	sum := hr.sum()
-	var trailer [sha1.Size]byte
+	var trailer [gitobj.Size]byte
 	if _, err := io.ReadFull(hr.r, trailer[:]); err != nil {
 		return nil, packErr(err, "truncated pack trailer")
 	}
 	if !bytes.Equal(sum, trailer[:]) {
 		return nil, protoErr("pack checksum mismatch")
 	}
+
 	return objs, nil
+}
+
+// readObjectSize reads a pack object's type code and size, as an int64.
+func readObjectSize(r io.ByteReader) (byte, int64, error) {
+	code, size, err := readObjectHeader(r)
+	if err != nil {
+		return 0, 0, err
+	}
+	if size > math.MaxInt64 {
+		return 0, 0, fmt.Errorf("%w: pack object of %d bytes", ErrTooLarge, size)
+	}
+
+	return code, int64(size), nil
 }
 
 // readObjectHeader reads a pack object's type code and size.
@@ -151,6 +200,7 @@ func readObjectHeader(r io.ByteReader) (byte, uint64, error) {
 	if err != nil {
 		return 0, 0, packErr(err, "truncated object header")
 	}
+
 	code := b >> 4 & 7
 	size := uint64(b & 0x0f)
 	for shift := uint(4); b&0x80 != 0; shift += 7 {
@@ -160,8 +210,10 @@ func readObjectHeader(r io.ByteReader) (byte, uint64, error) {
 		if b, err = r.ReadByte(); err != nil {
 			return 0, 0, packErr(err, "truncated object header")
 		}
+
 		size |= uint64(b&0x7f) << shift
 	}
+
 	return code, size, nil
 }
 
@@ -172,6 +224,7 @@ func inflate(r *hashReader, size int64) ([]byte, error) {
 	if err != nil {
 		return nil, packErr(err, "bad zlib stream")
 	}
+
 	var buf bytes.Buffer
 	n, err := io.Copy(&buf, io.LimitReader(zr, size+1))
 	if err != nil {
@@ -180,6 +233,7 @@ func inflate(r *hashReader, size int64) ([]byte, error) {
 	if n != size {
 		return nil, protoErr("object is %d bytes, header says %d", n, size)
 	}
+
 	return buf.Bytes(), nil
 }
 
@@ -188,7 +242,8 @@ func packErr(err error, msg string) error {
 	if errors.Is(err, ErrTooLarge) || errors.Is(err, ErrRemote) {
 		return err
 	}
-	return fmt.Errorf("%w: %s: %v", ErrProtocol, msg, err)
+
+	return fmt.Errorf("%w: %s: %w", ErrProtocol, msg, err)
 }
 
 // hashReader hashes the bytes it returns. It implements io.ByteReader so
@@ -202,6 +257,7 @@ type hashReader struct {
 func (h *hashReader) Read(p []byte) (int, error) {
 	n, err := h.r.Read(p)
 	h.add(p[:n])
+
 	return n, err
 }
 
@@ -213,6 +269,7 @@ func (h *hashReader) ReadByte() (byte, error) {
 			h.add(nil)
 		}
 	}
+
 	return b, err
 }
 
@@ -221,6 +278,7 @@ func (h *hashReader) add(p []byte) {
 		h.h.Write(h.pending)
 		h.pending = h.pending[:0]
 	}
+
 	h.h.Write(p)
 }
 

@@ -16,6 +16,7 @@ func mustID(t *testing.T, s string) ID {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return id
 }
 
@@ -43,9 +44,10 @@ func TestParseID(t *testing.T) {
 	if id := mustID(t, ok); id.String() != ok || id.IsZero() {
 		t.Fatalf("round trip: %s", id)
 	}
-	if !ZeroID.IsZero() || ZeroID.String() != strings.Repeat("0", 40) {
-		t.Fatal("ZeroID")
+	if zero := (ID{}); !zero.IsZero() || zero.String() != strings.Repeat("0", 40) {
+		t.Fatal("zero ID")
 	}
+
 	for _, bad := range []string{"", "ce01", strings.ToUpper(ok), ok + "0", ok[:39] + "g", strings.Repeat("0", 64)} {
 		if _, err := ParseID(bad); !errors.Is(err, ErrInvalid) {
 			t.Errorf("ParseID(%q) err = %v", bad, err)
@@ -54,11 +56,18 @@ func TestParseID(t *testing.T) {
 }
 
 func TestModeString(t *testing.T) {
-	for m, want := range map[Mode]string{ModeTree: "40000", ModeFile: "100644", ModeExec: "100755", ModeSymlink: "120000", ModeSubmodule: "160000"} {
+	for m, want := range map[Mode]string{
+		ModeTree:      "40000",
+		ModeFile:      "100644",
+		ModeExec:      "100755",
+		ModeSymlink:   "120000",
+		ModeSubmodule: "160000",
+	} {
 		if m.String() != want || !m.Valid() {
 			t.Errorf("%o: %q", uint32(m), m.String())
 		}
 	}
+
 	if Mode(0o100664).Valid() {
 		t.Error("100664 valid")
 	}
@@ -73,6 +82,7 @@ func TestCheckName(t *testing.T) {
 			t.Errorf("CheckName(%q) = %v", good, err)
 		}
 	}
+
 	for _, bad := range []string{"", ".", "..", "a/b", "/", "a\x00", ".git", ".GIT", ".Git", ".git.", ".git ", ".git. .", "git~1", "GIT~1",
 		".g\u200cit", "\ufeff.git", `a\.git`, `.git\a`, ".git:stream"} {
 		if err := CheckName(bad); !errors.Is(err, ErrInvalid) {
@@ -96,6 +106,7 @@ func TestSortEntries(t *testing.T) {
 	for _, x := range e {
 		got = append(got, x.Name)
 	}
+
 	// Trees sort as "foo/", after "foo.c"; a submodule sorts as a file.
 	want := []string{"B", "fo", "foo-bar", "foo.c", "foo", "sub", "sub.x"}
 	if !reflect.DeepEqual(got, want) {
@@ -106,8 +117,16 @@ func TestSortEntries(t *testing.T) {
 func TestEncodeTree(t *testing.T) {
 	blob := Hash(TypeBlob, []byte("hello\n"))
 	in := []TreeEntry{
-		{Name: "z", Mode: ModeFile, ID: blob},
-		{Name: "a", Mode: ModeTree, ID: Hash(TypeTree, nil)},
+		{
+			Name: "z",
+			Mode: ModeFile,
+			ID:   blob,
+		},
+		{
+			Name: "a",
+			Mode: ModeTree,
+			ID:   Hash(TypeTree, nil),
+		},
 	}
 	data, err := EncodeTree(in)
 	if err != nil {
@@ -116,10 +135,12 @@ func TestEncodeTree(t *testing.T) {
 	if in[0].Name != "z" {
 		t.Fatal("EncodeTree changed its input")
 	}
+
 	want := "40000 a\x00" + string(in[1].ID[:]) + "100644 z\x00" + string(blob[:])
 	if string(data) != want {
 		t.Fatalf("encoding %q", data)
 	}
+
 	got, err := DecodeTree(data)
 	if err != nil {
 		t.Fatal(err)
@@ -159,6 +180,7 @@ func TestDecodeTreeErrors(t *testing.T) {
 			t.Errorf("DecodeTree(%q) err = %v", bad, err)
 		}
 	}
+
 	// Legacy zero-padded modes still decode.
 	got, err := DecodeTree([]byte("040000 d\x00" + id))
 	if err != nil || got[0].Mode != ModeTree {
@@ -176,6 +198,7 @@ func TestSignature(t *testing.T) {
 	if want := "Ada L <ada@example.com> 1709274600 +0530"; enc != want {
 		t.Fatalf("Encode = %q, want %q", enc, want)
 	}
+
 	got, err := ParseSignature(enc)
 	if err != nil {
 		t.Fatal(err)
@@ -195,7 +218,11 @@ func TestSignature(t *testing.T) {
 	for _, bad := range []Signature{
 		{Name: "", When: when},
 		{Name: "a<b", When: when},
-		{Name: "a", Email: "x>y", When: when},
+		{
+			Name:  "a",
+			Email: "x>y",
+			When:  when,
+		},
 		{Name: "a\nb", When: when},
 		{Name: "a"},
 		{Name: "a", When: time.Unix(0, 0).In(time.FixedZone("", 100*3600))},
@@ -204,6 +231,7 @@ func TestSignature(t *testing.T) {
 			t.Errorf("Encode(%+v) err = %v", bad, err)
 		}
 	}
+
 	for _, bad := range []string{"a b 1 +0000", "a <b 1 +0000", "a <b> +0000", "a <b> 1", "a <b> x +0000", "a <b> 1 0000", "a <b> 1 +0099", "a <b> -1 +0000"} {
 		if _, err := ParseSignature(bad); !errors.Is(err, ErrInvalid) {
 			t.Errorf("ParseSignature(%q) err = %v", bad, err)
@@ -214,6 +242,7 @@ func TestSignature(t *testing.T) {
 func sampleCommit(t *testing.T) Commit {
 	t.Helper()
 	when := time.Unix(1700000000, 0).In(time.FixedZone("", -5*3600))
+
 	return Commit{
 		Tree:      Hash(TypeTree, nil),
 		Parents:   []ID{Hash(TypeBlob, []byte("p1")), Hash(TypeBlob, []byte("p2"))},
@@ -234,10 +263,12 @@ func TestCommitRoundTrip(t *testing.T) {
 		!strings.Contains(string(data), "\ncommitter C O Mitter <c@example.com> 1700003600 +0000\ngpgsig -----BEGIN-----\n abc\n \n -----END-----\n\nSubject") {
 		t.Fatalf("encoding:\n%s", data)
 	}
+
 	got, err := DecodeCommit(data)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	again, err := EncodeCommit(got)
 	if err != nil {
 		t.Fatal(err)
@@ -275,6 +306,7 @@ func TestCommitErrors(t *testing.T) {
 			t.Errorf("%s: err = %v", name, err)
 		}
 	}
+
 	tree := "tree 4b825dc642cb6eb9a060e54bf8d69288fbee4904\n"
 	sig := "a <b> 1 +0000\n"
 	for _, bad := range []string{
@@ -297,15 +329,23 @@ func TestCommitErrors(t *testing.T) {
 
 func TestTagRoundTrip(t *testing.T) {
 	sig := Signature{Name: "T", Email: "t@example.com", When: time.Unix(1, 0).UTC()}
-	tag := Tag{Object: Hash(TypeTree, nil), Type: TypeTree, Name: "v1", Tagger: &sig, Message: "msg\n"}
+	tag := Tag{
+		Object:  Hash(TypeTree, nil),
+		Type:    TypeTree,
+		Name:    "v1",
+		Tagger:  &sig,
+		Message: "msg\n",
+	}
 	data, err := EncodeTag(tag)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	want := "object 4b825dc642cb6eb9a060e54bf8d69288fbee4904\ntype tree\ntag v1\ntagger T <t@example.com> 1 +0000\n\nmsg\n"
 	if string(data) != want {
 		t.Fatalf("encoding %q", data)
 	}
+
 	got, err := DecodeTag(data)
 	if err != nil {
 		t.Fatal(err)
@@ -313,16 +353,27 @@ func TestTagRoundTrip(t *testing.T) {
 	if again, _ := EncodeTag(got); !bytes.Equal(again, data) {
 		t.Fatalf("re-encode %q", again)
 	}
+
 	tag.Tagger = nil
 	data, _ = EncodeTag(tag)
 	if got, err := DecodeTag(data); err != nil || got.Tagger != nil || got.Name != "v1" {
 		t.Fatalf("no tagger: %+v %v", got, err)
 	}
-	for _, bad := range []Tag{{Object: tag.Object, Type: "x", Name: "v"}, {Object: tag.Object, Type: TypeBlob}, {Object: tag.Object, Type: TypeBlob, Name: "a\nb"}} {
+
+	for _, bad := range []Tag{{
+		Object: tag.Object,
+		Type:   "x",
+		Name:   "v",
+	}, {Object: tag.Object, Type: TypeBlob}, {
+		Object: tag.Object,
+		Type:   TypeBlob,
+		Name:   "a\nb",
+	}} {
 		if _, err := EncodeTag(bad); !errors.Is(err, ErrInvalid) {
 			t.Errorf("EncodeTag(%+v) err = %v", bad, err)
 		}
 	}
+
 	for _, bad := range []string{"object x\ntype tree\ntag v\n\n", "type tree\n\n", "object 4b825dc642cb6eb9a060e54bf8d69288fbee4904\ntype nope\ntag v\n\n"} {
 		if _, err := DecodeTag([]byte(bad)); !errors.Is(err, ErrInvalid) {
 			t.Errorf("DecodeTag(%q) err = %v", bad, err)
@@ -336,6 +387,7 @@ func TestAgainstGit(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not on PATH")
 	}
+
 	hash := func(typ Type, data []byte) string {
 		t.Helper()
 		cmd := exec.Command("git", "hash-object", "-t", string(typ), "--stdin")
@@ -346,15 +398,36 @@ func TestAgainstGit(t *testing.T) {
 		if err != nil {
 			t.Fatalf("git hash-object -t %s: %v: %s", typ, err, out)
 		}
+
 		return strings.TrimSpace(string(out))
 	}
 	blob := Hash(TypeBlob, []byte("x"))
 	tree, err := EncodeTree([]TreeEntry{
-		{Name: "foo", Mode: ModeTree, ID: Hash(TypeTree, nil)},
-		{Name: "foo.c", Mode: ModeFile, ID: blob},
-		{Name: "run", Mode: ModeExec, ID: blob},
-		{Name: "link", Mode: ModeSymlink, ID: blob},
-		{Name: "mod", Mode: ModeSubmodule, ID: blob},
+		{
+			Name: "foo",
+			Mode: ModeTree,
+			ID:   Hash(TypeTree, nil),
+		},
+		{
+			Name: "foo.c",
+			Mode: ModeFile,
+			ID:   blob,
+		},
+		{
+			Name: "run",
+			Mode: ModeExec,
+			ID:   blob,
+		},
+		{
+			Name: "link",
+			Mode: ModeSymlink,
+			ID:   blob,
+		},
+		{
+			Name: "mod",
+			Mode: ModeSubmodule,
+			ID:   blob,
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -362,6 +435,7 @@ func TestAgainstGit(t *testing.T) {
 	if got, want := hash(TypeTree, tree), Hash(TypeTree, tree).String(); got != want {
 		t.Errorf("tree: git %s, ours %s", got, want)
 	}
+
 	c := sampleCommit(t)
 	c.Extra = nil
 	commit, err := EncodeCommit(c)
@@ -371,7 +445,14 @@ func TestAgainstGit(t *testing.T) {
 	if got, want := hash(TypeCommit, commit), Hash(TypeCommit, commit).String(); got != want {
 		t.Errorf("commit: git %s, ours %s", got, want)
 	}
-	tag, err := EncodeTag(Tag{Object: Hash(TypeCommit, commit), Type: TypeCommit, Name: "v1", Tagger: &c.Author, Message: "m\n"})
+
+	tag, err := EncodeTag(Tag{
+		Object:  Hash(TypeCommit, commit),
+		Type:    TypeCommit,
+		Name:    "v1",
+		Tagger:  &c.Author,
+		Message: "m\n",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -381,7 +462,12 @@ func TestAgainstGit(t *testing.T) {
 }
 
 func FuzzDecode(f *testing.F) {
-	c, _ := EncodeCommit(Commit{Tree: Hash(TypeTree, nil), Author: Signature{Name: "a", When: time.Unix(1, 0)}, Committer: Signature{Name: "a", When: time.Unix(1, 0)}, Message: "m"})
+	c, _ := EncodeCommit(Commit{
+		Tree:      Hash(TypeTree, nil),
+		Author:    Signature{Name: "a", When: time.Unix(1, 0)},
+		Committer: Signature{Name: "a", When: time.Unix(1, 0)},
+		Message:   "m",
+	})
 	f.Add(c)
 	tr, _ := EncodeTree([]TreeEntry{{Name: "a", Mode: ModeFile}})
 	f.Add(tr)

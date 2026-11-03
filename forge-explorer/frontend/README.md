@@ -10,6 +10,7 @@ npm ci
 npm run typecheck
 npm test
 npm run build
+npm run test:package
 npx playwright install chromium
 npm run test:browser
 ```
@@ -27,15 +28,38 @@ no frontend build. Normal builds, tests and runtime never contact NudaUI.
 
 The [frontend workflow](../../.github/workflows/forge-explorer-frontend.yml)
 runs type checks, unit tests, production builds and browser tests on pull requests
-and changes to `master`. It does not publish to an npm registry. To consume a
-local build, run `npm pack` after building, then install the resulting
-`forge-tools-explorer-0.1.0.tgz` in the host project. The service image includes
+and changes to `master`. After checks pass on `master`, it builds and publishes
+`@r59q/explorer` to `https://npm.pkg.github.com` using the repository's
+`GITHUB_TOKEN`. No extra publishing secret is needed. Pull requests and forks
+cannot run the publishing job. Manual dispatch on `master` can retry a release.
+
+Existing versions are skipped; registry/authentication failures fail the job.
+For a new release, bump the version and lockfile with
+`npm version patch --no-git-tag-version`, then commit both files. Publishing is
+serialized and never replaces a version. Package metadata links it to this
+repository. GitHub initially creates packages as private; after the first
+publication, a maintainer should set the package visibility to public if desired.
+See [GitHub's registry documentation](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-npm-registry).
+
+In a consuming project, configure the scope, authenticate with a personal access
+token (classic) with `read:packages` and access to the package, then install:
+
+```sh
+npm config set @r59q:registry https://npm.pkg.github.com --location=project
+npm login --scope=@r59q --auth-type=legacy --registry=https://npm.pkg.github.com
+npm install @r59q/explorer
+```
+
+GitHub requires authentication even for public npm packages. Keep authentication
+in your user npm configuration, never in committed files. To consume a local
+build without registry access, run `npm pack` after building and install the
+resulting `r59q-explorer-0.1.0.tgz` in the host project. The service image includes
 the standalone app and has its own [publishing pipeline](../service/README.md#asset-packaging).
 
 ## Embedding contract
 
 ```ts
-import { createExplorer, httpProvider } from '@forge-tools/explorer';
+import { createExplorer, httpProvider } from '@r59q/explorer';
 
 const lifetime = new AbortController();
 const provider = httpProvider('/explorer-api', () => serviceToken);

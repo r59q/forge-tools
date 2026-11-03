@@ -94,4 +94,5 @@ The [service workflow](../../.github/workflows/forge-explorer-service.yml) build
 Linux amd64/arm64 images on pull requests without pushing. After its Go, protobuf
 and browser checks pass on `master`, it publishes
 `ghcr.io/r59q/forge-explorer-service` with `latest` and commit SHA tags. This
-publishes the service and bundled standalone app, not the frontend npm package.
+publishes the service and bundled standalone app. The frontend has a separate
+[GitHub npm publishing job](../frontend/README.md).

@@ -32,6 +32,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - run: npm run test:package
       - run: npx --no-install playwright install --with-deps chromium
       - run: npm run test:browser
       - if: inputs.backend

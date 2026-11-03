@@ -1,11 +1,15 @@
+import { AppHeader, AttributionFooter, ConnectionForm, ConnectionStatus } from "./components.js";
+import { h } from "../src/components/dom.js";
 import { createExplorer, httpProvider } from "../src/index";
 import type { ExplorerHandle } from "../src/index";
 
-const form = document.querySelector<HTMLFormElement>("#connect")!;
-const token = document.querySelector<HTMLInputElement>("#token")!;
-const sourceSelect = document.querySelector<HTMLSelectElement>("#source")!;
-const status = document.querySelector<HTMLElement>("#connection-status")!;
-const host = document.querySelector<HTMLElement>("#explorer")!;
+const connection = new ConnectionForm();
+const form = connection.node;
+const token = connection.token;
+const sourceSelect = connection.source.node;
+const status = ConnectionStatus();
+const host = h("div", { id: "explorer" });
+document.body.append(AppHeader(), form, status, host, AttributionFooter());
 const lifetime = new AbortController();
 const provider = httpProvider("", () => token.value);
 let explorer: ExplorerHandle | undefined;
@@ -30,13 +34,7 @@ async function connect(): Promise<void> {
     if (signal.aborted) return;
     const selected =
       sources.find((source) => source.id === sourceSelect.value) ?? sources[0];
-    sourceSelect.replaceChildren();
-    for (const source of sources) {
-      const option = document.createElement("option");
-      option.value = source.id;
-      option.textContent = source.label;
-      sourceSelect.append(option);
-    }
+    connection.source.update(sources);
     explorer?.dispose();
     if (!selected) {
       status.textContent = "No sources configured.";

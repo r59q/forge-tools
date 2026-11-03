@@ -48,6 +48,7 @@ test("tree rows retain disclosure, unsupported, partial, empty and error states"
   const explorer = page.locator("#explorer");
   const tree = explorer.getByRole("navigation", { name: "Files", exact: true });
   await expect(tree.getByRole("button", { name: "<img src=x>", exact: true })).toBeDisabled();
+  await expect(tree.getByRole("button", { name: "hello.go", exact: true })).toHaveClass(/nuda-shine-sweep/);
   await expect(tree.locator("img")).toHaveCount(0);
   await expect(tree.getByRole("status")).toContainText("Canceled; results may be incomplete.");
   mode = "empty";

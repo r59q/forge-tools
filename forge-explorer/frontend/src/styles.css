@@ -96,12 +96,6 @@ aside {
   padding-left: 0;
 }
 .tree .file {
-  color: var(--explorer-text);
-  border: 0;
-  border-radius: 8px;
-  padding: 6px 10px;
-  font-size: 0.85rem;
-  font-weight: 600;
   text-align: left;
   overflow-wrap: anywhere;
   background: transparent;

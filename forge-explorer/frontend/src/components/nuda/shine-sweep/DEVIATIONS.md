@@ -7,7 +7,7 @@ MIT copyright: Santiago Gómez de la Torre Romero (2026).
 explicit button type. Labels may contain repository data. Original CSS is used
 directly; `../../primitives.css` supplies explorer tokens, compact spacing, focus,
 disabled states and reduced motion. The standalone app and each ShadowRoot
-use the same adapter and styles. Tree rows now use specialised native buttons
-with the same compact metrics; they no longer carry the decorative sweep. No upstream script exists.
+use the same adapter and styles. Specialised file-tree items keep the imported
+button appearance and disabled unsupported-entry state. No upstream script exists.
 Direct edits are allowed; record meaningful deviations here. Browser tests cover
 keyboard activation, safe text rendering and instance isolation.

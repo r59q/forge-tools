@@ -1,9 +1,9 @@
 import type { Entry } from "../types.js";
-import { Disclosure } from "./controls.js";
+import { Button, Disclosure } from "./controls.js";
 import { h } from "./dom.js";
 
 /** FileTreeItem renders a lazy directory, file action or disabled unsupported entry.
- * Rows retain their own semantics and are not ordinary Shine Sweep actions.
+ * File rows retain discovery state; directories use native disclosure semantics.
  */
 export function FileTreeItem(
   entry: Entry,
@@ -40,12 +40,10 @@ function DirectoryItem(
 
 function FileItem(entry: Entry, label: string, navigate: (path: string) => unknown): HTMLButtonElement {
   const supported = entry.kind === "file";
-  const node = h("button", {
-    type: "button",
+
+  return Button(label, () => navigate(entry.path), {
     class: "file",
     disabled: !supported,
     title: supported ? undefined : "Unsupported entry (symlink or special file)",
-  }, label);
-  node.addEventListener("click", () => void navigate(entry.path));
-  return node;
+  });
 }

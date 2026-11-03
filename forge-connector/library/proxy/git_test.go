@@ -39,6 +39,7 @@ type gitForge struct {
 func (g *gitForge) last() (*http.Request, []byte) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+
 	return g.request, g.body
 }
 
@@ -50,6 +51,7 @@ type countingReader struct {
 func (c countingReader) Read(p []byte) (int, error) {
 	n, err := c.r.Read(p)
 	c.n.Add(int64(n))
+
 	return n, err
 }
 
@@ -62,6 +64,7 @@ func newGitForge(t *testing.T) *gitForge {
 		if err != nil {
 			return
 		}
+
 		g.mu.Lock()
 		g.request, g.body = r, body
 		g.mu.Unlock()
@@ -69,9 +72,11 @@ func newGitForge(t *testing.T) *gitForge {
 			g.reply(w, r)
 			return
 		}
+
 		w.Header().Set("Content-Type", "application/x-git-upload-pack-advertisement")
 		_, _ = io.WriteString(w, "refs")
 	}))
+
 	return g
 }
 
@@ -81,6 +86,7 @@ func gitSetup(t *testing.T, push bool) (*gitForge, *fakeBroker, proxy.Config) {
 	b := &fakeBroker{conn: forgeauth.Connection{Kind: forgeauth.GitHub, BaseURL: g.srv.URL + "/api/v3"}, gitBase: g.srv.URL + "/git"}
 	c := config(t, b)
 	c.AllowGitPush = push
+
 	return g, b, c
 }
 
@@ -90,6 +96,7 @@ func gitRequest(method, target, contentType string, body io.Reader) *http.Reques
 	if contentType != "" {
 		r.Header.Set("Content-Type", contentType)
 	}
+
 	return r
 }
 
@@ -97,7 +104,10 @@ func TestGitForwardsAllowedRequests(t *testing.T) {
 	g, b, c := gitSetup(t, true)
 	h := handler(t, c)
 	for _, tc := range []struct {
-		method, path, contentType, upstream string
+		method      string
+		path        string
+		contentType string
+		upstream    string
 	}{
 		{http.MethodGet, "/g/conn/owner/repo.git/info/refs?service=git-upload-pack", "", "/git/owner/repo.git/info/refs?service=git-upload-pack"},
 		{http.MethodGet, "/g/conn/owner/repo.git/info/refs?service=git-receive-pack", "", "/git/owner/repo.git/info/refs?service=git-receive-pack"},
@@ -111,20 +121,24 @@ func TestGitForwardsAllowedRequests(t *testing.T) {
 			for _, name := range []string{"Cookie", "Private-Token", "Proxy-Authorization", "X-Forwarded-For", "X-Other"} {
 				r.Header.Set(name, clientToken)
 			}
+
 			w := httptest.NewRecorder()
 			h.ServeHTTP(w, r)
 			if w.Code != 200 || w.Body.String() != "refs" {
 				t.Fatalf("status = %d, body %q", w.Code, w.Body)
 			}
+
 			got, body := g.last()
 			if got.URL.RequestURI() != tc.upstream {
 				t.Errorf("upstream = %s", got.URL.RequestURI())
 			}
+
 			want := http.Header{}
 			github.SetGitToken(want, forgeToken)
 			if got.Header.Get("Authorization") != want.Get("Authorization") {
 				t.Errorf("Authorization = %q", got.Header.Get("Authorization"))
 			}
+
 			for name, values := range got.Header {
 				for _, v := range values {
 					if strings.Contains(v, clientToken) {
@@ -132,6 +146,7 @@ func TestGitForwardsAllowedRequests(t *testing.T) {
 					}
 				}
 			}
+
 			if got.Header.Get("Git-Protocol") != "version=2" || got.Header.Get("Accept") == "" {
 				t.Error("Git-Protocol or Accept not forwarded")
 			}
@@ -144,6 +159,7 @@ func TestGitForwardsAllowedRequests(t *testing.T) {
 			}
 		})
 	}
+
 	if b.issuances.Load() != 4 {
 		t.Errorf("issuances = %d", b.issuances.Load())
 	}
@@ -176,6 +192,7 @@ func TestGitBasicClientAuth(t *testing.T) {
 			t.Errorf("%q: WWW-Authenticate = %q", auth, w.Header().Get("WWW-Authenticate"))
 		}
 	}
+
 	r := httptest.NewRequest(http.MethodGet, "/g/conn/o/r.git/info/refs?service=git-upload-pack", nil)
 	w := httptest.NewRecorder()
 	before := b.issuances.Load()
@@ -189,8 +206,10 @@ func TestGitRejectsBeforeBroker(t *testing.T) {
 	g, b, c := gitSetup(t, false)
 	h := handler(t, c)
 	for _, tc := range []struct {
-		method, target, contentType string
-		want                        int
+		method      string
+		target      string
+		contentType string
+		want        int
 	}{
 		// Traversal, escapes and encoded slashes.
 		{"GET", "/g/conn/../x.git/info/refs?service=git-upload-pack", "", 400},
@@ -247,6 +266,7 @@ func TestGitRejectsBeforeBroker(t *testing.T) {
 			}
 		})
 	}
+
 	r := gitRequest("POST", "/g/conn/a/b.git/git-upload-pack", uploadType, nil)
 	r.Header.Set("Content-Encoding", "br")
 	w := httptest.NewRecorder()
@@ -254,6 +274,7 @@ func TestGitRejectsBeforeBroker(t *testing.T) {
 	if w.Code != 415 {
 		t.Errorf("Content-Encoding br: status = %d", w.Code)
 	}
+
 	r = gitRequest("POST", "/g/conn/a/b.git/git-upload-pack", uploadType, nil)
 	r.Header.Add("Content-Type", uploadType)
 	w = httptest.NewRecorder()
@@ -276,6 +297,7 @@ func TestGitCleansResponses(t *testing.T) {
 		r := gitRequest(http.MethodGet, "/g/conn/o/r.git/info/refs?service=git-upload-pack", "", nil)
 		r.Host = "proxy.example"
 		h.ServeHTTP(w, r)
+
 		return w
 	}
 	g.reply = func(w http.ResponseWriter, _ *http.Request) {
@@ -292,14 +314,17 @@ func TestGitCleansResponses(t *testing.T) {
 	if w.Code != 401 || w.Body.String() != "denied" {
 		t.Fatalf("status = %d", w.Code)
 	}
+
 	for _, name := range []string{"Set-Cookie", "Link", "Alt-Svc", "Trailer", "X-Trailer"} {
 		if w.Header().Get(name) != "" || w.Result().Trailer.Get(name) != "" {
 			t.Errorf("%s returned to caller", name)
 		}
 	}
+
 	if w.Header().Get("WWW-Authenticate") != `Basic realm="forge-connector", charset="UTF-8"` {
 		t.Errorf("WWW-Authenticate = %q", w.Header().Get("WWW-Authenticate"))
 	}
+
 	for location, want := range map[string]string{
 		g.srv.URL + "/git/o/moved.git/info/refs?service=git-upload-pack": "http://proxy.example/g/conn/o/moved.git/info/refs?service=git-upload-pack",
 		"/git/a/b/c.git/info/refs?service=git-upload-pack":               "http://proxy.example/g/conn/a/b/c.git/info/refs?service=git-upload-pack",
@@ -320,6 +345,7 @@ func TestGitCleansResponses(t *testing.T) {
 			t.Errorf("Location %s: status %d, got %q, want %q", location, w.Code, w.Header().Get("Location"), want)
 		}
 	}
+
 	if other.hits.Load() != 0 || g.hits.Load() != 10 {
 		t.Fatalf("redirect followed: other %d, forge %d", other.hits.Load(), g.hits.Load())
 	}
@@ -329,15 +355,58 @@ func TestGitUpstreamChecks(t *testing.T) {
 	g := newGitForge(t)
 	conn := forgeauth.Connection{Kind: forgeauth.GitHub, BaseURL: "https://forge.example/api/v3"}
 	for _, issued := range []broker.IssuedToken{
-		{Kind: forgeauth.GitHub, BaseURL: conn.BaseURL, Token: forgeToken},
-		{Kind: forgeauth.GitHub, BaseURL: conn.BaseURL, GitBaseURL: "ftp://forge.example", Token: forgeToken},
-		{Kind: forgeauth.GitHub, BaseURL: conn.BaseURL, GitBaseURL: "https://u:p@forge.example", Token: forgeToken},
-		{Kind: forgeauth.GitHub, BaseURL: conn.BaseURL, GitBaseURL: "https://forge.example?x", Token: forgeToken},
-		{Kind: forgeauth.GitHub, BaseURL: conn.BaseURL, GitBaseURL: "https://forge.example/a/../b", Token: forgeToken},
-		{Kind: forgeauth.GitLab, BaseURL: conn.BaseURL, GitBaseURL: g.srv.URL, Token: forgeToken},
-		{Kind: forgeauth.GitHub, BaseURL: "https://other.example/api/v3", GitBaseURL: g.srv.URL, Token: forgeToken},
-		{Kind: forgeauth.GitHub, BaseURL: conn.BaseURL, GitBaseURL: g.srv.URL},
-		{Kind: forgeauth.GitHub, BaseURL: conn.BaseURL, GitBaseURL: g.srv.URL, Token: "bad\r\ntoken"},
+		{
+			Kind:    forgeauth.GitHub,
+			BaseURL: conn.BaseURL,
+			Token:   forgeToken,
+		},
+		{
+			Kind:       forgeauth.GitHub,
+			BaseURL:    conn.BaseURL,
+			GitBaseURL: "ftp://forge.example",
+			Token:      forgeToken,
+		},
+		{
+			Kind:       forgeauth.GitHub,
+			BaseURL:    conn.BaseURL,
+			GitBaseURL: "https://u:p@forge.example",
+			Token:      forgeToken,
+		},
+		{
+			Kind:       forgeauth.GitHub,
+			BaseURL:    conn.BaseURL,
+			GitBaseURL: "https://forge.example?x",
+			Token:      forgeToken,
+		},
+		{
+			Kind:       forgeauth.GitHub,
+			BaseURL:    conn.BaseURL,
+			GitBaseURL: "https://forge.example/a/../b",
+			Token:      forgeToken,
+		},
+		{
+			Kind:       forgeauth.GitLab,
+			BaseURL:    conn.BaseURL,
+			GitBaseURL: g.srv.URL,
+			Token:      forgeToken,
+		},
+		{
+			Kind:       forgeauth.GitHub,
+			BaseURL:    "https://other.example/api/v3",
+			GitBaseURL: g.srv.URL,
+			Token:      forgeToken,
+		},
+		{
+			Kind:       forgeauth.GitHub,
+			BaseURL:    conn.BaseURL,
+			GitBaseURL: g.srv.URL,
+		},
+		{
+			Kind:       forgeauth.GitHub,
+			BaseURL:    conn.BaseURL,
+			GitBaseURL: g.srv.URL,
+			Token:      "bad\r\ntoken",
+		},
 	} {
 		b := &fakeBroker{conn: conn, issued: &issued}
 		w := httptest.NewRecorder()
@@ -346,11 +415,13 @@ func TestGitUpstreamChecks(t *testing.T) {
 			t.Errorf("%+v: status = %d", issued, w.Code)
 		}
 	}
+
 	// A provider without Git support fails closed.
 	var reg forgeauth.Registry
 	if err := reg.Register(noGitProvider{github.Provider{}}); err != nil {
 		t.Fatal(err)
 	}
+
 	b := &fakeBroker{conn: conn, gitBase: g.srv.URL}
 	h := handler(t, proxy.Config{Verifier: b, TokenIssuer: b, Registry: &reg})
 	w := httptest.NewRecorder()
@@ -361,7 +432,12 @@ func TestGitUpstreamChecks(t *testing.T) {
 	if g.hits.Load() != 0 {
 		t.Fatal("forge contacted")
 	}
-	if _, err := proxy.New(proxy.Config{Verifier: b, TokenIssuer: b, Registry: &reg, MaxGitPushBytes: -1}); err == nil {
+	if _, err := proxy.New(proxy.Config{
+		Verifier:        b,
+		TokenIssuer:     b,
+		Registry:        &reg,
+		MaxGitPushBytes: -1,
+	}); err == nil {
 		t.Error("negative push cap accepted")
 	}
 }
@@ -379,6 +455,7 @@ func TestGitBodyCaps(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		req.ContentLength = length
 		req.Header.Set("Authorization", "Bearer "+clientToken)
 		req.Header.Set("Content-Type", contentType)
@@ -386,7 +463,9 @@ func TestGitBodyCaps(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		readResponse(t, resp)
+
 		return resp.StatusCode
 	}
 	big := bytes.Repeat([]byte("x"), 2<<20)
@@ -403,10 +482,12 @@ func TestGitBodyCaps(t *testing.T) {
 	if n := g.received.Load(); n > 1<<20 {
 		t.Errorf("forge received %d bytes", n)
 	}
+
 	fetch := bytes.Repeat([]byte("y"), int(proxy.MaxGitFetchBytes)+1)
 	if code := post("/g/conn/o/r.git/git-upload-pack", uploadType, bytes.NewReader(fetch), int64(len(fetch))); code != 413 {
 		t.Errorf("fetch over cap: %d", code)
 	}
+
 	code := post("/g/conn/o/r.git/git-receive-pack", receiveType, bytes.NewReader(big[:1<<20]), 1<<20)
 	if _, body := g.last(); code != 200 || len(body) != 1<<20 {
 		t.Errorf("body at cap: %d, forge got %d bytes", code, len(body))
@@ -420,6 +501,7 @@ func TestGitStreamsRequestBody(t *testing.T) {
 		if _, err := io.ReadFull(r.Body, buf); err == nil {
 			close(first)
 		}
+
 		_, _ = io.Copy(io.Discard, r.Body)
 		w.Header().Set("Content-Type", "application/x-git-upload-pack-result")
 	}))
@@ -444,12 +526,14 @@ func TestGitStreamsRequestBody(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	readResponse(t, resp)
 	select {
 	case <-first:
 	default:
 		t.Fatal("request body was buffered")
 	}
+
 	if resp.StatusCode != 200 {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}

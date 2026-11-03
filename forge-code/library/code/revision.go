@@ -41,20 +41,24 @@ func parseRevision(text string) (revision, error) {
 		rev.head = true
 		return rev, nil
 	}
+
 	bad := func(why string) (revision, error) {
 		return revision{}, fmt.Errorf("%w: revision %q: %s", ErrInvalid, text, why)
 	}
 	if len(text) > maxRevBytes {
 		return bad("too long")
 	}
+
 	base, suffix := text, ""
 	if i := strings.IndexAny(text, "~^"); i >= 0 {
 		base, suffix = text[:i], text[i:]
 	}
+
 	steps, err := parseSteps(suffix)
 	if err != nil {
 		return bad(err.Error())
 	}
+
 	rev.steps = steps
 	switch {
 	case base == "HEAD":
@@ -74,6 +78,7 @@ func parseRevision(text string) (revision, error) {
 		}
 		rev.bare = base
 	}
+
 	return rev, nil
 }
 
@@ -85,21 +90,26 @@ func parseSteps(s string) ([]step, error) {
 		if s[0] != '~' && s[0] != '^' {
 			return nil, fmt.Errorf("unexpected %q", s)
 		}
+
 		s = s[1:]
 		end := 0
 		for end < len(s) && s[end] >= '0' && s[end] <= '9' {
 			end++
 		}
+
 		if end > 0 {
 			n, err := strconv.Atoi(s[:end])
 			if err != nil || n > maxStep || end > 3 {
 				return nil, fmt.Errorf("step %q over %d", s[:end], maxStep)
 			}
+
 			st.n = n
 		}
+
 		s = s[end:]
 		steps = append(steps, st)
 	}
+
 	return steps, nil
 }
 
@@ -108,11 +118,13 @@ func isHex(s string) bool {
 	if s == "" {
 		return false
 	}
+
 	for i := 0; i < len(s); i++ {
 		c := s[i] | 0x20 // lowercase letters; digits keep their value
 		if (s[i] < '0' || s[i] > '9') && (c < 'a' || c > 'f') {
 			return false
 		}
 	}
+
 	return true
 }

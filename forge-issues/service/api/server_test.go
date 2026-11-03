@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -27,7 +28,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 const (
@@ -37,7 +37,10 @@ const (
 
 // request is one request a fake forge received.
 type request struct {
-	method, path, query, body string
+	method string
+	path   string
+	query  string
+	body   string
 }
 
 // forge serves fixed JSON keyed by "METHOD escaped-path" below prefix and
@@ -81,6 +84,7 @@ func newForge(t *testing.T, prefix string, routes map[string]string) *forge {
 		}
 	}))
 	t.Cleanup(f.srv.Close)
+
 	return f
 }
 
@@ -94,7 +98,9 @@ func (f *forge) last(t *testing.T, method string) request {
 			return f.requests[i]
 		}
 	}
+
 	t.Fatalf("no %s request in %+v", method, f.requests)
+
 	return request{}
 }
 
@@ -105,6 +111,7 @@ func (f *forge) sent(t *testing.T, method string) map[string]any {
 	if err := json.Unmarshal([]byte(f.last(t, method).body), &v); err != nil {
 		t.Fatalf("%s body: %v", method, err)
 	}
+
 	return v
 }
 
@@ -170,6 +177,7 @@ func setup(t *testing.T) (*Server, http.Handler, *forge, *forge, *forge) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		return s
 	}
 	client, err := issues.New(
@@ -180,14 +188,17 @@ func setup(t *testing.T) (*Server, http.Handler, *forge, *forge, *forge) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	s, err := New(Fixed(client), forgeauth.StaticToken(serviceToken), 5*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	h, err := s.REST(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return s, h, gh, gl, fj
 }
 
@@ -197,6 +208,7 @@ func rest(t *testing.T, h http.Handler, method, target, body, token string) (int
 	if token != "" {
 		r.Header.Set("Authorization", "Bearer "+token)
 	}
+
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
 	if got := w.Header().Get("Cache-Control"); got != "no-store" {
@@ -205,11 +217,13 @@ func rest(t *testing.T, h http.Handler, method, target, body, token string) (int
 	if strings.Contains(w.Body.String(), forgeToken) {
 		t.Fatalf("%s %s leaked forge data: %s", method, target, w.Body)
 	}
+
 	// protojson varies its whitespace on purpose; compare compact JSON.
 	var out bytes.Buffer
 	if err := json.Compact(&out, w.Body.Bytes()); err != nil {
 		t.Fatalf("%s %s: %v: %s", method, target, err, w.Body)
 	}
+
 	return w.Code, out.String()
 }
 
@@ -220,7 +234,7 @@ func TestNew(t *testing.T) {
 		token   forgeauth.Credentials
 		timeout time.Duration
 	}{{nil, forgeauth.StaticToken("x"), time.Second}, {Fixed(client), nil, time.Second}, {Fixed(client), forgeauth.StaticToken("x"), 0}} {
-		if _, err := New(tc.sources, tc.token, tc.timeout); err != ErrInvalid {
+		if _, err := New(tc.sources, tc.token, tc.timeout); !errors.Is(err, ErrInvalid) {
 			t.Errorf("New(%v, %v) = %v, want ErrInvalid", tc.token, tc.timeout, err)
 		}
 	}
@@ -234,6 +248,7 @@ func TestSourcesUnavailable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	h, err := s.REST(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -282,6 +297,7 @@ func TestRESTReads(t *testing.T) {
 	if list.Issues[1].Repository != "mrbean/tools/cli" || list.Issues[2].Source.ID != "fj" {
 		t.Errorf("account list = %+v", list.Issues)
 	}
+
 	for _, tc := range []struct {
 		f    *forge
 		want string
@@ -311,13 +327,16 @@ func TestRESTReads(t *testing.T) {
 
 	// GitLab system notes are left out; note URLs come from the issue.
 	code, body = rest(t, h, "GET", "/v1/issues/7/comments?repository=mrbean/tools/cli&source=gl", "", serviceToken)
-	if want := `{"comments":[{"id":"2","author":{"login":"irma"},"body":"Same here","webUrl":"https://gitlab.com/mrbean/tools/cli/-/issues/7#note_2","createdAt":"2024-03-02T00:00:00Z"}]}`; code != 200 || body != want {
+	if want := `{"comments":[{"id":"2","author":{"login":"irma"},"body":"Same here","webUrl":"https://gitlab.com/mrbean/tools/cli/-/issues/7#note_2","createdAt":"2024-03-02T00:00:00Z"}]}`; code != 200 ||
+		body != want {
 		t.Errorf("gitlab comments: %d %s", code, body)
 	}
+
 	code, body = rest(t, h, "GET", "/v1/issues/1/comments?repository=mrbean/teddy", "", serviceToken)
 	if code != 200 || !strings.Contains(body, `"webUrl":"https://github.com/mrbean/teddy/issues/1#issuecomment-9"`) {
 		t.Errorf("github comments: %d %s", code, body)
 	}
+
 	// An issue without comments is an empty list, not an error.
 	code, body = rest(t, h, "GET", "/v1/issues/5/comments?repository=mrbean/garden&source=fj", "", serviceToken)
 	if code != 200 || body != `{}` {
@@ -328,7 +347,14 @@ func TestRESTReads(t *testing.T) {
 func TestRESTWrites(t *testing.T) {
 	_, h, gh, gl, fj := setup(t)
 
-	code, body := rest(t, h, "POST", "/v1/issues", `{"source":"gh","repository":"mrbean/teddy","title":"Bear is lost","body":"Find him","labels":["bug"],"assignees":["irma"]}`, serviceToken)
+	code, body := rest(
+		t,
+		h,
+		"POST",
+		"/v1/issues",
+		`{"source":"gh","repository":"mrbean/teddy","title":"Bear is lost","body":"Find him","labels":["bug"],"assignees":["irma"]}`,
+		serviceToken,
+	)
 	if code != 200 || !strings.Contains(body, `"number":"1"`) {
 		t.Fatalf("create: %d %s", code, body)
 	}
@@ -337,7 +363,14 @@ func TestRESTWrites(t *testing.T) {
 	}
 
 	// Labels set with no values clear; unset assignees are left alone.
-	code, body = rest(t, h, "PATCH", "/v1/issues/1", `{"source":"gh","repository":"mrbean/teddy","title":"Bear found","state":"closed","labels":{}}`, serviceToken)
+	code, body = rest(
+		t,
+		h,
+		"PATCH",
+		"/v1/issues/1",
+		`{"source":"gh","repository":"mrbean/teddy","title":"Bear found","state":"closed","labels":{}}`,
+		serviceToken,
+	)
 	if code != 200 || !strings.Contains(body, `"state":"closed"`) || !strings.Contains(body, `"closedAt":"2024-02-01T00:00:00Z"`) {
 		t.Fatalf("update: %d %s", code, body)
 	}
@@ -346,7 +379,14 @@ func TestRESTWrites(t *testing.T) {
 	}
 
 	// GitLab looks up assignee IDs and closes with state_event.
-	code, body = rest(t, h, "PATCH", "/v1/issues/7", `{"source":"gl","repository":"mrbean/tools/cli","state":"closed","assignees":{"values":["alice"]},"body":""}`, serviceToken)
+	code, body = rest(
+		t,
+		h,
+		"PATCH",
+		"/v1/issues/7",
+		`{"source":"gl","repository":"mrbean/tools/cli","state":"closed","assignees":{"values":["alice"]},"body":""}`,
+		serviceToken,
+	)
 	if code != 200 {
 		t.Fatalf("gitlab update: %d %s", code, body)
 	}
@@ -365,6 +405,7 @@ func TestRESTWrites(t *testing.T) {
 	if got, _ := json.Marshal(fj.sent(t, "PUT")); string(got) != `{"labels":[3]}` {
 		t.Errorf("Forgejo labels got %s", got)
 	}
+
 	code, body = rest(t, h, "PATCH", "/v1/issues/5", `{"source":"fj","repository":"mrbean/garden","labels":{"values":[]}}`, serviceToken)
 	if code != 200 {
 		t.Fatalf("forgejo clear: %d %s", code, body)
@@ -382,7 +423,14 @@ func TestRESTWrites(t *testing.T) {
 	}
 
 	// Unknown body fields are rejected rather than silently ignored.
-	if code, _ := rest(t, h, "PATCH", "/v1/issues/1", `{"source":"gh","repository":"mrbean/teddy","milestone":"v2"}`, serviceToken); code != http.StatusBadRequest {
+	if code, _ := rest(
+		t,
+		h,
+		"PATCH",
+		"/v1/issues/1",
+		`{"source":"gh","repository":"mrbean/teddy","milestone":"v2"}`,
+		serviceToken,
+	); code != http.StatusBadRequest {
 		t.Errorf("unknown field: %d", code)
 	}
 }
@@ -390,8 +438,11 @@ func TestRESTWrites(t *testing.T) {
 func TestRESTErrors(t *testing.T) {
 	_, h, _, _, _ := setup(t)
 	for _, tc := range []struct {
-		method, target, body, token string
-		code                        int
+		method string
+		target string
+		body   string
+		token  string
+		code   int
 	}{
 		{"GET", "/v1/sources", "", "", http.StatusUnauthorized},
 		{"GET", "/v1/issues", "", "wrong", http.StatusUnauthorized},
@@ -425,7 +476,8 @@ func TestRESTErrors(t *testing.T) {
 		if code != tc.code {
 			t.Errorf("%s %s %s: %d %s, want %d", tc.method, tc.target, tc.body, code, body, tc.code)
 		}
-		if code >= 400 && (strings.Contains(body, "mrbean") || strings.Contains(body, "nobody") || strings.Contains(body, "upstream") || strings.Contains(body, "Validation")) {
+		if code >= 400 && (strings.Contains(body, "mrbean") ||
+			strings.Contains(body, "nobody") || strings.Contains(body, "upstream") || strings.Contains(body, "Validation")) {
 			t.Errorf("%s %s: error echoes input or forge response: %s", tc.method, tc.target, body)
 		}
 	}
@@ -451,6 +503,20 @@ func TestRPCError(t *testing.T) {
 	}
 }
 
+func TestCount(t *testing.T) {
+	for n, want := range map[int]int32{
+		-1:                0,
+		0:                 0,
+		7:                 7,
+		math.MaxInt32:     math.MaxInt32,
+		math.MaxInt32 + 1: math.MaxInt32,
+	} {
+		if got := count(n); got != want {
+			t.Errorf("count(%d) = %d, want %d", n, got, want)
+		}
+	}
+}
+
 func TestMetadataHeadersCannotAuthenticate(t *testing.T) {
 	_, h, _, _, _ := setup(t)
 	r := httptest.NewRequest("GET", "/v1/sources", nil)
@@ -468,25 +534,31 @@ func TestGRPC(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	srv := grpc.NewServer()
-	pb.RegisterIssuesServer(srv, s)
-	go srv.Serve(lis)
+	pb.RegisterIssuesServiceServer(srv, s)
+	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(srv.Stop)
 	conn, err := grpc.NewClient(lis.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { conn.Close() })
-	c := pb.NewIssuesClient(conn)
 
-	if _, err := c.ListSources(context.Background(), &emptypb.Empty{}); status.Code(err) != codes.Unauthenticated {
+	t.Cleanup(func() { conn.Close() })
+	c := pb.NewIssuesServiceClient(conn)
+
+	if _, err := c.ListSources(context.Background(), &pb.ListSourcesRequest{}); status.Code(err) != codes.Unauthenticated {
 		t.Fatalf("no token: %v", err)
 	}
+
 	ctx := metadata.AppendToOutgoingContext(context.Background(), "authorization", "Bearer "+serviceToken)
-	iss, err := c.GetIssue(ctx, &pb.IssueRequest{Repository: "mrbean/tools/cli", Number: 7})
-	if err != nil || iss.GetSource().GetId() != "gl" || iss.GetNumber() != 7 || iss.GetAuthor().GetLogin() != "mrbean" || iss.GetClosedAt() != nil {
+	got, err := c.GetIssue(ctx, &pb.GetIssueRequest{Repository: "mrbean/tools/cli", Number: 7})
+	iss := got.GetIssue()
+	if err != nil ||
+		iss.GetSource().GetId() != "gl" || iss.GetNumber() != 7 || iss.GetAuthor().GetLogin() != "mrbean" || iss.GetClosedAt() != nil {
 		t.Fatalf("get: %v %v", iss, err)
 	}
+
 	list, err := c.ListIssues(ctx, &pb.ListIssuesRequest{Repository: "mrbean/teddy", Labels: []string{"bug"}})
 	if err != nil || len(list.GetIssues()) != 1 || list.GetIssues()[0].GetComments() != 2 {
 		t.Fatalf("list: %v %v", list, err)
@@ -494,27 +566,41 @@ func TestGRPC(t *testing.T) {
 
 	// Assignees set with no values clear; unset labels are left alone.
 	title := "Bear found"
-	iss, err = c.UpdateIssue(ctx, &pb.UpdateIssueRequest{Source: "gh", Repository: "mrbean/teddy", Number: 1, Title: &title, Assignees: &pb.StringList{}})
-	if err != nil || iss.GetState() != "closed" {
-		t.Fatalf("update: %v %v", iss, err)
+	updated, err := c.UpdateIssue(ctx, &pb.UpdateIssueRequest{
+		Source:     "gh",
+		Repository: "mrbean/teddy",
+		Number:     1,
+		Title:      &title,
+		Assignees:  &pb.StringList{},
+	})
+	if err != nil || updated.GetIssue().GetState() != "closed" {
+		t.Fatalf("update: %v %v", updated, err)
 	}
 	if got, _ := json.Marshal(gh.sent(t, "PATCH")); string(got) != `{"assignees":[],"title":"Bear found"}` {
 		t.Errorf("GitHub update got %s", got)
 	}
 
-	cm, err := c.AddComment(ctx, &pb.AddCommentRequest{Source: "gh", Repository: "mrbean/teddy", Number: 1, Body: "Seen him"})
-	if err != nil || cm.GetAuthor().GetLogin() != "irma" {
+	cm, err := c.AddComment(ctx, &pb.AddCommentRequest{
+		Source:     "gh",
+		Repository: "mrbean/teddy",
+		Number:     1,
+		Body:       "Seen him",
+	})
+	if err != nil || cm.GetComment().GetAuthor().GetLogin() != "irma" {
 		t.Fatalf("comment: %v %v", cm, err)
 	}
-	cms, err := c.ListComments(ctx, &pb.IssueRequest{Repository: "mrbean/teddy", Number: 1})
+
+	cms, err := c.ListComments(ctx, &pb.ListCommentsRequest{Repository: "mrbean/teddy", Number: 1})
 	if err != nil || len(cms.GetComments()) != 1 {
 		t.Fatalf("comments: %v %v", cms, err)
 	}
+
 	_, err = c.CreateIssue(ctx, &pb.CreateIssueRequest{Source: "gh", Repository: "mrbean/teddy"})
 	if status.Code(err) != codes.InvalidArgument {
 		t.Fatalf("create without title: %v", err)
 	}
-	_, err = c.GetIssue(ctx, &pb.IssueRequest{Repository: "mrbean/shared", Number: 4})
+
+	_, err = c.GetIssue(ctx, &pb.GetIssueRequest{Repository: "mrbean/shared", Number: 4})
 	if status.Code(err) != codes.FailedPrecondition || status.Convert(err).Message() != codes.FailedPrecondition.String() {
 		t.Fatalf("ambiguous: %v", err)
 	}

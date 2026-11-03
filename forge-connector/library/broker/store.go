@@ -8,6 +8,13 @@ import "context"
 // Connection metadata and sealed credentials are written atomically. Store is
 // trusted: it exposes ciphertext and client hashes, never plaintext credentials.
 type Store interface {
+	ForgeStore
+	ConnectionStore
+	ClientStore
+}
+
+// ForgeStore persists forges, under the Store rules.
+type ForgeStore interface {
 	// CreateForge inserts a forge with a nonempty ID, kind and API base URL.
 	CreateForge(context.Context, Forge) error
 	// GetForge returns forge metadata.
@@ -20,7 +27,11 @@ type Store interface {
 	UpdateForge(context.Context, Forge) error
 	// DeleteForge fails with ErrConflict while any connection references it.
 	DeleteForge(context.Context, ID) error
+}
 
+// ConnectionStore persists connections and their sealed credentials, under
+// the Store rules.
+type ConnectionStore interface {
 	// CreateConnection inserts metadata and nonempty ciphertext. ForgeID must exist.
 	CreateConnection(context.Context, Connection, []byte) error
 	// GetConnection returns metadata only.
@@ -35,7 +46,10 @@ type Store interface {
 	// DeleteConnection atomically deletes metadata and ciphertext, and removes
 	// the ID from all client scopes.
 	DeleteConnection(context.Context, ID) error
+}
 
+// ClientStore persists clients, under the Store rules.
+type ClientStore interface {
 	// CreateClient inserts a client. All scoped connections must exist, and an
 	// AllConnections client lists none.
 	CreateClient(context.Context, Client) error

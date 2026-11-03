@@ -14,18 +14,18 @@ All native writes use the connector session's identity and permissions. Native
 feedback is immediately published; standalone feedback stays local. This table
 describes the implemented adapters, not every feature in the forge's UI.
 
-| Operation | GitHub | GitLab | Forgejo |
-| --- | --- | --- | --- |
-| Request reviewers | Usernames | Numeric user IDs; replaces list | Usernames |
-| General feedback | Review body | Discussion | Review body |
-| Approval | Review at commit | Approval guarded by `sha` | Review at commit |
-| Request changes | Review | Unsupported | Review |
-| Inline comments | Old/new lines | Old/new lines | Old/new lines |
-| Same-side ranges | Yes | Unsupported | Unsupported |
-| File comments | Yes | Unsupported | Unsupported |
-| Replies | Root review comment | Diff discussion | Unsupported |
-| Resolve/reopen | Unsupported in this REST adapter | Resolvable diff discussion | Unsupported |
-| Read reviews/status | Native reviews | Approval state and discussions | Native reviews |
+| Operation           | GitHub                           | GitLab                          | Forgejo          |
+| ------------------- | -------------------------------- | ------------------------------- | ---------------- |
+| Request reviewers   | Usernames                        | Numeric user IDs; replaces list | Usernames        |
+| General feedback    | Review body                      | Discussion                      | Review body      |
+| Approval            | Review at commit                 | Approval guarded by `sha`       | Review at commit |
+| Request changes     | Review                           | Unsupported                     | Review           |
+| Inline comments     | Old/new lines                    | Old/new lines                   | Old/new lines    |
+| Same-side ranges    | Yes                              | Unsupported                     | Unsupported      |
+| File comments       | Yes                              | Unsupported                     | Unsupported      |
+| Replies             | Root review comment              | Diff discussion                 | Unsupported      |
+| Resolve/reopen      | Unsupported in this REST adapter | Resolvable diff discussion      | Unsupported      |
+| Read reviews/status | Native reviews                   | Approval state and discussions  | Native reviews   |
 
 GitLab approval and discussion APIs are separate: an approval with a body is
 unsupported; send discussion feedback separately. Quick actions in GitLab

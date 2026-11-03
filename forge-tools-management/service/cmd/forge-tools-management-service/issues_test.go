@@ -33,9 +33,11 @@ func TestRunWithNativeIssues(t *testing.T) {
 		calls.Add(1)
 		if r.Header.Get("Authorization") != "Bearer forge-synthetic" {
 			t.Error("wrong forge credential")
-			http.Error(w, "denied", 401)
+			http.Error(w, "denied", http.StatusUnauthorized)
+
 			return
 		}
+
 		switch {
 		case mode.Load() == 1:
 			http.Error(w, "forge-synthetic issues-synthetic", 500)
@@ -51,31 +53,44 @@ func TestRunWithNativeIssues(t *testing.T) {
 		}
 	}))
 	defer forge.Close()
-	session, err := github.Provider{}.Open(context.Background(), forgeauth.Connection{BaseURL: forge.URL}, forgeauth.StaticToken("forge-synthetic"))
+	session, err := github.Provider{}.Open(
+		context.Background(),
+		forgeauth.Connection{BaseURL: forge.URL},
+		forgeauth.StaticToken("forge-synthetic"),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	client, err := issues.New(issues.Source{ID: "personal", Session: session})
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	backend, err := issueapi.New(issueapi.Fixed(client), forgeauth.StaticToken("issues-synthetic"), time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	g := grpc.NewServer()
-	issuespb.RegisterIssuesServer(g, backend)
+	issuespb.RegisterIssuesServiceServer(g, backend)
 	go func() { _ = g.Serve(l) }()
 	defer g.Stop()
 	t.Setenv("MANAGEMENT_TEST_ISSUES", "issues-synthetic")
-	s, err := parse([]string{"--token-file=" + writeToken(t, "operator-synthetic"), "--http-listen=127.0.0.1:0", "--grpc-listen=127.0.0.1:0", "--issues-address=" + l.Addr().String(), "--issues-token-env=MANAGEMENT_TEST_ISSUES", "--issues-insecure=true"}, func(string) string { return "" }, io.Discard)
+	s, err := parse(
+		[]string{"--token-file=" + writeToken(t, "operator-synthetic"), "--http-listen=127.0.0.1:0", "--grpc-listen=127.0.0.1:0", "--issues-address=" + l.Addr().String(), "--issues-token-env=MANAGEMENT_TEST_ISSUES", "--issues-insecure=true"},
+		func(string) string { return "" },
+		io.Discard,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	a := startManagement(t, s)
 	for _, tc := range []struct {
 		name, query string
@@ -111,10 +126,12 @@ func TestRunWithNativeIssues(t *testing.T) {
 					}
 				}
 			}
+
 			code, body = httpGet(t, a[1], "/issues"+tc.query, true)
 			if code != tc.code || !strings.Contains(body, tc.message) || strings.Contains(body, "<script>") {
 				t.Fatalf("web: %d %s", code, body)
 			}
+
 			for _, secret := range []string{"forge-synthetic", "issues-synthetic", "operator-synthetic", "body-synthetic"} {
 				if strings.Contains(body, secret) {
 					t.Fatal("secret or issue body leaked in HTML")
@@ -122,6 +139,7 @@ func TestRunWithNativeIssues(t *testing.T) {
 			}
 		})
 	}
+
 	before := calls.Load()
 	t.Setenv("MANAGEMENT_TEST_ISSUES", "rejected-issues-synthetic")
 	if code, _ := httpGet(t, a[1], "/v1/issues", false); code != 503 {

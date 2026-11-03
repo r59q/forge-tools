@@ -2,10 +2,12 @@ package review
 
 import (
 	"context"
-	"github.com/r59q/forge-tools/forge-core/forgeapi/forgeauth"
+
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/r59q/forge-tools/forge-core/forgeapi/forgeauth"
 )
 
 func TestForgejoComparisonDeduplicatesPaths(t *testing.T) {
@@ -39,7 +41,12 @@ func TestForgejoComparisonDeduplicatesPaths(t *testing.T) {
 		}
 	})
 	ctx := context.Background()
-	in := Input{Kind: "comparison", Ref: Ref{Source: "source", Repository: "o/r"}, From: "main", To: "topic"}
+	in := Input{
+		Kind: "comparison",
+		Ref:  Ref{Source: "source", Repository: "o/r"},
+		From: "main",
+		To:   "topic",
+	}
 	s, err := c.CreateSubject(ctx, in)
 	if err != nil {
 		t.Fatal(err)
@@ -50,18 +57,26 @@ func TestForgejoComparisonDeduplicatesPaths(t *testing.T) {
 	if len(fetches) != 4 {
 		t.Fatalf("file requests: %v", fetches)
 	}
+
 	for path, count := range fetches {
 		if count != 1 {
 			t.Errorf("fetched %s %d times", path, count)
 		}
 	}
+
 	for _, path := range []string{"a", "b"} {
 		for _, side := range []string{"old", "new"} {
-			if err := ValidateAnchor(s, &Anchor{Path: path, Side: side, Start: 1, End: 1}); err != nil {
+			if err := ValidateAnchor(s, &Anchor{
+				Path:  path,
+				Side:  side,
+				Start: 1,
+				End:   1,
+			}); err != nil {
 				t.Fatal(err)
 			}
 		}
 	}
+
 	duplicate = false
 	unique, err := c.CreateSubject(ctx, in)
 	if err != nil {

@@ -104,6 +104,14 @@ type Thread struct {
 	Resolved  bool      `json:"resolved"`
 }
 
+// Review statuses. Requested is open; the others are submitted assessments.
+const (
+	StatusRequested        = "requested"
+	StatusCommented        = "commented"
+	StatusApproved         = "approved"
+	StatusChangesRequested = "changes_requested"
+)
+
 // Review tracks one standalone assignment and its assessment. Status is
 // requested, commented, approved or changes_requested. Storage is always local.
 type Review struct {

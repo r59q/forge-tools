@@ -5,6 +5,7 @@
 FROM --platform=$BUILDPLATFORM golang:1.27-alpine@sha256:d200d2dd76b03a99b52651fd1325aff7dcd35422c35c01bac56571b0507f3deb AS build
 WORKDIR /src
 COPY forge-core/forgeapi/go.mod forge-core/forgeapi/
+COPY forge-core/servicekit/go.mod forge-core/servicekit/go.sum forge-core/servicekit/
 COPY forge-connector/library/go.mod forge-connector/library/go.sum forge-connector/library/
 COPY forge-checkouts/library/go.mod forge-checkouts/library/
 COPY forge-checkouts/service/go.mod forge-checkouts/service/go.sum forge-checkouts/service/
@@ -12,6 +13,7 @@ WORKDIR /src/forge-checkouts/service
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
 WORKDIR /src
 COPY forge-core/forgeapi/ forge-core/forgeapi/
+COPY forge-core/servicekit/ forge-core/servicekit/
 COPY forge-connector/library/ forge-connector/library/
 COPY forge-checkouts/library/ forge-checkouts/library/
 COPY forge-checkouts/service/ forge-checkouts/service/

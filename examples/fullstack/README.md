@@ -4,7 +4,8 @@ Runs the whole stack with Docker Compose: the
 [forge-connector](../../forge-connector/) broker and proxy, the
 [repositories service](../../forge-repositories/service/), the
 [issues service](../../forge-issues/service/), the
-[checkouts service](../../forge-checkouts/service/) and the
+[checkouts service](../../forge-checkouts/service/), the
+[actions service](../../forge-actions/service/) and the
 [management interface](../../forge-tools-management/). You connect forges in
 the browser.
 
@@ -27,20 +28,22 @@ options.
 existing `.env` it adds only the missing secrets, so run it again after
 updating this example. It never changes existing values.
 
-| Secret | Used for |
-| --- | --- |
-| `FORGE_BROKER_KEY` | Encrypts stored forge tokens. Back it up; losing it loses them. |
-| `FORGE_BROKER_ADMIN_TOKEN` | Lets management administer the broker. |
-| `FORGE_MANAGEMENT_TOKEN` | Your password for the management interface. |
-| `FORGE_PROXY_TOKEN` | Lets the proxy fetch forge tokens from the broker. |
+| Secret                               | Used for                                                         |
+| ------------------------------------ | ---------------------------------------------------------------- |
+| `FORGE_BROKER_KEY`                   | Encrypts stored forge tokens. Back it up; losing it loses them.  |
+| `FORGE_BROKER_ADMIN_TOKEN`           | Lets management administer the broker.                           |
+| `FORGE_MANAGEMENT_TOKEN`             | Your password for the management interface.                      |
+| `FORGE_PROXY_TOKEN`                  | Lets the proxy fetch forge tokens from the broker.               |
 | `FORGE_REPOSITORIES_CONNECTOR_TOKEN` | Lets the repositories service use connections through the proxy. |
-| `FORGE_REPOSITORIES_TOKEN` | Lets management call the repositories service. |
-| `FORGE_ISSUES_CONNECTOR_TOKEN` | Lets the issues service use connections through the proxy. |
-| `FORGE_ISSUES_TOKEN` | Lets management call the issues service. |
-| `FORGE_CHECKOUTS_CONNECTOR_TOKEN` | Lets checkouts fetch repositories through the proxy. |
-| `FORGE_CHECKOUTS_TOKEN` | Authenticates checkout REST/gRPC callers. |
+| `FORGE_REPOSITORIES_TOKEN`           | Lets management call the repositories service.                   |
+| `FORGE_ISSUES_CONNECTOR_TOKEN`       | Lets the issues service use connections through the proxy.       |
+| `FORGE_ISSUES_TOKEN`                 | Lets management call the issues service.                         |
+| `FORGE_CHECKOUTS_CONNECTOR_TOKEN`    | Lets checkouts fetch repositories through the proxy.             |
+| `FORGE_CHECKOUTS_TOKEN`              | Authenticates checkout REST/gRPC callers.                        |
+| `FORGE_ACTIONS_CONNECTOR_TOKEN`      | Lets actions read pipelines through the proxy.                   |
+| `FORGE_ACTIONS_TOKEN`                | Authenticates actions REST/gRPC callers and management.          |
 
-At startup, management registers the proxy, repositories, issues and checkouts tokens
+At startup, management registers the proxy, repositories, issues, checkouts and actions tokens
 in the broker. To rotate any secret except `FORGE_BROKER_KEY`, change it in
 `.env` and run `docker compose up -d` again.
 
@@ -49,7 +52,7 @@ in the broker. To rotate any secret except `FORGE_BROKER_KEY`, change it in
 1. Open `http://127.0.0.1:8083/` and sign in as `operator`, with
    `FORGE_MANAGEMENT_TOKEN` from `.env` as the password.
 2. Go to **Connections** and add a forge account: choose the forge, enter an
-   access token with read access to your repositories and issues, and
+   access token with read access to your repositories, issues and pipeline data, and
    optionally a host for self-hosted forges, such as `gitlab.example.com`.
    The token is checked with the forge, stored encrypted and never shown
    again.
@@ -58,6 +61,8 @@ in the broker. To rotate any secret except `FORGE_BROKER_KEY`, change it in
    accounts. Filter by state, or show the issues they created. On
    **Repositories**, **Issues** under a repository lists that repository's
    issues.
+
+5. On **Repositories**, choose **Pipelines** to browse executions, jobs and logs.
 
 Add more accounts or forges the same way. Use **Test** to recheck a token,
 **Replace token** to rotate it and **Remove** to delete a connection. Changes
@@ -68,7 +73,7 @@ tokens*. GitLab and Forgejo have personal access tokens in user settings.
 
 ## Notes
 
-- Management and checkouts are reachable from the host, on `127.0.0.1`. The other
+- Management, checkouts and actions are reachable from the host, on `127.0.0.1`. The other
   services talk over the Compose network in plaintext; use TLS endpoints
   for remote access.
 - All operators see what the connected accounts can see. Management grants
@@ -105,3 +110,16 @@ rm .env
 ```
 
 Close the browser session to clear its sign-in.
+
+## Pipelines
+
+The actions API listens on `127.0.0.1:8089` (REST) and `127.0.0.1:9099`
+(gRPC), authenticated with `FORGE_ACTIONS_TOKEN`. Management uses the internal
+endpoint and adds Pipelines links to repository rows.
+
+GitHub downloads redirect to object storage. The proxy's
+`FORGE_PROXY_DOWNLOAD_HOSTS` defaults here to `*.blob.core.windows.net` and
+`*.actions.githubusercontent.com`. Downloads to those HTTPS hosts carry no
+forge or caller credentials. Set a comma-separated host list for other storage
+providers; an explicitly empty value disables external downloads. Rerun
+`init-env.sh` to add the two new actions tokens to an existing installation.

@@ -21,6 +21,7 @@ func (u wireUser) user() User {
 	if u.Username != "" {
 		return User{u.Username, u.WebURL}
 	}
+
 	return User{u.Login, u.HTMLURL}
 }
 
@@ -40,51 +41,91 @@ type proposal struct {
 	files       *int
 }
 
+// wireProposal is a GitHub or Forgejo pull request, or a GitLab merge
+// request.
+type wireProposal struct {
+	ID             int64
+	Number         int64
+	IID            int64
+	NodeID         string `json:"node_id"`
+	Title          string
+	Body           string
+	Description    string
+	State          string
+	Draft          bool
+	WorkInProgress bool `json:"work_in_progress"`
+	Merged         bool
+	User           wireUser
+	Author         wireUser
+	Head           wireBranch
+	Base           wireBranch
+	SourceBranch   string `json:"source_branch"`
+	TargetBranch   string `json:"target_branch"`
+	SHA            string
+	DiffRefs       struct {
+		Head   string `json:"head_sha"`
+		Target string `json:"start_sha"`
+		Base   string `json:"base_sha"`
+	} `json:"diff_refs"`
+	MergeBase           string `json:"merge_base"`
+	Mergeable           *bool
+	MergeableState      string    `json:"mergeable_state"`
+	DetailedMergeStatus string    `json:"detailed_merge_status"`
+	ChangedFiles        *int      `json:"changed_files"`
+	HTMLURL             string    `json:"html_url"`
+	WebURL              string    `json:"web_url"`
+	CreatedAt           time.Time `json:"created_at"`
+	UpdatedAt           time.Time `json:"updated_at"`
+	ClosedAt            time.Time `json:"closed_at"`
+	MergedAt            time.Time `json:"merged_at"`
+	SourceProjectID     int64     `json:"source_project_id"`
+	TargetProjectID     int64     `json:"target_project_id"`
+}
+
+// decode reads a proposal from path on s.
 func decode(s Source, path string, raw json.RawMessage) (proposal, error) {
-	var w struct {
-		ID             int64
-		Number         int64
-		IID            int64
-		NodeID         string `json:"node_id"`
-		Title          string
-		Body           string
-		Description    string
-		State          string
-		Draft          bool
-		WorkInProgress bool `json:"work_in_progress"`
-		Merged         bool
-		User           wireUser
-		Author         wireUser
-		Head           wireBranch
-		Base           wireBranch
-		SourceBranch   string `json:"source_branch"`
-		TargetBranch   string `json:"target_branch"`
-		SHA            string
-		DiffRefs       struct {
-			Head   string `json:"head_sha"`
-			Target string `json:"start_sha"`
-			Base   string `json:"base_sha"`
-		} `json:"diff_refs"`
-		MergeBase           string `json:"merge_base"`
-		Mergeable           *bool
-		MergeableState      string    `json:"mergeable_state"`
-		DetailedMergeStatus string    `json:"detailed_merge_status"`
-		ChangedFiles        *int      `json:"changed_files"`
-		HTMLURL             string    `json:"html_url"`
-		WebURL              string    `json:"web_url"`
-		CreatedAt           time.Time `json:"created_at"`
-		UpdatedAt           time.Time `json:"updated_at"`
-		ClosedAt            time.Time `json:"closed_at"`
-		MergedAt            time.Time `json:"merged_at"`
-		SourceProjectID     int64     `json:"source_project_id"`
-		TargetProjectID     int64     `json:"target_project_id"`
-	}
+	var w wireProposal
 	if err := json.Unmarshal(raw, &w); err != nil {
 		return proposal{}, err
 	}
-	c := ChangeRequest{Ref: Ref{s.ID, path, w.Number}, Kind: s.Session.Kind, ID: strconv.FormatInt(w.ID, 10), Title: w.Title, Description: w.Body,
-		Author: w.User.user(), SourceBranch: w.Head.Ref, TargetBranch: w.Base.Ref, Revision: Revision{w.Head.SHA, w.Base.SHA, w.MergeBase},
-		State: State(w.State), Draft: w.Draft, WebURL: w.HTMLURL, CreatedAt: w.CreatedAt, UpdatedAt: w.UpdatedAt, ClosedAt: w.ClosedAt, MergedAt: w.MergedAt}
+
+	c := w.change(s, path)
+	status := w.MergeableState
+	if s.Session.Kind == forgeauth.GitLab {
+		w.gitlab(&c, path)
+		status = w.DetailedMergeStatus
+	}
+
+	if w.Merged || !w.MergedAt.IsZero() || w.State == string(Merged) {
+		c.State = Merged
+	}
+	if c.Ref.Number <= 0 || !validState(s.Session.Kind, c.State) {
+		return proposal{}, fmt.Errorf("changes: invalid proposal response")
+	}
+
+	return proposal{c, w.NodeID, w.Mergeable, status, w.ChangedFiles}, nil
+}
+
+// change reads the GitHub and Forgejo fields of w.
+func (w wireProposal) change(s Source, path string) ChangeRequest {
+	c := ChangeRequest{
+		Ref:          Ref{s.ID, path, w.Number},
+		Kind:         s.Session.Kind,
+		ID:           strconv.FormatInt(w.ID, 10),
+		Title:        w.Title,
+		Description:  w.Body,
+		Author:       w.User.user(),
+		SourceBranch: w.Head.Ref,
+		TargetBranch: w.Base.Ref,
+		Revision:     Revision{w.Head.SHA, w.Base.SHA, w.MergeBase},
+		State:        State(w.State),
+		Draft:        w.Draft,
+		WebURL:       w.HTMLURL,
+		CreatedAt:    w.CreatedAt,
+		UpdatedAt:    w.UpdatedAt,
+		ClosedAt:     w.ClosedAt,
+		MergedAt:     w.MergedAt,
+	}
 	if s.Session.Kind == forgeauth.Forgejo && w.Head.Label != "" {
 		// Forgejo keeps the original name in label when ref becomes a PR ref.
 		c.SourceBranch = w.Head.Label
@@ -95,38 +136,43 @@ func decode(s Source, path string, raw json.RawMessage) (proposal, error) {
 	if w.Base.Repo != nil && w.Base.Repo.FullName != "" {
 		c.Ref.Repository = w.Base.Repo.FullName
 	}
-	status := w.MergeableState
-	if s.Session.Kind == forgeauth.GitLab {
-		c.Ref.Number = w.IID
-		c.Description = w.Description
-		c.Author = w.Author.user()
-		c.WebURL = w.WebURL
-		c.SourceBranch = w.SourceBranch
-		c.TargetBranch = w.TargetBranch
-		c.Revision = Revision{w.DiffRefs.Head, w.DiffRefs.Target, w.DiffRefs.Base}
-		if c.Revision.Head == "" {
-			c.Revision.Head = w.SHA
-		}
-		if w.SourceProjectID != 0 && w.SourceProjectID == w.TargetProjectID {
-			c.SourceRepository = path
-		}
-		c.Draft = w.Draft || w.WorkInProgress
-		if w.State == "opened" {
-			c.State = Open
-		}
-		status = w.DetailedMergeStatus
+
+	return c
+}
+
+// gitlab overwrites c with the GitLab fields of w.
+func (w wireProposal) gitlab(c *ChangeRequest, path string) {
+	c.Ref.Number = w.IID
+	c.Description = w.Description
+	c.Author = w.Author.user()
+	c.WebURL = w.WebURL
+	c.SourceBranch = w.SourceBranch
+	c.TargetBranch = w.TargetBranch
+	c.Revision = Revision{w.DiffRefs.Head, w.DiffRefs.Target, w.DiffRefs.Base}
+	if c.Revision.Head == "" {
+		c.Revision.Head = w.SHA
 	}
-	if w.Merged || !w.MergedAt.IsZero() || w.State == "merged" {
-		c.State = Merged
+	if w.SourceProjectID != 0 && w.SourceProjectID == w.TargetProjectID {
+		c.SourceRepository = path
 	}
-	validState := c.State == Open || c.State == Closed || c.State == Merged
-	if s.Session.Kind == forgeauth.GitLab && c.State == Locked {
-		validState = true
+
+	c.Draft = w.Draft || w.WorkInProgress
+	if w.State == "opened" {
+		c.State = Open
 	}
-	if c.Ref.Number <= 0 || !validState {
-		return proposal{}, fmt.Errorf("changes: invalid proposal response")
+}
+
+// validState reports whether a forge of kind may report state. Only GitLab
+// locks proposals.
+func validState(kind forgeauth.Kind, state State) bool {
+	switch state {
+	case Open, Closed, Merged:
+		return true
+	case Locked:
+		return kind == forgeauth.GitLab
 	}
-	return proposal{c, w.NodeID, w.Mergeable, status, w.ChangedFiles}, nil
+
+	return false
 }
 
 // draftTitle uses the default GitLab and Forgejo draft prefixes. Native titles
@@ -142,12 +188,15 @@ func draftTitle(title string, draft bool) string {
 				break
 			}
 		}
+
 		if !trimmed {
 			break
 		}
 	}
+
 	if draft {
 		return "Draft: " + title
 	}
+
 	return title
 }

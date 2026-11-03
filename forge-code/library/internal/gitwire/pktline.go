@@ -44,6 +44,7 @@ func NewPktReader(r io.Reader) *PktReader {
 	if !ok {
 		br = bufio.NewReaderSize(r, MaxPktLen)
 	}
+
 	return &PktReader{r: br}
 }
 
@@ -59,16 +60,20 @@ func (p *PktReader) Next() (PktKind, []byte, error) {
 		if errors.Is(err, io.ErrUnexpectedEOF) {
 			return 0, nil, protoErr("truncated pkt-line length")
 		}
+
 		return 0, nil, err
 	}
+
 	n := 0
 	for _, c := range hdr {
 		v, ok := hexVal(c)
 		if !ok {
 			return 0, nil, protoErr("bad pkt-line length %q", clean(hdr[:]))
 		}
+
 		n = n<<4 | v
 	}
+
 	switch {
 	case n == 0:
 		return PktFlush, nil, nil
@@ -79,13 +84,16 @@ func (p *PktReader) Next() (PktKind, []byte, error) {
 	case n < 4 || n > MaxPktLen:
 		return 0, nil, protoErr("bad pkt-line length %d", n)
 	}
+
 	data := p.buf[:n-4]
 	if _, err := io.ReadFull(p.r, data); err != nil {
 		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 			return 0, nil, protoErr("truncated pkt-line")
 		}
+
 		return 0, nil, err
 	}
+
 	return PktData, data, nil
 }
 
@@ -101,6 +109,7 @@ func hexVal(c byte) (int, bool) {
 	case 'A' <= c && c <= 'F':
 		return int(c-'A') + 10, true
 	}
+
 	return 0, false
 }
 
@@ -123,6 +132,7 @@ func (p *PktWriter) Data(b []byte) error {
 		p.err = fmt.Errorf("gitwire: pkt-line payload of %d bytes", len(b))
 		return p.err
 	}
+
 	var hdr [4]byte
 	const digits = "0123456789abcdef"
 	n := len(b) + 4
@@ -130,15 +140,28 @@ func (p *PktWriter) Data(b []byte) error {
 		hdr[i] = digits[n&0xf]
 		n >>= 4
 	}
+
 	if _, p.err = p.w.Write(hdr[:]); p.err == nil {
 		_, p.err = p.w.Write(b)
 	}
+
 	return p.err
 }
 
 // Line writes s followed by a newline as one data line.
 func (p *PktWriter) Line(s string) error {
 	return p.Data([]byte(s + "\n"))
+}
+
+// Lines writes each of lines as with Line.
+func (p *PktWriter) Lines(lines ...string) error {
+	for _, s := range lines {
+		if err := p.Line(s); err != nil {
+			return err
+		}
+	}
+
+	return p.err
 }
 
 // Flush writes a flush-pkt, "0000".
@@ -157,6 +180,7 @@ func (p *PktWriter) special(s string) error {
 	if p.err == nil {
 		_, p.err = io.WriteString(p.w, s)
 	}
+
 	return p.err
 }
 
@@ -179,12 +203,13 @@ func demux(pr *PktReader, w io.Writer, max int64) error {
 	var n int64
 	for {
 		kind, data, err := pr.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return protoErr("side-band stream ended without flush")
 		}
 		if err != nil {
 			return err
 		}
+
 		switch kind {
 		case PktFlush:
 			return nil
@@ -192,9 +217,11 @@ func demux(pr *PktReader, w io.Writer, max int64) error {
 		default:
 			return protoErr("unexpected special pkt-line in side-band stream")
 		}
+
 		if len(data) == 0 {
 			return protoErr("empty side-band line")
 		}
+
 		switch data[0] {
 		case bandData:
 			n += int64(len(data) - 1)

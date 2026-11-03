@@ -3,8 +3,6 @@ package proxy
 import (
 	"encoding/base64"
 	"errors"
-	"io"
-	"log"
 	"mime"
 	"net/http"
 	"net/http/httputil"
@@ -37,15 +35,23 @@ const (
 	infoRefs    = "info/refs"
 )
 
-// Request headers sent upstream. Everything else, including credentials and
-// cookies, is dropped.
-var gitRequestHeaders = []string{"Accept", "Accept-Encoding", "Content-Encoding", "Git-Protocol", "User-Agent"}
+// gitRequestHeaders lists the request headers sent upstream. Everything
+// else, including credentials and cookies, is dropped.
+func gitRequestHeaders() []string {
+	return []string{"Accept", "Accept-Encoding", "Content-Encoding", "Git-Protocol", "User-Agent"}
+}
 
-// Response headers returned to the caller. Location and WWW-Authenticate are
-// handled separately; everything else, including Set-Cookie, is dropped.
-var gitResponseHeaders = []string{
-	"Cache-Control", "Content-Encoding", "Content-Length", "Content-Type",
-	"Date", "Expires", "Pragma", "Retry-After", "Vary",
+// gitResponseHeader reports whether a response header is returned to the
+// caller. Location and WWW-Authenticate are handled separately; everything
+// else, including Set-Cookie, is dropped.
+func gitResponseHeader(name string) bool {
+	switch http.CanonicalHeaderKey(name) {
+	case "Cache-Control", "Content-Encoding", "Content-Length", "Content-Type",
+		"Date", "Expires", "Pragma", "Retry-After", "Vary":
+		return true
+	}
+
+	return false
 }
 
 // gitRoute is a parsed request on the Git route.
@@ -63,10 +69,12 @@ func (h *Handler) parseGitRoute(r *http.Request) (gitRoute, int) {
 	if u == nil || u.IsAbs() || u.Host != "" || u.User != nil || u.Opaque != "" || u.Fragment != "" {
 		return gitRoute{}, http.StatusBadRequest
 	}
+
 	rest, ok := strings.CutPrefix(u.EscapedPath(), GitPrefix)
 	if !ok {
 		return gitRoute{}, http.StatusNotFound
 	}
+
 	id, rest, ok := strings.Cut(rest, "/")
 	if !ok || id == "" {
 		return gitRoute{}, http.StatusNotFound
@@ -74,17 +82,25 @@ func (h *Handler) parseGitRoute(r *http.Request) (gitRoute, int) {
 	if !validID(id) {
 		return gitRoute{}, http.StatusBadRequest
 	}
+
 	repo, endpoint, code := parseRepoPath(rest)
 	if code != 0 {
 		return gitRoute{}, code
 	}
-	route := gitRoute{id: broker.ID(id), repo: repo, endpoint: endpoint, service: endpoint}
+
+	route := gitRoute{
+		id:       broker.ID(id),
+		repo:     repo,
+		endpoint: endpoint,
+		service:  endpoint,
+	}
 	if endpoint == infoRefs {
 		route.service = strings.TrimPrefix(u.RawQuery, "service=")
 	}
 	if !gitQuery(endpoint, u.RawQuery, u.ForceQuery) || (route.service == receivePack && !h.allowPush) {
 		return gitRoute{}, http.StatusNotFound
 	}
+
 	method := http.MethodPost
 	if endpoint == infoRefs {
 		method = http.MethodGet
@@ -104,6 +120,7 @@ func (h *Handler) parseGitRoute(r *http.Request) (gitRoute, int) {
 			return gitRoute{}, http.StatusUnsupportedMediaType
 		}
 	}
+
 	return route, 0
 }
 
@@ -117,22 +134,26 @@ func parseRepoPath(path string) (repo, endpoint string, code int) {
 			break
 		}
 	}
+
 	if endpoint == "" {
 		return "", "", http.StatusNotFound
 	}
 	if repo == "" {
 		return "", "", http.StatusBadRequest
 	}
+
 	for _, seg := range strings.Split(repo, "/") {
 		if strings.Trim(seg, ".") == "" {
 			return "", "", http.StatusBadRequest
 		}
+
 		for _, c := range seg {
-			if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '_' || c == '.') {
+			if !isIDChar(c) && c != '.' {
 				return "", "", http.StatusBadRequest
 			}
 		}
 	}
+
 	return repo, endpoint, 0
 }
 
@@ -144,18 +165,29 @@ func gitQuery(endpoint, rawQuery string, force bool) bool {
 	if endpoint == infoRefs {
 		return rawQuery == "service="+uploadPack || rawQuery == "service="+receivePack
 	}
+
 	return rawQuery == ""
 }
 
 func validID(id string) bool {
 	// Broker IDs are URL-safe opaque identifiers, never escaped path segments.
 	for _, c := range id {
-		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '_') {
+		if !isIDChar(c) {
 			return false
 		}
 	}
+
 	return id != ""
 }
+
+// isIDChar reports whether c is in [A-Za-z0-9_-].
+func isIDChar(c rune) bool {
+	return isLower(c) || c >= 'A' && c <= 'Z' || isDigit(c) || c == '-' || c == '_'
+}
+
+func isLower(c rune) bool { return c >= 'a' && c <= 'z' }
+
+func isDigit(c rune) bool { return c >= '0' && c <= '9' }
 
 // gitToken reads the caller's client token from a Bearer header, or from the
 // password of a Basic header, as Git clients send it.
@@ -163,18 +195,22 @@ func gitToken(h http.Header) (string, bool) {
 	if token, ok := forgeauth.AuthorizationToken(h, "Bearer"); ok {
 		return token, true
 	}
+
 	encoded, ok := forgeauth.AuthorizationToken(h, "Basic")
 	if !ok {
 		return "", false
 	}
+
 	decoded, err := base64.StdEncoding.DecodeString(encoded)
 	if err != nil {
 		return "", false
 	}
+
 	_, password, ok := strings.Cut(string(decoded), ":")
 	if !ok || !validToken(password) {
 		return "", false
 	}
+
 	return password, true
 }
 
@@ -184,16 +220,10 @@ func gitToken(h http.Header) (string, bool) {
 func (h *Handler) serveGit(w http.ResponseWriter, r *http.Request) {
 	route, code := h.parseGitRoute(r)
 	if code != 0 {
-		if code == http.StatusMethodNotAllowed {
-			allow := http.MethodPost
-			if route.endpoint == infoRefs {
-				allow = http.MethodGet
-			}
-			w.Header().Set("Allow", allow)
-		}
-		proxyError(w, code)
+		gitRouteError(w, route, code)
 		return
 	}
+
 	limit := MaxGitFetchBytes
 	if route.service == receivePack {
 		limit = h.maxPush
@@ -202,98 +232,139 @@ func (h *Handler) serveGit(w http.ResponseWriter, r *http.Request) {
 		proxyError(w, http.StatusRequestEntityTooLarge)
 		return
 	}
+
 	conn, err := h.verifier.Connection(r.Context(), route.id)
 	if err != nil {
 		gitDependencyError(w, err)
 		return
 	}
-	provider, err := h.registry.Provider(conn.Kind)
-	if err != nil {
-		proxyError(w, http.StatusBadGateway)
-		return
-	}
-	auth, ok := provider.(forgeauth.GitAuthenticator)
+
+	setToken, ok := h.gitTokenSetter(conn.Kind)
 	if !ok {
 		proxyError(w, http.StatusBadGateway)
 		return
 	}
+
 	token, ok := gitToken(r.Header)
 	if !ok {
 		gitUnauthorized(w)
 		return
 	}
-	if _, err := h.verifier.VerifyClient(r.Context(), forgeauth.StaticToken(token), route.id); err != nil {
-		gitDependencyError(w, err)
-		return
-	}
-	issued, err := h.issuer.IssueToken(r.Context(), route.id)
+
+	issued, err := h.issue(r.Context(), token, route.id, conn)
 	if err != nil {
 		gitDependencyError(w, err)
 		return
 	}
-	// Fail closed if metadata changed between authorization and issuance.
-	if issued.Kind != conn.Kind || issued.BaseURL != conn.BaseURL || !validToken(string(issued.Token)) {
-		proxyError(w, http.StatusBadGateway)
-		return
-	}
+
 	gitBase, ok := baseURL(issued.GitBaseURL)
 	if !ok {
 		proxyError(w, http.StatusBadGateway)
 		return
 	}
+
 	origin, ok := h.origin(r)
 	if !ok {
 		proxyError(w, http.StatusBadRequest)
 		return
 	}
+
 	target := gitTarget(gitBase, route.repo, route.endpoint, r.URL.RawQuery)
 	proxyBase := origin + GitPrefix + string(route.id)
 	if r.Method == http.MethodPost {
 		r.Body = http.MaxBytesReader(w, r.Body, limit)
 	}
-	p := httputil.ReverseProxy{
-		Transport:     h.transport,
-		FlushInterval: -1,
-		ErrorLog:      log.New(io.Discard, "", 0),
-		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, err error) {
-			var tooLarge *http.MaxBytesError
-			if errors.As(err, &tooLarge) {
-				proxyError(w, http.StatusRequestEntityTooLarge)
-				return
-			}
-			proxyError(w, http.StatusBadGateway)
-		},
-		Rewrite: func(pr *httputil.ProxyRequest) {
-			pr.Out.URL = target
-			pr.Out.Host = target.Host
-			out := http.Header{}
-			for _, name := range gitRequestHeaders {
-				if values := pr.In.Header.Values(name); len(values) > 0 {
-					out[name] = append([]string(nil), values...)
-				}
-			}
-			if protocol := out.Values("Git-Protocol"); len(protocol) != 1 || len(protocol[0]) > 256 {
-				out.Del("Git-Protocol")
-			}
-			if pr.In.Method == http.MethodPost {
-				out.Set("Content-Type", "application/x-"+route.service+"-request")
-			} else {
-				pr.Out.Body, pr.Out.ContentLength = nil, 0
-			}
-			pr.Out.Header = out
-			pr.Out.Trailer = nil
-			auth.SetGitToken(pr.Out.Header, string(issued.Token))
-		},
-		ModifyResponse: func(resp *http.Response) error {
-			if resp.StatusCode == http.StatusSwitchingProtocols {
-				return errors.New("proxy: upgrade refused")
-			}
-			return nil
-		},
-	}
+
+	p := h.gitProxy(target, route.service, setToken, string(issued.Token))
 	p.ServeHTTP(&gitResponseWriter{rw: w, clean: func(hd http.Header, code int) {
 		cleanGitHeaders(hd, code, gitBase, target, proxyBase, h.allowPush)
 	}}, r)
+}
+
+// gitRouteError rejects a request that parseGitRoute refused.
+func gitRouteError(w http.ResponseWriter, route gitRoute, code int) {
+	if code == http.StatusMethodNotAllowed {
+		allow := http.MethodPost
+		if route.endpoint == infoRefs {
+			allow = http.MethodGet
+		}
+
+		w.Header().Set("Allow", allow)
+	}
+
+	proxyError(w, code)
+}
+
+// gitTokenSetter returns the SetGitToken of kind's provider, if it has one.
+func (h *Handler) gitTokenSetter(kind forgeauth.Kind) (func(http.Header, string), bool) {
+	provider, err := h.registry.Provider(kind)
+	if err != nil {
+		return nil, false
+	}
+
+	auth, ok := provider.(forgeauth.GitAuthenticator)
+	if !ok {
+		return nil, false
+	}
+
+	return auth.SetGitToken, true
+}
+
+// gitProxy sends only allow-listed headers and the issued token to target,
+// and refuses protocol upgrades.
+func (h *Handler) gitProxy(target *url.URL, service string, setToken func(http.Header, string), token string) *httputil.ReverseProxy {
+	p := h.reverseProxy()
+
+	p.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, err error) {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			proxyError(w, http.StatusRequestEntityTooLarge)
+			return
+		}
+
+		proxyError(w, http.StatusBadGateway)
+	}
+
+	p.Rewrite = func(pr *httputil.ProxyRequest) {
+		pr.Out.URL = target
+		pr.Out.Host = target.Host
+		pr.Out.Header = gitHeadersForRequest(pr.In, service)
+		if pr.In.Method != http.MethodPost {
+			pr.Out.Body, pr.Out.ContentLength = nil, 0
+		}
+
+		pr.Out.Trailer = nil
+		setToken(pr.Out.Header, token)
+	}
+
+	p.ModifyResponse = func(resp *http.Response) error {
+		if resp.StatusCode == http.StatusSwitchingProtocols {
+			return errors.New("proxy: upgrade refused")
+		}
+
+		return nil
+	}
+
+	return p
+}
+
+func gitHeadersForRequest(request *http.Request, service string) http.Header {
+	headers := http.Header{}
+	for _, name := range gitRequestHeaders() {
+		if values := request.Header.Values(name); len(values) > 0 {
+			headers[name] = append([]string(nil), values...)
+		}
+	}
+
+	protocol := headers.Values("Git-Protocol")
+	if len(protocol) != 1 || len(protocol[0]) > 256 {
+		headers.Del("Git-Protocol")
+	}
+	if request.Method == http.MethodPost {
+		headers.Set("Content-Type", "application/x-"+service+"-request")
+	}
+
+	return headers
 }
 
 // gitTarget builds the upstream URL. The query is set only from the allow-list.
@@ -305,6 +376,7 @@ func gitTarget(base *url.URL, repo, endpoint, rawQuery string) *url.URL {
 	if endpoint == infoRefs {
 		u.RawQuery = rawQuery
 	}
+
 	return &u
 }
 
@@ -314,16 +386,11 @@ func cleanGitHeaders(hd http.Header, code int, gitBase, target *url.URL, proxyBa
 	locations := hd.Values("Location")
 	challenged := len(hd.Values("Www-Authenticate")) > 0
 	for name := range hd {
-		keep := false
-		for _, allowed := range gitResponseHeaders {
-			if http.CanonicalHeaderKey(name) == allowed {
-				keep = true
-			}
-		}
-		if !keep {
+		if !gitResponseHeader(name) {
 			delete(hd, name)
 		}
 	}
+
 	if challenged || code == http.StatusUnauthorized {
 		hd.Set("WWW-Authenticate", gitRealm)
 	}
@@ -332,6 +399,7 @@ func cleanGitHeaders(hd http.Header, code int, gitBase, target *url.URL, proxyBa
 			hd.Set("Location", rewritten)
 		}
 	}
+
 	hd.Set("X-Content-Type-Options", "nosniff")
 }
 
@@ -341,15 +409,18 @@ func gitLocation(raw string, gitBase, target *url.URL, proxyBase string, allowPu
 	if err != nil || u.User != nil || u.Opaque != "" || u.Fragment != "" {
 		return "", false
 	}
+
 	u = target.ResolveReference(u)
 	if !sameOrigin(u, gitBase) {
 		return "", false
 	}
+
 	root := strings.TrimRight(gitBase.EscapedPath(), "/")
 	suffix, ok := strings.CutPrefix(u.EscapedPath(), root+"/")
 	if !ok {
 		return "", false
 	}
+
 	repo, endpoint, code := parseRepoPath(suffix)
 	if code != 0 || !gitQuery(endpoint, u.RawQuery, u.ForceQuery) {
 		return "", false
@@ -357,10 +428,12 @@ func gitLocation(raw string, gitBase, target *url.URL, proxyBase string, allowPu
 	if !allowPush && (endpoint == receivePack || u.RawQuery == "service="+receivePack) {
 		return "", false
 	}
+
 	location := proxyBase + "/" + repo + ".git/" + endpoint
 	if u.RawQuery != "" {
 		location += "?" + u.RawQuery
 	}
+
 	return location, true
 }
 
@@ -380,8 +453,10 @@ func (w *gitResponseWriter) Header() http.Header {
 		if w.discard == nil {
 			w.discard = http.Header{}
 		}
+
 		return w.discard
 	}
+
 	return w.rw.Header()
 }
 
@@ -389,10 +464,12 @@ func (w *gitResponseWriter) WriteHeader(code int) {
 	if w.wrote {
 		return
 	}
+
 	w.clean(w.rw.Header(), code)
 	if code >= 200 || code == http.StatusSwitchingProtocols {
 		w.wrote = true
 	}
+
 	w.rw.WriteHeader(code)
 }
 
@@ -400,6 +477,7 @@ func (w *gitResponseWriter) Write(p []byte) (int, error) {
 	if !w.wrote {
 		w.WriteHeader(http.StatusOK)
 	}
+
 	return w.rw.Write(p)
 }
 
@@ -418,5 +496,6 @@ func gitDependencyError(w http.ResponseWriter, err error) {
 		gitUnauthorized(w)
 		return
 	}
+
 	dependencyError(w, err)
 }

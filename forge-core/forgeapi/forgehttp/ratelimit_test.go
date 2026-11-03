@@ -36,7 +36,12 @@ func TestParseRateLimit(t *testing.T) {
 				"Ratelimit-Resettime": {"Sat, 31 Oct 2026 13:00:00 GMT"},
 				"Retry-After":         {"30"},
 			},
-			RateLimit{Limit: 2000, Remaining: 0, Reset: reset, RetryAfter: 30 * time.Second},
+			RateLimit{
+				Limit:      2000,
+				Remaining:  0,
+				Reset:      reset,
+				RetryAfter: 30 * time.Second,
+			},
 			true,
 		},
 		{

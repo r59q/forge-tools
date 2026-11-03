@@ -23,6 +23,7 @@ func copyState(s State) State {
 	if out.Reviews == nil {
 		out.Reviews = map[string]Review{}
 	}
+
 	return out
 }
 
@@ -33,6 +34,7 @@ func (m *MemoryStore) Read(ctx context.Context) (State, error) {
 	if err := ctx.Err(); err != nil {
 		return State{}, err
 	}
+
 	return copyState(m.state), nil
 }
 
@@ -43,6 +45,7 @@ func (m *MemoryStore) Update(ctx context.Context, fn func(*State) error) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+
 	s := copyState(m.state)
 	if err := fn(&s); err != nil {
 		return err
@@ -50,6 +53,8 @@ func (m *MemoryStore) Update(ctx context.Context, fn func(*State) error) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+
 	m.state = copyState(s)
+
 	return nil
 }

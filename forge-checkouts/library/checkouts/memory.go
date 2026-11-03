@@ -21,6 +21,7 @@ func (s *MemoryStore) Read(ctx context.Context) (State, error) {
 	if err := ctx.Err(); err != nil {
 		return State{}, err
 	}
+
 	return State{Checkouts: maps.Clone(s.state.Checkouts)}, nil
 }
 
@@ -31,6 +32,7 @@ func (s *MemoryStore) Update(ctx context.Context, fn func(*State) error) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+
 	next := State{Checkouts: maps.Clone(s.state.Checkouts)}
 	if next.Checkouts == nil {
 		next.Checkouts = map[string]Record{}
@@ -41,6 +43,8 @@ func (s *MemoryStore) Update(ctx context.Context, fn func(*State) error) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+
 	s.state = State{Checkouts: maps.Clone(next.Checkouts)}
+
 	return nil
 }

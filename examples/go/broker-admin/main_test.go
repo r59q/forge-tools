@@ -12,12 +12,11 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 // fakeBroker answers the list calls when given the admin token.
 type fakeBroker struct {
-	pb.UnimplementedBrokerServer
+	pb.UnimplementedBrokerServiceServer
 }
 
 func authorize(ctx context.Context) error {
@@ -25,46 +24,66 @@ func authorize(ctx context.Context) error {
 	if v := md.Get("authorization"); len(v) != 1 || v[0] != "Bearer admin" {
 		return status.Error(codes.Unauthenticated, "unauthenticated")
 	}
+
 	return nil
 }
 
-func (fakeBroker) ListForges(ctx context.Context, _ *emptypb.Empty) (*pb.ListForgesResponse, error) {
+func (fakeBroker) ListForges(ctx context.Context, _ *pb.ListForgesRequest) (*pb.ListForgesResponse, error) {
 	if err := authorize(ctx); err != nil {
 		return nil, err
 	}
-	return &pb.ListForgesResponse{Forges: []*pb.Forge{{Id: "f1", Kind: "github", BaseUrl: "https://api.github.com"}}}, nil
+
+	return &pb.ListForgesResponse{Forges: []*pb.Forge{{
+		Id:      "f1",
+		Kind:    "github",
+		BaseUrl: "https://api.github.com",
+	}}}, nil
 }
 
-func (fakeBroker) ListConnections(ctx context.Context, _ *emptypb.Empty) (*pb.ListConnectionsResponse, error) {
+func (fakeBroker) ListConnections(ctx context.Context, _ *pb.ListConnectionsRequest) (*pb.ListConnectionsResponse, error) {
 	if err := authorize(ctx); err != nil {
 		return nil, err
 	}
-	return &pb.ListConnectionsResponse{Connections: []*pb.Connection{{Id: "c1", Name: "me", Status: "ok"}}}, nil
+
+	return &pb.ListConnectionsResponse{Connections: []*pb.Connection{{
+		Id:     "c1",
+		Name:   "me",
+		Status: "ok",
+	}}}, nil
 }
 
-func (fakeBroker) ListClients(ctx context.Context, _ *emptypb.Empty) (*pb.ListClientsResponse, error) {
+func (fakeBroker) ListClients(ctx context.Context, _ *pb.ListClientsRequest) (*pb.ListClientsResponse, error) {
 	if err := authorize(ctx); err != nil {
 		return nil, err
 	}
-	return &pb.ListClientsResponse{Clients: []*pb.Client{{Id: "k1", Name: "proxy", ConnectionIds: []string{"c1"}, CanIssueTokens: true}}}, nil
+
+	return &pb.ListClientsResponse{Clients: []*pb.Client{{
+		Id:             "k1",
+		Name:           "proxy",
+		ConnectionIds:  []string{"c1"},
+		CanIssueTokens: true,
+	}}}, nil
 }
 
-func dial(t *testing.T) pb.BrokerClient {
+func dial(t *testing.T) pb.BrokerServiceClient {
 	t.Helper()
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	srv := grpc.NewServer()
-	pb.RegisterBrokerServer(srv, fakeBroker{})
-	go srv.Serve(lis)
+	pb.RegisterBrokerServiceServer(srv, fakeBroker{})
+	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(srv.Stop)
 	conn, err := grpc.NewClient(lis.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	t.Cleanup(func() { conn.Close() })
-	return pb.NewBrokerClient(conn)
+
+	return pb.NewBrokerServiceClient(conn)
 }
 
 func TestRunLists(t *testing.T) {
@@ -72,6 +91,7 @@ func TestRunLists(t *testing.T) {
 	if err := run(context.Background(), dial(t), "admin", &out); err != nil {
 		t.Fatal(err)
 	}
+
 	for _, want := range []string{"f1  github", "c1  me  ok", "k1  proxy  connections=[c1] issue-tokens=true"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("output %q lacks %q", out.String(), want)

@@ -47,6 +47,7 @@ func TestRejectsUnsafeRequests(t *testing.T) {
 			}
 		})
 	}
+
 	for _, path := range []string{"/", "/user", "/c/", "/c/conn", "/c//user"} {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
@@ -54,11 +55,13 @@ func TestRejectsUnsafeRequests(t *testing.T) {
 			t.Errorf("%s: status = %d, want 404", path, w.Code)
 		}
 	}
+
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodConnect, "/c/conn/user", nil))
 	if w.Code != 400 {
 		t.Errorf("CONNECT status = %d", w.Code)
 	}
+
 	r := httptest.NewRequest(http.MethodGet, "/c/conn/user", nil)
 	r.URL.Fragment = "fragment"
 	w = httptest.NewRecorder()
@@ -107,13 +110,34 @@ func TestInvalidEndpointAndIssuedToken(t *testing.T) {
 			}
 		})
 	}
+
 	for _, issued := range []broker.IssuedToken{
-		{Kind: forgeauth.GitLab, BaseURL: "https://forge.example/api", Token: forgeToken},
-		{Kind: forgeauth.GitHub, BaseURL: "https://other.example/api", Token: forgeToken},
-		{Kind: forgeauth.GitHub, BaseURL: "http://forge.example/api", Token: forgeToken},
-		{Kind: forgeauth.GitHub, BaseURL: "https://forge.example/other", Token: forgeToken},
+		{
+			Kind:    forgeauth.GitLab,
+			BaseURL: "https://forge.example/api",
+			Token:   forgeToken,
+		},
+		{
+			Kind:    forgeauth.GitHub,
+			BaseURL: "https://other.example/api",
+			Token:   forgeToken,
+		},
+		{
+			Kind:    forgeauth.GitHub,
+			BaseURL: "http://forge.example/api",
+			Token:   forgeToken,
+		},
+		{
+			Kind:    forgeauth.GitHub,
+			BaseURL: "https://forge.example/other",
+			Token:   forgeToken,
+		},
 		{Kind: forgeauth.GitHub, BaseURL: "https://forge.example/api"},
-		{Kind: forgeauth.GitHub, BaseURL: "https://forge.example/api", Token: "unsafe\r\ntoken"},
+		{
+			Kind:    forgeauth.GitHub,
+			BaseURL: "https://forge.example/api",
+			Token:   "unsafe\r\ntoken",
+		},
 	} {
 		b := &fakeBroker{conn: forgeauth.Connection{Kind: forgeauth.GitHub, BaseURL: "https://forge.example/api"}, issued: &issued}
 		c := config(t, b)
@@ -142,6 +166,7 @@ func TestRedirectsAndLinksStayWithinConnection(t *testing.T) {
 		if location == "same" {
 			location = forge.URL + "/api/v1/users?page=2"
 		}
+
 		w.Header().Set("Location", location)
 		w.Header().Add("Link", fmt.Sprintf(`<%s/api/v1/users?page=2>; rel="next"; title="a,b", </api/v1/users?page=1>; rel="first"`, forge.URL))
 		w.Header().Add("Link", `<?page=3>; rel="last", <`+other.URL+`/steal>; rel="external"`)
@@ -172,6 +197,7 @@ func TestRedirectsAndLinksStayWithinConnection(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			req.Header.Set("Authorization", "Bearer "+clientToken)
 			resp, err := client.Do(req)
 			if err != nil {
@@ -183,6 +209,7 @@ func TestRedirectsAndLinksStayWithinConnection(t *testing.T) {
 			if got := resp.Header.Get("Location"); got != tc.want {
 				t.Errorf("Location = %q, want %q", got, tc.want)
 			}
+
 			links := forgehttp.ParseLinks(resp.Header)
 			if len(links) != 4 {
 				t.Fatalf("Link count = %d, want 4", len(links))
@@ -195,6 +222,7 @@ func TestRedirectsAndLinksStayWithinConnection(t *testing.T) {
 			}
 		})
 	}
+
 	if otherRequests.Load() != 0 || requests.Load() != 14 {
 		t.Fatal("proxy followed a redirect")
 	}
@@ -213,26 +241,34 @@ func TestPagingWithForgeauthSession(t *testing.T) {
 				if r.URL.Path != "/api/v1/issues" || (page > 1 && r.URL.Query().Get("page") != fmt.Sprint(page)) {
 					t.Errorf("unexpected page URL: %s", r.URL)
 				}
+
 				switch page {
 				case 1:
 					w.Header().Set("Link", `<`+forge.URL+`/api/v1/issues?page=2>; rel="next"`)
 				case 2:
 					w.Header().Set("Link", `<?page=3>; rel="next"`)
 				}
+
 				_, _ = fmt.Fprintf(w, `{"page":%d}`, page)
 			}))
 			b := &fakeBroker{conn: forgeauth.Connection{Kind: provider.Kind(), BaseURL: forge.URL + "/api/v1"}}
 			server := serve(t, handler(t, config(t, b)))
-			session, err := provider.Open(context.Background(), forgeauth.Connection{BaseURL: server.URL + "/c/conn"}, forgeauth.StaticToken(clientToken))
+			session, err := provider.Open(
+				context.Background(),
+				forgeauth.Connection{BaseURL: server.URL + "/c/conn"},
+				forgeauth.StaticToken(clientToken),
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			next := "/issues"
 			for page := 1; page <= 3; page++ {
 				req, err := session.NewRequest(context.Background(), http.MethodGet, next, nil)
 				if err != nil {
 					t.Fatal(err)
 				}
+
 				resp, err := session.Client.Do(req)
 				if err != nil {
 					t.Fatal(err)
@@ -240,12 +276,14 @@ func TestPagingWithForgeauthSession(t *testing.T) {
 				if body := readResponse(t, resp); resp.StatusCode != 200 || body != fmt.Sprintf(`{"page":%d}`, page) {
 					t.Fatalf("page response = %d %q", resp.StatusCode, body)
 				}
+
 				var more bool
 				next, more = forgehttp.NextPage(resp.Header)
 				if more != (page < 3) || (more && !strings.HasPrefix(next, server.URL+"/c/conn/")) {
 					t.Fatalf("next page = %q, more = %v", next, more)
 				}
 			}
+
 			if requests.Load() != 3 || b.verifications.Load() != 3 || b.issuances.Load() != 3 {
 				t.Error("pagination did not stay behind authorization")
 			}
@@ -267,6 +305,7 @@ func TestStreamingAndTrailerRewriting(t *testing.T) {
 		case <-r.Context().Done():
 			return
 		}
+
 		_, _ = io.WriteString(w, "last")
 		w.Header().Set("Link", `<`+forge.URL+`/api/next>; rel="next"`)
 		w.Header().Set("Location", "https://other.example/steal")
@@ -282,11 +321,13 @@ func TestStreamingAndTrailerRewriting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer resp.Body.Close()
 	first := make([]byte, 5)
 	if _, err := io.ReadFull(resp.Body, first); err != nil || string(first) != "first" {
 		t.Fatalf("first chunk = %q, error = %v", first, err)
 	}
+
 	release <- struct{}{}
 	if rest := readResponse(t, resp); rest != "last" {
 		t.Fatalf("remaining body = %q", rest)
@@ -316,14 +357,21 @@ func TestInformationalHeadersAreRewritten(t *testing.T) {
 		if next, _ := forgehttp.NextPage(http.Header(h)); code != 103 || next != server.URL+"/c/conn/next" || h.Get("Location") != "" {
 			t.Error("informational headers bypassed rewriting")
 		}
+
 		return nil
 	}}
-	req, _ := http.NewRequestWithContext(httptrace.WithClientTrace(context.Background(), trace), http.MethodGet, server.URL+"/c/conn/user", nil)
+	req, _ := http.NewRequestWithContext(
+		httptrace.WithClientTrace(context.Background(), trace),
+		http.MethodGet,
+		server.URL+"/c/conn/user",
+		nil,
+	)
 	req.Header.Set("Authorization", "Bearer "+clientToken)
 	resp, err := server.Client().Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	readResponse(t, resp)
 	if resp.StatusCode != 204 || hints.Load() != 1 {
 		t.Error("informational response missing")
@@ -340,6 +388,7 @@ func TestStreamsRequestAndDropsTrailers(t *testing.T) {
 			t.Error("request prefix was not streamed")
 			return
 		}
+
 		firstRead <- struct{}{}
 		if rest, err := io.ReadAll(r.Body); err != nil || string(rest) != "last" {
 			t.Error("request suffix changed")
@@ -347,6 +396,7 @@ func TestStreamsRequestAndDropsTrailers(t *testing.T) {
 		if len(r.Trailer) != 0 {
 			t.Error("caller trailers reached forge")
 		}
+
 		w.WriteHeader(204)
 	}))
 	b := &fakeBroker{conn: forgeauth.Connection{Kind: forgeauth.GitHub, BaseURL: forge.URL + "/api"}}
@@ -363,6 +413,7 @@ func TestStreamsRequestAndDropsTrailers(t *testing.T) {
 			writeErr <- err
 			return
 		}
+
 		select {
 		case <-firstRead:
 			_, err := io.WriteString(writer, "last")
@@ -375,6 +426,7 @@ func TestStreamsRequestAndDropsTrailers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	readResponse(t, resp)
 	if err := <-writeErr; err != nil || resp.StatusCode != 204 {
 		t.Fatalf("streaming request: status = %d, error = %v", resp.StatusCode, err)
@@ -404,11 +456,13 @@ func TestStreamsKnownLengthResponse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer resp.Body.Close()
 	first := make([]byte, 5)
 	if _, err := io.ReadFull(resp.Body, first); err != nil || string(first) != "first" {
 		t.Fatalf("first response chunk = %q, error = %v", first, err)
 	}
+
 	release <- struct{}{}
 	if rest := readResponse(t, resp); rest != "last" || resp.ContentLength != 9 {
 		t.Errorf("remaining body = %q, length = %d", rest, resp.ContentLength)

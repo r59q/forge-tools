@@ -15,10 +15,12 @@ import (
 
 func TestReadinessConditions(t *testing.T) {
 	for _, tt := range []struct {
-		kind                      forgeauth.Kind
-		native, status, condition string
-		mergeable                 *bool
-		draft                     bool
+		kind      forgeauth.Kind
+		native    string
+		status    string
+		condition string
+		mergeable *bool
+		draft     bool
 	}{
 		{forgeauth.GitHub, "clean", "ready", "", ptr(true), false},
 		{forgeauth.GitHub, "blocked", "blocked", "forge", ptr(true), false},
@@ -51,6 +53,7 @@ func TestReadinessConditions(t *testing.T) {
 						found = true
 					}
 				}
+
 				if !found {
 					t.Fatalf("missing unmet %s: %+v", tt.condition, v)
 				}
@@ -61,8 +64,10 @@ func TestReadinessConditions(t *testing.T) {
 
 func TestGitHubUnstableReadiness(t *testing.T) {
 	for _, tt := range []struct {
-		name, state, want string
-		mergeable, draft  bool
+		name             string
+		state            string
+		want             string
+		mergeable, draft bool
 	}{
 		{"non-passing optional checks", "open", "unknown", true, false},
 		{"conflicts", "open", "blocked", false, false},
@@ -81,10 +86,12 @@ func TestGitHubUnstableReadiness(t *testing.T) {
 			if err != nil || v.Status != tt.want {
 				t.Fatalf("Readiness: %+v, %v", v, err)
 			}
+
 			conditions := make(map[string]Condition)
 			for _, condition := range v.Conditions {
 				conditions[condition.Name] = condition
 			}
+
 			if conditions["forge"] != (Condition{"forge", "unknown", "unstable"}) {
 				t.Errorf("forge condition = %+v", conditions["forge"])
 			}
@@ -109,6 +116,7 @@ func TestMergedCannotReopenOrMerge(t *testing.T) {
 				if r.Method != "GET" {
 					t.Error("mutated merged proposal")
 				}
+
 				v := fixture(kind, "closed", "title", head, false)
 				v["merged_at"] = "2026-01-01T01:00:00Z"
 				_ = json.NewEncoder(w).Encode(v)
@@ -117,14 +125,17 @@ func TestMergedCannotReopenOrMerge(t *testing.T) {
 			if err != nil || v.State != Merged {
 				t.Fatalf("%+v %v", v, err)
 			}
+
 			_, err = c.Update(context.Background(), r, Update{State: ptr(Open)})
 			if !errors.Is(err, forgehttp.ErrConflict) {
 				t.Fatal(err)
 			}
+
 			_, err = c.Merge(context.Background(), r, MergeOptions{})
 			if !errors.Is(err, ErrMergeRejected) {
 				t.Fatal(err)
 			}
+
 			_, err = c.SetDraft(context.Background(), r, true)
 			if !errors.Is(err, forgehttp.ErrConflict) {
 				t.Fatal(err)
@@ -140,8 +151,10 @@ func TestGraphQLFailureIsNotSuccess(t *testing.T) {
 				if r.URL.Path == "/graphql" {
 					w.WriteHeader(status)
 					fmt.Fprint(w, `{"errors":[{"message":"denied"}]}`)
+
 					return
 				}
+
 				_ = json.NewEncoder(w).Encode(fixture(forgeauth.GitHub, "open", "title", head, false))
 			})
 			_, err := c.SetDraft(context.Background(), r, true)
@@ -178,10 +191,12 @@ func TestContentLimits(t *testing.T) {
 	if !errors.Is(err, ErrTooLarge) {
 		t.Fatal(err)
 	}
+
 	f, err := c.Files(context.Background(), r)
 	if err != nil || f.Completeness != "truncated" || !f.Files[0].PatchUnavailable || f.Files[0].OldPath != "" {
 		t.Fatalf("%+v %v", f, err)
 	}
+
 	_, err = c.Diff(context.Background(), r)
 	if !errors.Is(err, ErrTooLarge) {
 		t.Fatal(err)
@@ -196,25 +211,30 @@ func TestSourceSelection(t *testing.T) {
 		if r.URL.Query().Get("scope") != "all" || r.URL.Query().Get("state") != "opened" {
 			t.Error(r.URL.RawQuery)
 		}
+
 		fmt.Fprint(w, `[]`)
 	})
 	_, err := c.List(context.Background(), ListOptions{Source: r.Source, Repository: "group/sub/repo"})
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	_, err = c.List(context.Background(), ListOptions{Source: "missing", Repository: "o/r"})
 	if !errors.Is(err, ErrUnknownSource) {
 		t.Fatal(err)
 	}
+
 	_, err = c.List(context.Background(), ListOptions{Repository: "o/r", State: "bad"})
 	if !errors.Is(err, ErrInvalid) {
 		t.Fatal(err)
 	}
+
 	sources := c.Sources()
 	sources[0].ID = "changed"
 	if c.Sources()[0].ID != r.Source {
 		t.Fatal("Sources aliases client")
 	}
+
 	_, err = New(c.Sources()[0], c.Sources()[0])
 	if !errors.Is(err, ErrInvalid) {
 		t.Fatal(err)

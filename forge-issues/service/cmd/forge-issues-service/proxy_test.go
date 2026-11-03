@@ -26,6 +26,7 @@ func (b brokerStub) Connection(_ context.Context, id broker.ID) (forgeauth.Conne
 	if c, ok := b[id]; ok {
 		return c, nil
 	}
+
 	return forgeauth.Connection{}, broker.ErrNotFound
 }
 
@@ -33,6 +34,7 @@ func (b brokerStub) VerifyClient(_ context.Context, token forgeauth.StaticToken,
 	if token != "client" {
 		return broker.Client{}, broker.ErrUnauthorized
 	}
+
 	return broker.Client{}, nil
 }
 
@@ -45,10 +47,23 @@ func (b brokerStub) ClientConnections(_ context.Context, token forgeauth.StaticT
 	if token != "client" {
 		return nil, broker.ErrUnauthorized
 	}
+
 	return []broker.ClientConnection{
-		{ID: "fj", Kind: forgeauth.Forgejo, Status: broker.StatusOK},
-		{ID: "gh", Kind: forgeauth.GitHub, Status: broker.StatusOK},
-		{ID: "gl", Kind: forgeauth.GitLab, Status: broker.StatusOK},
+		{
+			ID:     "fj",
+			Kind:   forgeauth.Forgejo,
+			Status: broker.StatusOK,
+		},
+		{
+			ID:     "gh",
+			Kind:   forgeauth.GitHub,
+			Status: broker.StatusOK,
+		},
+		{
+			ID:     "gl",
+			Kind:   forgeauth.GitLab,
+			Status: broker.StatusOK,
+		},
 	}, nil
 }
 
@@ -77,10 +92,17 @@ func TestSourcesThroughProxy(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	h, err := proxy.New(proxy.Config{Verifier: stub, TokenIssuer: stub, Connections: stub, Registry: reg})
+
+	h, err := proxy.New(proxy.Config{
+		Verifier:    stub,
+		TokenIssuer: stub,
+		Connections: stub,
+		Registry:    reg,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	p := httptest.NewServer(h)
 	defer p.Close()
 	conn, err := connector.New(connector.Config{URL: p.URL, Credentials: forgeauth.StaticToken("client")})
@@ -92,14 +114,17 @@ func TestSourcesThroughProxy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	list, err := client.List(context.Background(), issues.ListOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	var got []string
 	for _, i := range list {
 		got = append(got, fmt.Sprintf("%s:%s#%d@%s", i.Source.ID, i.Repository, i.Number, i.Source.Host))
 	}
+
 	if want := "fj:mrbean/garden#5@codeberg.org gh:mrbean/teddy#3@github.com gl:mrbean/tools/cli#7@gitlab.com"; strings.Join(got, " ") != want {
 		t.Fatalf("issues = %q, want %q", got, want)
 	}

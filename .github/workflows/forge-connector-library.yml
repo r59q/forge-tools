@@ -8,13 +8,21 @@ on:
       - forge-connector/library/**
       - forge-core/forgeapi/**
       - .github/workflows/forge-connector-library.yml
+      - buf.yaml
+      - buf.lock
+      - .github/workflows/reusable-proto.yml
       - .github/workflows/reusable-go.yml
+      - .golangci.yml
   pull_request:
     paths:
       - forge-connector/library/**
       - forge-core/forgeapi/**
       - .github/workflows/forge-connector-library.yml
+      - buf.yaml
+      - buf.lock
+      - .github/workflows/reusable-proto.yml
       - .github/workflows/reusable-go.yml
+      - .golangci.yml
   workflow_dispatch:
 
 permissions:
@@ -23,5 +31,10 @@ permissions:
 jobs:
   test:
     uses: ./.github/workflows/reusable-go.yml
+    with:
+      dir: forge-connector/library
+
+  proto:
+    uses: ./.github/workflows/reusable-proto.yml
     with:
       dir: forge-connector/library

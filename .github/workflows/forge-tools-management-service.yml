@@ -12,10 +12,15 @@ on:
       - forge-repositories/library/**
       - forge-issues/service/**
       - forge-issues/library/**
+      - forge-actions/library/**
+      - forge-actions/service/**
       - forge-core/forgeapi/**
+      - forge-core/servicekit/**
       - examples/fullstack/**
       - .dockerignore
       - .github/workflows/forge-tools-management-service.yml
+      - buf.yaml
+      - buf.lock
       - .github/workflows/reusable-*.yml
   pull_request:
     paths:
@@ -27,10 +32,15 @@ on:
       - forge-repositories/library/**
       - forge-issues/service/**
       - forge-issues/library/**
+      - forge-actions/library/**
+      - forge-actions/service/**
       - forge-core/forgeapi/**
+      - forge-core/servicekit/**
       - examples/fullstack/**
       - .dockerignore
       - .github/workflows/forge-tools-management-service.yml
+      - buf.yaml
+      - buf.lock
       - .github/workflows/reusable-*.yml
   workflow_dispatch:
 
@@ -57,10 +67,17 @@ jobs:
           FORGE_ISSUES_TOKEN: example-issues-token
           FORGE_CHECKOUTS_CONNECTOR_TOKEN: example-checkouts-connector-token
           FORGE_CHECKOUTS_TOKEN: example-checkouts-token
+          FORGE_ACTIONS_TOKEN: example-actions-token
+          FORGE_ACTIONS_CONNECTOR_TOKEN: example-actions-connector-token
         run: docker compose -f examples/fullstack/compose.yaml config --quiet
 
   test:
     uses: ./.github/workflows/reusable-go.yml
+    with:
+      dir: forge-tools-management/service
+
+  proto:
+    uses: ./.github/workflows/reusable-proto.yml
     with:
       dir: forge-tools-management/service
 

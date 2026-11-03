@@ -36,7 +36,14 @@ func newGitHubTest(t *testing.T, opts fakeforge.GitHubOptions, l Limits) *github
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &githubTest{s: s, repo: r, fx: fx, c: c, ref: RepositoryRef{Source: "gh", Repository: "octo/fixture"}}
+
+	return &githubTest{
+		s:    s,
+		repo: r,
+		fx:   fx,
+		c:    c,
+		ref:  RepositoryRef{Source: "gh", Repository: "octo/fixture"},
+	}
 }
 
 // oid converts a fakeforge ID.
@@ -79,6 +86,7 @@ func TestGitHubResolve(t *testing.T) {
 			t.Errorf("Resolve(%q): %v", tt.rev, err)
 			continue
 		}
+
 		if want := (Resolved{Commit: githubOID(tt.want), Ref: tt.ref}); got != want {
 			t.Errorf("Resolve(%q) = %+v, want %+v", tt.rev, got, want)
 		}
@@ -101,14 +109,17 @@ func TestGitHubResolveErrors(t *testing.T) {
 			t.Errorf("Resolve(%q) = %v, want ErrRevisionNotFound and forgehttp.ErrNotFound", rev, err)
 		}
 	}
+
 	if _, err := g.c.Resolve(ctx, g.ref, "clash"); !errors.Is(err, ErrAmbiguous) {
 		t.Errorf("Resolve(clash) = %v, want ErrAmbiguous", err)
 	}
+
 	for _, rev := range []string{g.fx.Head.String()[:7], "main..feature", "main@{1}", "refs/notes/x"} {
 		if _, err := g.c.Resolve(ctx, g.ref, rev); !errors.Is(err, ErrInvalid) {
 			t.Errorf("Resolve(%q) = %v, want ErrInvalid", rev, err)
 		}
 	}
+
 	nested := RepositoryRef{Source: "gh", Repository: "group/sub/proj"}
 	if _, err := g.c.Resolve(ctx, nested, "HEAD"); !errors.Is(err, ErrInvalid) {
 		t.Errorf("nested repository: %v, want ErrInvalid", err)
@@ -123,6 +134,7 @@ func TestGitHubListRefs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	want := []Ref{
 		{"refs/heads/clash", githubOID(fx.ClashBranch), githubOID(fx.ClashBranch)},
 		{"refs/heads/feature", githubOID(fx.Feature[2]), githubOID(fx.Feature[2])},
@@ -160,6 +172,7 @@ func TestGitHubListRefsPaging(t *testing.T) {
 	for i := range 150 {
 		g.repo.SetRef(fmt.Sprintf("refs/heads/b/%03d", i), g.fx.Main[0])
 	}
+
 	// A tag on a tree has no commit; a dangling one cannot be peeled.
 	tree, _ := g.repo.Lookup(g.fx.Head, "")
 	g.repo.SetRef("refs/tags/tree", tree.ID)
@@ -170,14 +183,17 @@ func TestGitHubListRefsPaging(t *testing.T) {
 	if err != nil || got.Truncated || len(got.Refs) != 153 {
 		t.Fatalf("heads = %d refs, truncated %v, %v", len(got.Refs), got.Truncated, err)
 	}
+
 	got, err = g.c.ListRefs(ctx, g.ref, RefsOptions{Prefix: "refs/tags/"})
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	byName := map[string]Ref{}
 	for _, r := range got.Refs {
 		byName[r.Name] = r
 	}
+
 	if r := byName["refs/tags/tree"]; r.Commit != "" || r.Target != githubOID(tree.ID) {
 		t.Errorf("tree tag = %+v", r)
 	}
@@ -194,6 +210,7 @@ func TestGitHubListRefsPaging(t *testing.T) {
 	if n := g.calls("*/git/matching-refs/*"); n != 1 {
 		t.Errorf("listed heads with %d calls, want 1: %v", n, g.s.Requests())
 	}
+
 	for _, r := range g.s.Requests() {
 		if strings.Contains(r, "matching-refs") && strings.Contains(r, "per_page") {
 			t.Errorf("matching-refs sent per_page: %s", r)
@@ -205,19 +222,23 @@ func TestGitHubListRefsPaging(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	got, err = c1.ListRefs(ctx, g.ref, RefsOptions{Prefix: "refs/heads/"})
 	if err != nil || !got.Truncated || len(got.Refs) != 0 {
 		t.Errorf("budget = %d refs, truncated %v, %v", len(got.Refs), got.Truncated, err)
 	}
+
 	c, err := NewWithLimits(Limits{MaxCalls: 2}, Source{ID: "gh", Session: g.s.Session})
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	// Out of calls before peeling: no incomplete tag is returned.
 	got, err = c.ListRefs(ctx, g.ref, RefsOptions{Prefix: "refs/tags/"})
 	if err != nil || !got.Truncated {
 		t.Fatalf("tags on budget = %+v, %v", got, err)
 	}
+
 	for _, r := range got.Refs {
 		if r.Target != r.Commit {
 			t.Errorf("incomplete tag %+v", r)
@@ -229,9 +250,12 @@ func TestGitHubListRefsTooLarge(t *testing.T) {
 	g := newGitHubTest(t, fakeforge.GitHubOptions{}, Limits{})
 	// GitHub sends every match at once; a body over the cap is ErrTooLarge,
 	// not a decode error.
-	g.s.Inject(fakeforge.Fault{Path: "*/git/matching-refs/*", Status: http.StatusOK,
+	g.s.Inject(fakeforge.Fault{
+		Path:   "*/git/matching-refs/*",
+		Status: http.StatusOK,
 		Header: http.Header{"Content-Type": {"application/json"}},
-		Body:   "[" + strings.Repeat(" ", githubMaxRefsBody) + "]"})
+		Body:   "[" + strings.Repeat(" ", githubMaxRefsBody) + "]",
+	})
 	_, err := g.c.ListRefs(context.Background(), g.ref, RefsOptions{Limit: 1})
 	if !errors.Is(err, ErrTooLarge) {
 		t.Errorf("oversized listing = %v, want ErrTooLarge", err)
@@ -254,6 +278,7 @@ func TestGitHubListRefsTagMoved(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	for _, r := range got.Refs {
 		if r.Name != "refs/tags/v1.0" {
 			continue
@@ -261,8 +286,10 @@ func TestGitHubListRefsTagMoved(t *testing.T) {
 		if want := (Ref{Name: r.Name, Target: githubOID(moved), Commit: githubOID(fx.Head)}); r != want {
 			t.Errorf("moved tag = %+v, want %+v", r, want)
 		}
+
 		return
 	}
+
 	t.Errorf("v1.0 missing from %+v", got.Refs)
 }
 
@@ -272,9 +299,11 @@ func TestGitHubCommit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	src, _ := g.repo.ReadCommit(g.fx.Merge)
 	want := Commit{
-		ID: githubOID(g.fx.Merge), Tree: githubOID(src.Tree),
+		ID:      githubOID(g.fx.Merge),
+		Tree:    githubOID(src.Tree),
 		Parents: []OID{githubOID(g.fx.Main[4]), githubOID(g.fx.Feature[1])},
 		Author:  Signature{Name: src.Author.Name, Email: src.Author.Email, When: src.Author.When},
 		Message: "Merge branch 'feature'",
@@ -286,6 +315,7 @@ func TestGitHubCommit(t *testing.T) {
 		!got.Committer.When.Equal(want.Committer.When) {
 		t.Errorf("Commit = %+v\nwant %+v", got, want)
 	}
+
 	root, err := g.c.Commit(context.Background(), g.ref, g.fx.Main[0].String())
 	if err != nil || root.Parents == nil || len(root.Parents) != 0 {
 		t.Errorf("root commit = %+v, %v", root, err)
@@ -301,6 +331,7 @@ func githubAll(t *testing.T, g *githubTest, opts HistoryOptions, between func())
 		if pages > 50 {
 			t.Fatal("history does not end")
 		}
+
 		p, err := g.c.History(context.Background(), g.ref, opts)
 		if err != nil {
 			t.Fatal(err)
@@ -310,12 +341,15 @@ func githubAll(t *testing.T, g *githubTest, opts HistoryOptions, between func())
 		} else if p.Tip != tip {
 			t.Fatalf("tip moved from %s to %s", tip, p.Tip)
 		}
+
 		for _, c := range p.Commits {
 			ids = append(ids, c.ID)
 		}
+
 		if p.Next == "" {
 			return ids, tip
 		}
+
 		opts = HistoryOptions{Cursor: p.Next}
 		if between != nil {
 			between()
@@ -329,10 +363,12 @@ func githubLog(t *testing.T, r *fakeforge.Repo, tip gitobj.ID, path string) []OI
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	out := []OID{}
 	for _, id := range ids {
 		out = append(out, githubOID(id))
 	}
+
 	return out
 }
 
@@ -351,6 +387,7 @@ func TestGitHubHistory(t *testing.T) {
 	if tip != githubOID(fx.Head) || !slices.Equal(ids, githubLog(t, g.repo, fx.Head, "")) {
 		t.Errorf("history = %v (tip %s)\nwant %v", ids, tip, githubLog(t, g.repo, fx.Head, ""))
 	}
+
 	g.repo.SetRef("refs/heads/main", fx.Head)
 
 	for _, path := range []string{fakeforge.PathFeature, "docs", fakeforge.PathReadme, "no/such/path"} {
@@ -387,6 +424,7 @@ func githubEntries(t *testing.T, r *fakeforge.Repo, root gitobj.ID, dir string, 
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	out := []Entry{}
 	for _, e := range list {
 		mode := FileMode(e.Mode)
@@ -394,13 +432,24 @@ func githubEntries(t *testing.T, r *fakeforge.Repo, root gitobj.ID, dir string, 
 		if dir != "" {
 			path = dir + "/" + path
 		}
+
 		size := int64(-1)
 		if typeOf(mode) == ObjectBlob {
 			size = e.Size
 		}
-		out = append(out, Entry{Name: e.Name, Path: path, Mode: mode, Type: typeOf(mode), ID: githubOID(e.ID), Size: size})
+
+		out = append(out, Entry{
+			Name: e.Name,
+			Path: path,
+			Mode: mode,
+			Type: typeOf(mode),
+			ID:   githubOID(e.ID),
+			Size: size,
+		})
 	}
+
 	slices.SortFunc(out, func(a, b Entry) int { return strings.Compare(a.Path, b.Path) })
+
 	return out
 }
 
@@ -415,6 +464,7 @@ func githubCheckTrees(t *testing.T, g *githubTest) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	want := githubEntries(t, g.repo, root.ID, "", false)
 	if tr.Commit != githubOID(fx.Head) || tr.ID != githubOID(root.ID) || tr.Path != "" || tr.Truncated ||
 		!slices.Equal(tr.Entries, want) {
@@ -456,11 +506,13 @@ func TestGitHubTreeTruncatedWalk(t *testing.T) {
 	if err != nil || tr.Truncated {
 		t.Fatalf("walk = %+v, %v", tr, err)
 	}
+
 	// Out of calls mid-walk: Truncated, not an error.
 	c, err := NewWithLimits(Limits{MaxCalls: 4}, Source{ID: "gh", Session: g.s.Session})
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	tr, err = c.Tree(ctx, g.ref, g.fx.Head.String(), TreeOptions{Recursive: true})
 	if err != nil || !tr.Truncated || len(tr.Entries) == 0 {
 		t.Errorf("budget walk = %d entries, truncated %v, %v", len(tr.Entries), tr.Truncated, err)
@@ -480,7 +532,7 @@ func TestGitHubStat(t *testing.T) {
 	}{
 		{fakeforge.PathSymlink, ModeSymlink, ObjectBlob, githubOID(b[fakeforge.PathSymlink]), int64(len(fakeforge.PathReadme))},
 		{fakeforge.PathExec, ModeExec, ObjectBlob, githubOID(b[fakeforge.PathExec]), int64(len("#!/bin/sh\necho run\n"))},
-		{fakeforge.PathSubmodule, ModeSubmodule, ObjectCommit, githubOID(fakeforge.SubmoduleCommit), -1},
+		{fakeforge.PathSubmodule, ModeSubmodule, ObjectCommit, githubOID(fakeforge.SubmoduleCommit()), -1},
 		{fakeforge.PathUnicode, ModeFile, ObjectBlob, githubOID(b[fakeforge.PathUnicode]), int64(len("Grüße, 世界\n"))},
 		{fakeforge.PathLarge, ModeFile, ObjectBlob, githubOID(b[fakeforge.PathLarge]), fakeforge.LargeSize},
 	}
@@ -490,22 +542,33 @@ func TestGitHubStat(t *testing.T) {
 			t.Errorf("Stat(%q): %v", tt.path, err)
 			continue
 		}
+
 		name := tt.path[strings.LastIndexByte(tt.path, '/')+1:]
-		want := PathInfo{Commit: githubOID(g.fx.Head), Entry: Entry{Name: name, Path: tt.path, Mode: tt.mode, Type: tt.typ, ID: tt.id, Size: tt.size}}
+		want := PathInfo{Commit: githubOID(g.fx.Head), Entry: Entry{
+			Name: name,
+			Path: tt.path,
+			Mode: tt.mode,
+			Type: tt.typ,
+			ID:   tt.id,
+			Size: tt.size,
+		}}
 		if got != want {
 			t.Errorf("Stat(%q) = %+v\nwant %+v", tt.path, got, want)
 		}
 	}
+
 	docs, err := g.c.Stat(ctx, g.ref, "HEAD", "docs/guide")
 	if err != nil || docs.Mode != ModeTree || docs.Type != ObjectTree || docs.Size != -1 {
 		t.Errorf("Stat(docs/guide) = %+v, %v", docs, err)
 	}
+
 	for _, p := range []string{"nope", "docs/nope", "README.md/x", "nope/x", fakeforge.PathSubmodule + "/x"} {
 		_, err := g.c.Stat(ctx, g.ref, "HEAD", p)
 		if !errors.Is(err, ErrPathNotFound) || !errors.Is(err, forgehttp.ErrNotFound) {
 			t.Errorf("Stat(%q) = %v, want ErrPathNotFound", p, err)
 		}
 	}
+
 	// The old name exists before the rename only.
 	if _, err := g.c.Stat(ctx, g.ref, g.fx.Main[2].String(), fakeforge.PathOldName); err != nil {
 		t.Errorf("Stat old name: %v", err)
@@ -518,11 +581,13 @@ func githubRead(t *testing.T, r *Reader, err error) []byte {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer r.Close()
 	data, err := io.ReadAll(r)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return data
 }
 
@@ -537,6 +602,7 @@ func TestGitHubReadFile(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		g.s.ResetCalls()
 		r, err := g.c.ReadFile(ctx, g.ref, g.fx.Head.String(), path)
 		blob := r
@@ -544,8 +610,14 @@ func TestGitHubReadFile(t *testing.T) {
 		if !bytes.Equal(got, want) {
 			t.Errorf("ReadFile(%q) = %d bytes, want %d", path, len(got), len(want))
 		}
-		wantBlob := Blob{ID: githubOID(g.fx.Blobs[path]), Commit: githubOID(g.fx.Head), Path: path,
-			Size: int64(len(want)), LFSPointer: path == fakeforge.PathLFS}
+
+		wantBlob := Blob{
+			ID:         githubOID(g.fx.Blobs[path]),
+			Commit:     githubOID(g.fx.Head),
+			Path:       path,
+			Size:       int64(len(want)),
+			LFSPointer: path == fakeforge.PathLFS,
+		}
 		if blob.Blob != wantBlob {
 			t.Errorf("ReadFile(%q) blob = %+v, want %+v", path, blob.Blob, wantBlob)
 		}
@@ -554,11 +626,13 @@ func TestGitHubReadFile(t *testing.T) {
 			t.Errorf("ReadFile(%q) made %d calls, want %d: %v", path, n, want, g.s.Requests())
 		}
 	}
+
 	for _, p := range []string{"docs", fakeforge.PathSubmodule} {
 		if _, err := g.c.ReadFile(ctx, g.ref, "HEAD", p); !errors.Is(err, ErrNotFile) {
 			t.Errorf("ReadFile(%q) = %v, want ErrNotFile", p, err)
 		}
 	}
+
 	if _, err := g.c.ReadFile(ctx, g.ref, "HEAD", "nope.txt"); !errors.Is(err, ErrPathNotFound) {
 		t.Errorf("ReadFile(nope.txt) = %v, want ErrPathNotFound", err)
 	}
@@ -582,17 +656,20 @@ func TestGitHubReadBlob(t *testing.T) {
 	id := g.fx.Blobs[fakeforge.PathBinary]
 	r, err := g.c.ReadBlob(ctx, g.ref, githubOID(id))
 	got := githubRead(t, r, err)
-	if !bytes.Equal(got, fakeforge.Binary) || r.ID != githubOID(id) || r.Size != int64(len(got)) || r.Commit != "" {
+	if !bytes.Equal(got, fakeforge.Binary()) || r.ID != githubOID(id) || r.Size != int64(len(got)) || r.Commit != "" {
 		t.Errorf("ReadBlob = %q, %+v", got, r.Blob)
 	}
+
 	r, err = g.c.ReadBlob(ctx, g.ref, githubOID(g.fx.Blobs[fakeforge.PathLarge]))
 	if got := githubRead(t, r, err); len(got) != fakeforge.LargeSize {
 		t.Errorf("large blob = %d bytes", len(got))
 	}
+
 	r, err = g.c.ReadBlob(ctx, g.ref, githubOID(g.fx.Blobs[fakeforge.PathLFS]))
 	if githubRead(t, r, err); !r.LFSPointer {
 		t.Error("LFS pointer not flagged")
 	}
+
 	for _, missing := range []OID{OID(strings.Repeat("ab", 20)), githubOID(g.fx.Head)} {
 		_, err := g.c.ReadBlob(ctx, g.ref, missing)
 		if !errors.Is(err, ErrRevisionNotFound) || !errors.Is(err, forgehttp.ErrNotFound) {
@@ -612,16 +689,19 @@ func TestGitHubBlobLimits(t *testing.T) {
 	if n := g.calls("*/git/blobs/*"); n != 0 {
 		t.Errorf("fetched the blob %d times", n)
 	}
+
 	// ReadBlob learns the size from the response.
 	_, err = g.c.ReadBlob(ctx, g.ref, githubOID(g.fx.Blobs[fakeforge.PathReadme]))
 	if err != nil {
 		t.Errorf("ReadBlob(small) = %v", err)
 	}
+
 	r, err := g.c.ReadBlob(ctx, g.ref, githubOID(g.fx.Blobs[fakeforge.PathMain]))
 	if err == nil {
 		_, err = io.ReadAll(r)
 		r.Close()
 	}
+
 	if err != nil {
 		t.Errorf("ReadBlob(main.go) = %v", err)
 	}
@@ -631,6 +711,7 @@ func TestGitHubBlobLimits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	_, err = c.ReadBlob(ctx, g.ref, githubOID(g.fx.Blobs[fakeforge.PathLarge]))
 	if !errors.Is(err, ErrTooLarge) {
 		t.Errorf("ReadBlob over GitHub's limit = %v, want ErrTooLarge", err)
@@ -657,7 +738,8 @@ func TestGitHubMergeBase(t *testing.T) {
 			t.Errorf("MergeBase(%s, %s) = %s, %v, want %s", tt.a, tt.b, got, err, tt.want)
 		}
 	}
-	orphan := g.repo.CommitTree(g.repo.BuildTree(map[string]fakeforge.File{"x": {Data: []byte("x")}}), fakeforge.Epoch, "Orphan\n")
+
+	orphan := g.repo.CommitTree(g.repo.BuildTree(map[string]fakeforge.File{"x": {Data: []byte("x")}}), fakeforge.Epoch(), "Orphan\n")
 	g.repo.SetRef("refs/heads/orphan", orphan)
 	if _, err := g.c.MergeBase(ctx, g.ref, "main", "orphan"); !errors.Is(err, ErrInvalid) {
 		t.Errorf("MergeBase(unrelated) = %v, want ErrInvalid", err)
@@ -665,6 +747,7 @@ func TestGitHubMergeBase(t *testing.T) {
 	if _, err := g.c.MergeBase(ctx, g.ref, "main", "nope"); !errors.Is(err, ErrRevisionNotFound) {
 		t.Errorf("MergeBase(missing) = %v, want ErrRevisionNotFound", err)
 	}
+
 	caps, err := g.c.Capabilities("gh")
 	if err != nil || caps != (Capabilities{TreeIDs: true, MergeBase: true}) {
 		t.Errorf("Capabilities = %+v, %v", caps, err)
@@ -679,6 +762,7 @@ func TestGitHubAuthErrors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	c, err := New(Source{ID: "gh", Session: bad})
 	if err != nil {
 		t.Fatal(err)
@@ -695,25 +779,38 @@ func TestGitHubAuthErrors(t *testing.T) {
 			t.Errorf("private Resolve(%q) = %v, want not found", rev, err)
 		}
 	}
+
 	if _, err := g.c.ListRefs(ctx, g.ref, RefsOptions{}); !errors.Is(err, forgehttp.ErrNotFound) {
 		t.Errorf("private ListRefs = %v, want not found", err)
 	}
+
 	g.s.SetAccess("octo/fixture", fakeforge.AccessRead)
 
 	g.s.Inject(fakeforge.Fault{Path: "*/git/trees/*", Status: http.StatusForbidden, Times: 1})
 	if _, err := g.c.Tree(ctx, g.ref, "main", TreeOptions{}); !errors.Is(err, forgehttp.ErrForbidden) {
 		t.Errorf("403 = %v, want ErrForbidden", err)
 	}
-	g.s.Inject(fakeforge.Fault{Path: "*", Status: http.StatusForbidden, Times: 1,
-		Header: http.Header{"X-Ratelimit-Remaining": {"0"}, "X-Ratelimit-Reset": {"2000000000"}}})
+
+	g.s.Inject(fakeforge.Fault{
+		Path:   "*",
+		Status: http.StatusForbidden,
+		Times:  1,
+		Header: http.Header{"X-Ratelimit-Remaining": {"0"}, "X-Ratelimit-Reset": {"2000000000"}},
+	})
 	if _, err := g.c.Resolve(ctx, g.ref, "main"); !errors.Is(err, forgehttp.ErrRateLimited) {
 		t.Errorf("403 rate limit = %v, want ErrRateLimited", err)
 	}
-	g.s.Inject(fakeforge.Fault{Path: "*", Status: http.StatusTooManyRequests, Times: 1,
-		Header: http.Header{"Retry-After": {"30"}}})
+
+	g.s.Inject(fakeforge.Fault{
+		Path:   "*",
+		Status: http.StatusTooManyRequests,
+		Times:  1,
+		Header: http.Header{"Retry-After": {"30"}},
+	})
 	if _, err := g.c.History(ctx, g.ref, HistoryOptions{Revision: g.fx.Head.String()}); !errors.Is(err, forgehttp.ErrRateLimited) {
 		t.Errorf("429 = %v, want ErrRateLimited", err)
 	}
+
 	missing := RepositoryRef{Source: "gh", Repository: "octo/missing"}
 	if _, err := g.c.Resolve(ctx, missing, "HEAD"); !errors.Is(err, forgehttp.ErrNotFound) {
 		t.Errorf("missing repository = %v, want not found", err)
@@ -731,6 +828,7 @@ func TestGitHubEmptyRepository(t *testing.T) {
 			t.Errorf("empty Resolve(%q) = %v, want ErrRevisionNotFound", rev, err)
 		}
 	}
+
 	list, err := g.c.ListRefs(ctx, empty, RefsOptions{})
 	if err != nil || len(list.Refs) != 0 || list.Truncated {
 		t.Errorf("empty ListRefs = %+v, %v", list, err)
@@ -751,6 +849,7 @@ func TestGitHubConcurrent(t *testing.T) {
 			}
 		})
 	}
+
 	wg.Wait()
 }
 
@@ -763,10 +862,12 @@ func TestGitHubQuirks(t *testing.T) {
 	for i := range 5 {
 		id = g.repo.WriteTag(gitobj.Tag{Object: id, Name: fmt.Sprintf("deep%d", i), Message: "x\n"})
 	}
+
 	g.repo.SetRef("refs/tags/deep", id)
 	if _, err := g.c.Resolve(ctx, g.ref, "refs/tags/deep"); !errors.Is(err, ErrUnsupported) {
 		t.Errorf("deep tag = %v, want ErrUnsupported", err)
 	}
+
 	// ListRefs peels it through /tags.
 	list, err := g.c.ListRefs(ctx, g.ref, RefsOptions{Prefix: "refs/tags/"})
 	if err != nil || list.Refs[2].Name != "refs/tags/deep" || list.Refs[2].Commit != githubOID(g.fx.Main[0]) {
@@ -774,8 +875,13 @@ func TestGitHubQuirks(t *testing.T) {
 	}
 
 	// A JSON body in place of raw content is refused, never returned.
-	g.s.Inject(fakeforge.Fault{Path: "*/git/blobs/*", Status: http.StatusOK, Times: 1,
-		Header: http.Header{"Content-Type": {"application/json"}}, Body: `{"content":"eA==","encoding":"base64"}`})
+	g.s.Inject(fakeforge.Fault{
+		Path:   "*/git/blobs/*",
+		Status: http.StatusOK,
+		Times:  1,
+		Header: http.Header{"Content-Type": {"application/json"}},
+		Body:   `{"content":"eA==","encoding":"base64"}`,
+	})
 	if r, err := g.c.ReadBlob(ctx, g.ref, githubOID(g.fx.Blobs[fakeforge.PathReadme])); err == nil {
 		r.Close()
 		t.Error("ReadBlob accepted a JSON body")
@@ -788,11 +894,13 @@ func TestGitHubQuirks(t *testing.T) {
 	if !errors.Is(err, ErrRevisionNotFound) || !errors.Is(err, forgehttp.ErrNotFound) {
 		t.Errorf("unknown tip = %v, want ErrRevisionNotFound", err)
 	}
+
 	g.s.Inject(fakeforge.Fault{Path: "*/commits", Status: http.StatusUnprocessableEntity, Times: 1})
 	_, err = g.c.History(ctx, g.ref, HistoryOptions{Cursor: cur.encode()})
 	if !errors.Is(err, ErrRevisionNotFound) {
 		t.Errorf("unknown tip, 422 = %v, want ErrRevisionNotFound", err)
 	}
+
 	// A cursor on a missing repository is not blamed on the tip.
 	gone := RepositoryRef{Source: "gh", Repository: "octo/gone"}
 	_, err = g.c.History(ctx, gone, HistoryOptions{Cursor: cur.encode()})

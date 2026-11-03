@@ -39,7 +39,13 @@ func newGitLabTest(t *testing.T, l Limits) *gitlabTest {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &gitlabTest{srv: srv, repo: repo, fx: fx, c: c}
+
+	return &gitlabTest{
+		srv:  srv,
+		repo: repo,
+		fx:   fx,
+		c:    c,
+	}
 }
 
 // gitlabOID converts a fixture ID.
@@ -106,6 +112,7 @@ func TestGitLabResolve(t *testing.T) {
 		_, err := g.c.Resolve(context.Background(), gitlabRepo, rev)
 		gitlabNotFound(t, err, ErrRevisionNotFound)
 	}
+
 	if _, err := g.c.Resolve(context.Background(), gitlabRepo, "clash"); !errors.Is(err, ErrAmbiguous) {
 		t.Errorf("clash: err = %v, want ErrAmbiguous", err)
 	}
@@ -147,6 +154,7 @@ func TestGitLabEscaping(t *testing.T) {
 			t.Errorf("Resolve(%q) = %+v, %v", rev, got, err)
 		}
 	}
+
 	reqs := strings.Join(g.srv.Requests(), "\n")
 	for _, want := range []string{
 		"GET /projects/group%2Fsub%2Fproj/repository/branches/feat%2Fx?",
@@ -166,6 +174,7 @@ func TestGitLabListRefs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	want := []Ref{
 		{"refs/heads/clash", o(fx.ClashBranch), o(fx.ClashBranch)},
 		{"refs/heads/feature", o(fx.Feature[2]), o(fx.Feature[2])},
@@ -183,6 +192,7 @@ func TestGitLabListRefs(t *testing.T) {
 	if err != nil || len(tags.Refs) != 4 || tags.Truncated {
 		t.Fatalf("tags = %+v, %v", tags, err)
 	}
+
 	for limit, n := range map[int]int{2: 2, 3: 3, 6: 6} {
 		cut, err := g.c.ListRefs(context.Background(), gitlabRepo, RefsOptions{Limit: limit})
 		if err != nil || len(cut.Refs) != n || !cut.Truncated || !slices.Equal(cut.Refs, want[:n]) {
@@ -196,6 +206,7 @@ func TestGitLabListRefsPaging(t *testing.T) {
 	for i := range 250 {
 		g.repo.SetRef(fmt.Sprintf("refs/heads/b%03d", i), g.fx.Main[0])
 	}
+
 	list, err := g.c.ListRefs(context.Background(), gitlabRepo, RefsOptions{Prefix: headsPrefix})
 	if err != nil || len(list.Refs) != 253 || list.Truncated {
 		t.Fatalf("got %d refs, truncated %v, %v", len(list.Refs), list.Truncated, err)
@@ -218,6 +229,7 @@ func TestGitLabListRefsPaging(t *testing.T) {
 	for i := range 250 {
 		small.repo.SetRef(fmt.Sprintf("refs/heads/b%03d", i), small.fx.Main[0])
 	}
+
 	list, err = small.c.ListRefs(context.Background(), gitlabRepo, RefsOptions{Prefix: headsPrefix})
 	if err != nil || len(list.Refs) != 100 || !list.Truncated {
 		t.Fatalf("budget: got %d refs, truncated %v, %v", len(list.Refs), list.Truncated, err)
@@ -232,6 +244,7 @@ func TestGitLabEmptyRepository(t *testing.T) {
 	if err != nil || list.Default != "" || len(list.Refs) != 0 || list.Truncated {
 		t.Fatalf("list = %+v, %v", list, err)
 	}
+
 	_, err = g.c.Resolve(context.Background(), r, "HEAD")
 	gitlabNotFound(t, err, ErrRevisionNotFound)
 }
@@ -243,7 +256,8 @@ func TestGitLabCommit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	when := fakeforge.Epoch.Add(4 * time.Hour)
+
+	when := fakeforge.Epoch().Add(4 * time.Hour)
 	sig := Signature{Name: "Fake Author", Email: "author@example.com"}
 	if got.ID != gitlabOID(fx.Main[3]) || got.Tree != "" || !slices.Equal(got.Parents, []OID{gitlabOID(fx.Main[2])}) ||
 		got.Message != "Rename and add unicode name" || !got.Author.When.Equal(when) || !got.Committer.When.Equal(when) ||
@@ -280,19 +294,25 @@ func gitlabHistory(t *testing.T, g *gitlabTest, opts HistoryOptions) ([]OID, OID
 		if tip != "" && page.Tip != tip {
 			t.Fatalf("tip moved from %s to %s", tip, page.Tip)
 		}
+
 		tip = page.Tip
 		if len(page.Commits) > cmp(opts.PageSize, defaultPageSize) {
 			t.Fatalf("page of %d commits", len(page.Commits))
 		}
+
 		for _, c := range page.Commits {
 			ids = append(ids, c.ID)
 		}
+
 		if page.Next == "" {
 			return ids, tip
 		}
+
 		opts = HistoryOptions{Cursor: page.Next}
 	}
+
 	t.Fatal("history does not end")
+
 	return nil, ""
 }
 
@@ -303,10 +323,12 @@ func gitlabLog(t *testing.T, g *gitlabTest, tip gitobj.ID, path string) []OID {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	out := make([]OID, len(ids))
 	for i, id := range ids {
 		out[i] = gitlabOID(id)
 	}
+
 	return out
 }
 
@@ -323,6 +345,7 @@ func TestGitLabHistory(t *testing.T) {
 			if flip {
 				to = fx.Feature[2]
 			}
+
 			g.repo.SetRef("refs/heads/main", to)
 		}
 	})
@@ -333,6 +356,7 @@ func TestGitLabHistory(t *testing.T) {
 			t.Errorf("size %d: tip %s, got %v, want %v", size, tip, got, want)
 		}
 	}
+
 	g.srv.SetHook(nil)
 	g.repo.SetRef("refs/heads/main", fx.Head)
 
@@ -364,14 +388,17 @@ func TestGitLabTree(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		var want []string
 		for _, p := range list {
 			path := p.Path
 			if dir != "" {
 				path = dir + "/" + path
 			}
+
 			want = append(want, path)
 		}
+
 		slices.Sort(want)
 		var got []string
 		for _, e := range tr.Entries {
@@ -380,6 +407,7 @@ func TestGitLabTree(t *testing.T) {
 				t.Errorf("entry %+v", e)
 			}
 		}
+
 		if tr.ID != "" || tr.Commit != gitlabOID(fx.Head) || tr.Path != dir || tr.Truncated || !slices.Equal(got, want) {
 			t.Errorf("tree %q: %+v\nwant %v", dir, tr, want)
 		}
@@ -388,18 +416,22 @@ func TestGitLabTree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	for _, rec := range []bool{false, true} {
 		tr, err := g.c.Tree(ctx, gitlabRepo, "main", TreeOptions{Recursive: rec})
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		check(tr, rootTree.ID, "", rec)
 	}
+
 	docs, _ := g.repo.Lookup(fx.Head, "docs")
 	tr, err := g.c.Tree(ctx, gitlabRepo, "main", TreeOptions{Path: "docs", Recursive: true})
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	check(tr, docs.ID, "docs", true)
 
 	byPath := map[string]Entry{}
@@ -407,9 +439,13 @@ func TestGitLabTree(t *testing.T) {
 	for _, e := range tr.Entries {
 		byPath[e.Path] = e
 	}
+
 	for path, mode := range map[string]FileMode{
-		fakeforge.PathExec: ModeExec, fakeforge.PathSymlink: ModeSymlink, fakeforge.PathSubmodule: ModeSubmodule,
-		"docs/guide": ModeTree, fakeforge.PathReadme: ModeFile,
+		fakeforge.PathExec:      ModeExec,
+		fakeforge.PathSymlink:   ModeSymlink,
+		fakeforge.PathSubmodule: ModeSubmodule,
+		"docs/guide":            ModeTree,
+		fakeforge.PathReadme:    ModeFile,
 	} {
 		if byPath[path].Mode != mode {
 			t.Errorf("%s: mode %v, want %v", path, byPath[path].Mode, mode)
@@ -420,6 +456,7 @@ func TestGitLabTree(t *testing.T) {
 	if err != nil || len(cut.Entries) != 3 || !cut.Truncated {
 		t.Fatalf("cut = %+v, %v", cut, err)
 	}
+
 	for _, path := range []string{"nope", fakeforge.PathReadme, fakeforge.PathSubmodule, "docs/nope"} {
 		_, err := g.c.Tree(ctx, gitlabRepo, "main", TreeOptions{Path: path})
 		gitlabNotFound(t, err, ErrPathNotFound)
@@ -432,8 +469,9 @@ func TestGitLabTreePaging(t *testing.T) {
 	for i := range 250 {
 		files[fmt.Sprintf("d/f%03d", i)] = fakeforge.File{Data: []byte("same\n")} // equal blob IDs
 	}
+
 	files["top"] = fakeforge.File{Data: []byte("x")}
-	big := g.repo.CommitTree(g.repo.BuildTree(files), fakeforge.Epoch, "big\n")
+	big := g.repo.CommitTree(g.repo.BuildTree(files), fakeforge.Epoch(), "big\n")
 	g.repo.SetRef("refs/heads/big", big)
 
 	g.srv.ResetCalls()
@@ -456,7 +494,7 @@ func TestGitLabTreePaging(t *testing.T) {
 
 	// The call budget cuts a listing short.
 	small := newGitLabTest(t, Limits{MaxCalls: 3})
-	big = small.repo.CommitTree(small.repo.BuildTree(files), fakeforge.Epoch, "big\n")
+	big = small.repo.CommitTree(small.repo.BuildTree(files), fakeforge.Epoch(), "big\n")
 	tr, err = small.c.Tree(context.Background(), gitlabRepo, string(gitlabOID(big)), TreeOptions{Recursive: true})
 	if err != nil || len(tr.Entries) != 200 || !tr.Truncated {
 		t.Fatalf("budget: got %d entries, truncated %v, %v", len(tr.Entries), tr.Truncated, err)
@@ -474,7 +512,7 @@ func TestGitLabStat(t *testing.T) {
 	}{
 		{fakeforge.PathSymlink, ModeSymlink, ObjectBlob, gitlabOID(fx.Blobs[fakeforge.PathSymlink])},
 		{fakeforge.PathExec, ModeExec, ObjectBlob, gitlabOID(fx.Blobs[fakeforge.PathExec])},
-		{fakeforge.PathSubmodule, ModeSubmodule, ObjectCommit, gitlabOID(fakeforge.SubmoduleCommit)},
+		{fakeforge.PathSubmodule, ModeSubmodule, ObjectCommit, gitlabOID(fakeforge.SubmoduleCommit())},
 		{fakeforge.PathNested, ModeFile, ObjectBlob, gitlabOID(fx.Blobs[fakeforge.PathNested])},
 		{fakeforge.PathUnicode, ModeFile, ObjectBlob, gitlabOID(fx.Blobs[fakeforge.PathUnicode])},
 		{"docs/guide", ModeTree, ObjectTree, ""},
@@ -486,6 +524,7 @@ func TestGitLabStat(t *testing.T) {
 			t.Errorf("Stat(%q) = %+v, %v", tt.path, pi, err)
 		}
 	}
+
 	for _, path := range []string{"nope", "docs/nope", "nope/deeper", fakeforge.PathReadme + "/x"} {
 		_, err := g.c.Stat(context.Background(), gitlabRepo, "main", path)
 		gitlabNotFound(t, err, ErrPathNotFound)
@@ -499,11 +538,13 @@ func gitlabRead(t *testing.T) func(*Reader, error) []byte {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		defer r.Close()
 		data, err := io.ReadAll(r)
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		return data
 	}
 }
@@ -520,21 +561,30 @@ func TestGitLabReadFile(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		r, err := g.c.ReadFile(ctx, gitlabRepo, "main", path)
 		if err != nil {
 			t.Fatalf("%s: %v", path, err)
 		}
+
 		blob := r.Blob
 		got := gitlabRead(t)(r, nil)
 		if !bytes.Equal(got, want) {
 			t.Errorf("%s: content differs (%d bytes, want %d)", path, len(got), len(want))
 		}
-		wantBlob := Blob{ID: gitlabOID(fx.Blobs[path]), Commit: gitlabOID(fx.Head), Path: path,
-			Size: int64(len(want)), LFSPointer: path == fakeforge.PathLFS}
+
+		wantBlob := Blob{
+			ID:         gitlabOID(fx.Blobs[path]),
+			Commit:     gitlabOID(fx.Head),
+			Path:       path,
+			Size:       int64(len(want)),
+			LFSPointer: path == fakeforge.PathLFS,
+		}
 		if blob != wantBlob {
 			t.Errorf("%s: blob %+v, want %+v", path, blob, wantBlob)
 		}
 	}
+
 	if got := gitlabRead(t)(g.c.ReadFile(ctx, gitlabRepo, "main", fakeforge.PathSymlink)); string(got) != fakeforge.PathReadme {
 		t.Errorf("symlink content %q", got)
 	}
@@ -555,15 +605,18 @@ func TestGitLabReadFile(t *testing.T) {
 			t.Errorf("%s: err = %v, want ErrNotFile", path, err)
 		}
 	}
+
 	for _, path := range []string{"nope", "docs/nope", fakeforge.PathReadme + "/x"} {
 		_, err := g.c.ReadFile(ctx, gitlabRepo, "main", path)
 		gitlabNotFound(t, err, ErrPathNotFound)
 	}
+
 	// An older revision: the file was renamed later.
 	old := gitlabRead(t)(g.c.ReadFile(ctx, gitlabRepo, "refs/tags/chain", fakeforge.PathOldName))
 	if string(old) != "this file moves\n" {
 		t.Errorf("old file %q", old)
 	}
+
 	_, err := g.c.ReadFile(ctx, gitlabRepo, "refs/tags/chain", fakeforge.PathNewName)
 	gitlabNotFound(t, err, ErrPathNotFound)
 }
@@ -581,6 +634,7 @@ func TestGitLabReadLimits(t *testing.T) {
 	if _, err := g.c.ReadBlob(ctx, gitlabRepo, gitlabOID(g.fx.Blobs[fakeforge.PathLarge])); !errors.Is(err, ErrTooLarge) {
 		t.Fatalf("blob: err = %v, want ErrTooLarge", err)
 	}
+
 	small := gitlabRead(t)(g.c.ReadFile(ctx, gitlabRepo, "main", fakeforge.PathReadme))
 	if len(small) == 0 {
 		t.Error("small file empty")
@@ -597,15 +651,18 @@ func TestGitLabReadBlob(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		blob := r.Blob
 		if got := gitlabRead(t)(r, nil); !bytes.Equal(got, want) {
 			t.Errorf("%s: content differs", path)
 		}
+
 		wantBlob := Blob{ID: gitlabOID(id), Size: int64(len(want)), LFSPointer: path == fakeforge.PathLFS}
 		if blob != wantBlob {
 			t.Errorf("%s: blob %+v, want %+v", path, blob, wantBlob)
 		}
 	}
+
 	for _, id := range []gitobj.ID{g.fx.Head, gitobj.Hash(gitobj.TypeBlob, []byte("absent"))} {
 		_, err := g.c.ReadBlob(ctx, gitlabRepo, gitlabOID(id))
 		gitlabNotFound(t, err, ErrRevisionNotFound)
@@ -633,7 +690,7 @@ func TestGitLabMergeBase(t *testing.T) {
 		}
 	}
 
-	orphan := g.repo.CommitTree(g.repo.BuildTree(map[string]fakeforge.File{"x": {Data: []byte("x")}}), fakeforge.Epoch, "orphan\n")
+	orphan := g.repo.CommitTree(g.repo.BuildTree(map[string]fakeforge.File{"x": {Data: []byte("x")}}), fakeforge.Epoch(), "orphan\n")
 	g.repo.SetRef("refs/heads/orphan", orphan)
 	if _, err := g.c.MergeBase(ctx, gitlabRepo, "main", "orphan"); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("unrelated: err = %v, want ErrInvalid", err)
@@ -648,6 +705,7 @@ func TestGitLabErrors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	c, err := New(Source{ID: "gl", Session: bad})
 	if err != nil {
 		t.Fatal(err)
@@ -656,16 +714,26 @@ func TestGitLabErrors(t *testing.T) {
 		t.Errorf("bad token: err = %v", err)
 	}
 
-	g.srv.Inject(fakeforge.Fault{Path: "*/repository/branches/*", Status: http.StatusForbidden,
-		Body: `{"message":"403 Forbidden"}`, Times: 1})
+	g.srv.Inject(fakeforge.Fault{
+		Path:   "*/repository/branches/*",
+		Status: http.StatusForbidden,
+		Body:   `{"message":"403 Forbidden"}`,
+		Times:  1,
+	})
 	if _, err := g.c.Resolve(ctx, gitlabRepo, "refs/heads/main"); !errors.Is(err, forgehttp.ErrForbidden) {
 		t.Errorf("403: err = %v", err)
 	}
-	g.srv.Inject(fakeforge.Fault{Path: "*", Status: http.StatusTooManyRequests,
-		Header: http.Header{"Retry-After": {"30"}, "Ratelimit-Remaining": {"0"}}, Times: 1})
+
+	g.srv.Inject(fakeforge.Fault{
+		Path:   "*",
+		Status: http.StatusTooManyRequests,
+		Header: http.Header{"Retry-After": {"30"}, "Ratelimit-Remaining": {"0"}},
+		Times:  1,
+	})
 	if _, err := g.c.Tree(ctx, gitlabRepo, "main", TreeOptions{}); !errors.Is(err, forgehttp.ErrRateLimited) {
 		t.Errorf("429: err = %v", err)
 	}
+
 	g.srv.Inject(fakeforge.Fault{Path: "*/repository/tree", Status: http.StatusInternalServerError, Times: 1})
 	if _, err := g.c.Tree(ctx, gitlabRepo, "main", TreeOptions{}); err == nil || errors.Is(err, forgehttp.ErrNotFound) {
 		t.Errorf("500: err = %v", err)
@@ -683,11 +751,13 @@ func TestGitLabErrors(t *testing.T) {
 				t.Errorf("%s %s: err = %v", r.Repository, rev, err)
 			}
 		}
+
 		_, err := g.c.ReadBlob(ctx, r, gitlabOID(g.fx.Blobs[fakeforge.PathReadme]))
 		if !errors.Is(err, forgehttp.ErrNotFound) || errors.Is(err, ErrRevisionNotFound) {
 			t.Errorf("%s blob: err = %v", r.Repository, err)
 		}
 	}
+
 	g.srv.SetAccess(gitlabRepo.Repository, fakeforge.AccessRead)
 	if _, err := g.c.Resolve(ctx, gitlabRepo, "main"); err != nil {
 		t.Errorf("read access: %v", err)

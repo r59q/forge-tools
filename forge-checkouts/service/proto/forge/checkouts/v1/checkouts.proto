@@ -1,0 +1,150 @@
+syntax = "proto3";
+package forge.checkouts.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/r59q/forge-tools/forge-checkouts/service/checkoutspb";
+
+// CheckoutsService manages host-local working copies. All RPCs require a bearer
+// service token. Consumers must stop writing before removal; this is no sandbox.
+service CheckoutsService {
+  // CreateCheckout prepares an independent checkout at a resolved commit.
+  rpc CreateCheckout(CreateCheckoutRequest) returns (CreateCheckoutResponse) {
+    option (google.api.http) = {
+      post: "/v1/checkouts"
+      body: "*"
+      response_body: "checkout"
+    };
+  }
+  // ListCheckouts includes ready, retained and failed checkouts.
+  rpc ListCheckouts(ListCheckoutsRequest) returns (ListCheckoutsResponse) {
+    option (google.api.http) = {get: "/v1/checkouts"};
+  }
+  // GetCheckout reads durable creation metadata, even if files are missing.
+  rpc GetCheckout(GetCheckoutRequest) returns (GetCheckoutResponse) {
+    option (google.api.http) = {
+      get: "/v1/checkouts/{id}"
+      response_body: "checkout"
+    };
+  }
+  // RetainCheckout records that a checkout should be kept until explicit removal.
+  rpc RetainCheckout(RetainCheckoutRequest) returns (RetainCheckoutResponse) {
+    option (google.api.http) = {
+      post: "/v1/checkouts/{id}/retain"
+      body: "*"
+      response_body: "checkout"
+    };
+  }
+  // RemoveCheckout refuses uncommitted files unless discard is explicitly true.
+  rpc RemoveCheckout(RemoveCheckoutRequest) returns (RemoveCheckoutResponse) {
+    option (google.api.http) = {delete: "/v1/checkouts/{id}"};
+  }
+  // InspectCheckout reads current HEAD, attached branch and changed paths.
+  rpc InspectCheckout(InspectCheckoutRequest) returns (InspectCheckoutResponse) {
+    option (google.api.http) = {
+      get: "/v1/checkouts/{id}/status"
+      response_body: "status"
+    };
+  }
+  // ReadDiff returns separate staged and unstaged binary patches.
+  rpc ReadDiff(ReadDiffRequest) returns (ReadDiffResponse) {
+    option (google.api.http) = {
+      get: "/v1/checkouts/{id}/diff"
+      response_body: "diff"
+    };
+  }
+}
+// Repository selects local_path alone, or connector source and repository path.
+// Local paths are meaningful only on the service host and must be trusted.
+message Repository {
+  string local_path = 1;
+  string source = 2;
+  string path = 3;
+}
+// CreateCheckoutRequest accepts a branch, tag or commit. Empty reference means HEAD.
+message CreateCheckoutRequest {
+  Repository repository = 1;
+  string reference = 2;
+}
+// Checkout records the initial resolved revision; Status reports current HEAD.
+// State is creating, ready, retained, removing or failed. Location is host-local.
+message Checkout {
+  string id = 1;
+  Repository repository = 2;
+  string reference = 3;
+  string revision = 4;
+  string state = 5;
+  google.protobuf.Timestamp created_at = 6;
+  string location = 7;
+}
+// CreateCheckoutResponse carries the created checkout.
+message CreateCheckoutResponse {
+  Checkout checkout = 1;
+}
+// ListCheckoutsRequest lists all checkouts.
+message ListCheckoutsRequest {}
+// GetCheckoutRequest selects a stable checkout ID.
+message GetCheckoutRequest {
+  string id = 1;
+}
+// GetCheckoutResponse carries the checkout.
+message GetCheckoutResponse {
+  Checkout checkout = 1;
+}
+// RetainCheckoutRequest selects a stable checkout ID.
+message RetainCheckoutRequest {
+  string id = 1;
+}
+// RetainCheckoutResponse carries the retained checkout.
+message RetainCheckoutResponse {
+  Checkout checkout = 1;
+}
+// RemoveCheckoutRequest opts into discarding files only when discard is true.
+message RemoveCheckoutRequest {
+  string id = 1;
+  bool discard = 2;
+}
+// RemoveCheckoutResponse is empty on success.
+message RemoveCheckoutResponse {}
+// ListCheckoutsResponse orders durable metadata by creation time and ID.
+message ListCheckoutsResponse {
+  repeated Checkout checkouts = 1;
+}
+// InspectCheckoutRequest selects a stable checkout ID.
+message InspectCheckoutRequest {
+  string id = 1;
+}
+// InspectCheckoutResponse carries the checkout status.
+message InspectCheckoutResponse {
+  Status status = 1;
+}
+// ReadDiffRequest selects a stable checkout ID.
+message ReadDiffRequest {
+  string id = 1;
+}
+// ReadDiffResponse carries the checkout diff.
+message ReadDiffResponse {
+  Diff diff = 1;
+}
+// File uses Git porcelain status codes for index and worktree, including ?? and !!.
+// Old_path is set for renames/copies. Paths are relative to the checkout.
+message File {
+  string path = 1;
+  string old_path = 2;
+  string index = 3;
+  string worktree = 4;
+}
+// Status reports the current revision, optional branch and all changed paths.
+// Initial checkouts are detached, so branch is initially empty.
+message Status {
+  string revision = 1;
+  string branch = 2;
+  repeated File files = 3;
+}
+// Diff carries binary-capable patches as bytes (base64 in JSON), each at most 8 MiB.
+// Untracked and ignored file contents are excluded; Status lists their paths.
+message Diff {
+  bytes staged = 1;
+  bytes unstaged = 2;
+}

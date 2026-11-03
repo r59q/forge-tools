@@ -78,18 +78,18 @@ checkout without implementing Git checkout or credential handling itself.
 
 The example server exposes these browser routes (all JSON except static assets):
 
-| Route | Purpose |
-| --- | --- |
-| `GET /api/connections` | Connector connection choices. |
-| `GET /api/checkouts` | Saved checkout metadata. |
-| `POST /api/checkouts` | Create with `{source, repository, reference}`; empty source selects the local demo. |
-| `GET /api/checkouts/{id}` | One checkout's metadata. |
-| `DELETE /api/checkouts/{id}` | Protected removal; never forwards `discard`. |
-| `POST /api/checkouts/{id}/retain` | Retain the checkout. |
-| `GET /api/checkouts/{id}/status` or `/diff` | Forward checkout status or base64 patches. |
-| `GET /api/checkouts/{id}/files` | List local checkout files. |
-| `GET /api/checkouts/{id}/file?path=` | Read one text file. |
-| `GET /api/checkouts/{id}/search?q=` | Search checkout text. |
+| Route                                       | Purpose                                                                             |
+| ------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `GET /api/connections`                      | Connector connection choices.                                                       |
+| `GET /api/checkouts`                        | Saved checkout metadata.                                                            |
+| `POST /api/checkouts`                       | Create with `{source, repository, reference}`; empty source selects the local demo. |
+| `GET /api/checkouts/{id}`                   | One checkout's metadata.                                                            |
+| `DELETE /api/checkouts/{id}`                | Protected removal; never forwards `discard`.                                        |
+| `POST /api/checkouts/{id}/retain`           | Retain the checkout.                                                                |
+| `GET /api/checkouts/{id}/status` or `/diff` | Forward checkout status or base64 patches.                                          |
+| `GET /api/checkouts/{id}/files`             | List local checkout files.                                                          |
+| `GET /api/checkouts/{id}/file?path=`        | Read one text file.                                                                 |
+| `GET /api/checkouts/{id}/search?q=`         | Search checkout text.                                                               |
 
 File reads skip symlinks, `.git`, binary files and files over 256 KiB. Listings
 stop after 2,000 entries; searches stop after 100 matches or 16 MiB of text. The

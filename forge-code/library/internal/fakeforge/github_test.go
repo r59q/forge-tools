@@ -26,21 +26,25 @@ func githubGet(t *testing.T, s *Server, path, accept string) (int, http.Header, 
 	if accept != "" {
 		req.Header.Set("Accept", accept)
 	}
+
 	resp, err := s.Session.Client.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return resp.StatusCode, resp.Header, body
 }
 
 func newGitHubServer(t *testing.T, opts GitHubOptions) (*Server, *Repo, Fixture) {
 	s := NewServer(t, forgeauth.GitHub, GitHubFront(opts))
 	r := s.NewRepo("octo/fixture")
+
 	return s, r, Seed(r)
 }
 
@@ -108,14 +112,18 @@ func TestGitHubFrontShapes(t *testing.T) {
 	var tree struct {
 		SHA  string
 		Tree []struct {
-			Path, Mode, Type, SHA string
-			Size                  *int64
+			Path string
+			Mode string
+			Type string
+			SHA  string
+			Size *int64
 		}
 		Truncated bool
 	}
 	if err := get(t, s.Session, repo+"/git/trees/"+fx.Head.String(), &tree); err != nil || tree.SHA != fx.Head.String() {
 		t.Fatalf("git/trees on a commit = %+v, %v", tree.SHA, err)
 	}
+
 	modes := map[string]string{}
 	for _, e := range tree.Tree {
 		modes[e.Path] = e.Mode + " " + e.Type
@@ -123,6 +131,7 @@ func TestGitHubFrontShapes(t *testing.T) {
 			t.Errorf("entry %s: size %v", e.Path, e.Size)
 		}
 	}
+
 	if modes["docs"] != "040000 tree" || modes["link"] != "120000 blob" {
 		t.Errorf("modes = %v", modes)
 	}
@@ -145,16 +154,18 @@ func TestGitHubFrontQuirks(t *testing.T) {
 
 	blob := fx.Blobs[PathBinary]
 	status, h, body := githubGet(t, s, repo+"/git/blobs/"+blob.String(), "application/vnd.github.raw+json")
-	if status != http.StatusOK || !bytes.Equal(body, Binary) || h.Get("Content-Length") != "16" {
+	if status != http.StatusOK || !bytes.Equal(body, Binary()) || h.Get("Content-Length") != "16" {
 		t.Errorf("raw blob = %d %q", status, body)
 	}
+
 	var b64 struct{ Content, Encoding string }
 	if err := get(t, s.Session, repo+"/git/blobs/"+blob.String(), &b64); err != nil || b64.Encoding != "base64" {
 		t.Fatalf("JSON blob = %+v, %v", b64, err)
 	}
-	if data, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(b64.Content, "\n", "")); err != nil || !bytes.Equal(data, Binary) {
+	if data, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(b64.Content, "\n", "")); err != nil || !bytes.Equal(data, Binary()) {
 		t.Errorf("JSON blob content = %q, %v", data, err)
 	}
+
 	status, _, body = githubGet(t, s, repo+"/git/blobs/"+fx.Blobs[PathLarge].String(), "application/vnd.github.raw+json")
 	if status != http.StatusForbidden || !strings.Contains(string(body), "too_large") {
 		t.Errorf("large blob = %d %s", status, body)
@@ -192,7 +203,8 @@ func TestGitHubFrontQuirks(t *testing.T) {
 		len(cmp.Commits) != 1 || cmp.Commits[0].SHA != fx.Feature[2].String() {
 		t.Errorf("compare = %+v, %v", cmp, err)
 	}
-	orphan := r.CommitTree(r.BuildTree(map[string]File{"x": {Data: []byte("x")}}), Epoch, "Orphan\n")
+
+	orphan := r.CommitTree(r.BuildTree(map[string]File{"x": {Data: []byte("x")}}), Epoch(), "Orphan\n")
 	r.SetRef("refs/heads/orphan", orphan)
 	status, _, body = githubGet(t, s, repo+"/compare/main...orphan", "")
 	if status != http.StatusNotFound || !strings.Contains(string(body), "No common ancestor") {

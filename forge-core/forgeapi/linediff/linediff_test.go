@@ -22,59 +22,124 @@ func TestHunks(t *testing.T) {
 		want     string
 		add, del int
 	}{
-		{name: "identical", a: "x\ny\n", b: "x\ny\n", context: 3},
+		{
+			name:    "identical",
+			a:       "x\ny\n",
+			b:       "x\ny\n",
+			context: 3,
+		},
 		{name: "both empty", context: 3},
 		{
-			name: "from empty", b: "x\ny\n", context: 3,
-			want: "@@ -0,0 +1,2 @@\n+x\n+y\n", add: 2,
+			name:    "from empty",
+			b:       "x\ny\n",
+			context: 3,
+			want:    "@@ -0,0 +1,2 @@\n+x\n+y\n",
+			add:     2,
 		},
 		{
-			name: "to empty", a: "x\n", context: 3,
-			want: "@@ -1 +0,0 @@\n-x\n", del: 1,
+			name:    "to empty",
+			a:       "x\n",
+			context: 3,
+			want:    "@@ -1 +0,0 @@\n-x\n",
+			del:     1,
 		},
 		{
-			name: "modify middle", a: "1\n2\n3\n4\n5\n6\n7\n8\n9\n", b: "1\n2\n3\n4\nfive\n6\n7\n8\n9\n", context: 3,
-			want: "@@ -2,7 +2,7 @@\n 2\n 3\n 4\n-5\n+five\n 6\n 7\n 8\n", add: 1, del: 1,
+			name:    "modify middle",
+			a:       "1\n2\n3\n4\n5\n6\n7\n8\n9\n",
+			b:       "1\n2\n3\n4\nfive\n6\n7\n8\n9\n",
+			context: 3,
+			want:    "@@ -2,7 +2,7 @@\n 2\n 3\n 4\n-5\n+five\n 6\n 7\n 8\n",
+			add:     1,
+			del:     1,
 		},
 		{
-			name: "context 0", a: "1\n2\n3\n", b: "1\nb\n3\n", context: 0,
-			want: "@@ -2 +2 @@\n-2\n+b\n", add: 1, del: 1,
+			name:    "context 0",
+			a:       "1\n2\n3\n",
+			b:       "1\nb\n3\n",
+			context: 0,
+			want:    "@@ -2 +2 @@\n-2\n+b\n",
+			add:     1,
+			del:     1,
 		},
 		{
-			name: "pure insert context 0", a: "1\n2\n", b: "1\nx\n2\n", context: 0,
-			want: "@@ -1,0 +2 @@\n+x\n", add: 1,
+			name:    "pure insert context 0",
+			a:       "1\n2\n",
+			b:       "1\nx\n2\n",
+			context: 0,
+			want:    "@@ -1,0 +2 @@\n+x\n",
+			add:     1,
 		},
 		{
-			name: "negative context", a: "1\n2\n3\n", b: "1\nb\n3\n", context: -5,
-			want: "@@ -2 +2 @@\n-2\n+b\n", add: 1, del: 1,
+			name:    "negative context",
+			a:       "1\n2\n3\n",
+			b:       "1\nb\n3\n",
+			context: -5,
+			want:    "@@ -2 +2 @@\n-2\n+b\n",
+			add:     1,
+			del:     1,
 		},
 		{
-			name: "merged hunks", a: "a\n1\n2\nb\n", b: "A\n1\n2\nB\n", context: 1,
-			want: "@@ -1,4 +1,4 @@\n-a\n+A\n 1\n 2\n-b\n+B\n", add: 2, del: 2,
+			name:    "merged hunks",
+			a:       "a\n1\n2\nb\n",
+			b:       "A\n1\n2\nB\n",
+			context: 1,
+			want:    "@@ -1,4 +1,4 @@\n-a\n+A\n 1\n 2\n-b\n+B\n",
+			add:     2,
+			del:     2,
 		},
 		{
-			name: "split hunks", a: "a\n1\n2\n3\nb\n", b: "A\n1\n2\n3\nB\n", context: 1,
-			want: "@@ -1,2 +1,2 @@\n-a\n+A\n 1\n@@ -4,2 +4,2 @@\n 3\n-b\n+B\n", add: 2, del: 2,
+			name:    "split hunks",
+			a:       "a\n1\n2\n3\nb\n",
+			b:       "A\n1\n2\n3\nB\n",
+			context: 1,
+			want:    "@@ -1,2 +1,2 @@\n-a\n+A\n 1\n@@ -4,2 +4,2 @@\n 3\n-b\n+B\n",
+			add:     2,
+			del:     2,
 		},
 		{
-			name: "add final newline", a: "x\ny", b: "x\ny\n", context: 3,
-			want: "@@ -1,2 +1,2 @@\n x\n-y\n\\ No newline at end of file\n+y\n", add: 1, del: 1,
+			name:    "add final newline",
+			a:       "x\ny",
+			b:       "x\ny\n",
+			context: 3,
+			want:    "@@ -1,2 +1,2 @@\n x\n-y\n\\ No newline at end of file\n+y\n",
+			add:     1,
+			del:     1,
 		},
 		{
-			name: "drop final newline", a: "x\ny\n", b: "x\ny", context: 3,
-			want: "@@ -1,2 +1,2 @@\n x\n-y\n+y\n\\ No newline at end of file\n", add: 1, del: 1,
+			name:    "drop final newline",
+			a:       "x\ny\n",
+			b:       "x\ny",
+			context: 3,
+			want:    "@@ -1,2 +1,2 @@\n x\n-y\n+y\n\\ No newline at end of file\n",
+			add:     1,
+			del:     1,
 		},
 		{
-			name: "context without final newline", a: "a\nz", b: "b\nz", context: 3,
-			want: "@@ -1,2 +1,2 @@\n-a\n+b\n z\n\\ No newline at end of file\n", add: 1, del: 1,
+			name:    "context without final newline",
+			a:       "a\nz",
+			b:       "b\nz",
+			context: 3,
+			want:    "@@ -1,2 +1,2 @@\n-a\n+b\n z\n\\ No newline at end of file\n",
+			add:     1,
+			del:     1,
 		},
 		{
-			name: "crlf kept", a: "a\r\nb\r\n", b: "a\r\nc\r\n", context: 3,
-			want: "@@ -1,2 +1,2 @@\n a\r\n-b\r\n+c\r\n", add: 1, del: 1,
+			name:    "crlf kept",
+			a:       "a\r\nb\r\n",
+			b:       "a\r\nc\r\n",
+			context: 3,
+			want:    "@@ -1,2 +1,2 @@\n a\r\n-b\r\n+c\r\n",
+			add:     1,
+			del:     1,
 		},
 		{
-			name: "line ending change", a: "a\n", b: "a\r\n", context: 3,
-			want: "@@ -1 +1 @@\n-a\n+a\r\n", add: 1, del: 1,
+			name:    "line ending change",
+			a:       "a\n",
+			b:       "a\r\n",
+			context: 3,
+			want:    "@@ -1 +1 @@\n-a\n+a\r\n",
+			add:     1,
+			del:     1,
 		},
 	}
 	for _, tt := range tests {
@@ -131,6 +196,7 @@ func TestPathological(t *testing.T) {
 		fmt.Fprintf(&a, "%d\n", r.IntN(4))
 		fmt.Fprintf(&b, "%d\n", r.IntN(4))
 	}
+
 	patch, add, del := Hunks(a.Bytes(), b.Bytes(), 3)
 	check(t, "pathological", a.Bytes(), b.Bytes(), patch, add, del)
 }
@@ -140,12 +206,14 @@ func TestGit(t *testing.T) {
 	if err != nil {
 		t.Skip("git not on PATH")
 	}
+
 	r := rand.New(rand.NewPCG(7, 8))
 	for i := range 150 {
 		a, b := randomPair(r)
 		if bytes.Equal(a, b) {
 			continue
 		}
+
 		ctx := r.IntN(4)
 		dir := t.TempDir()
 		h, add, del := Hunks(a, b, ctx)
@@ -156,6 +224,7 @@ func TestGit(t *testing.T) {
 		if ctx == 0 {
 			args = append(args, "--unidiff-zero")
 		}
+
 		runGit(t, git, dir, append(args, "--check", "p")...)
 		runGit(t, git, dir, append(args, "p")...)
 		got, err := os.ReadFile(filepath.Join(dir, "f"))
@@ -186,10 +255,12 @@ func check(t *testing.T, name string, a, b []byte, patch string, add, del int) {
 	if bytes.Equal(a, b) != (patch == "") {
 		t.Fatalf("%s: patch %q for equal=%v", name, patch, bytes.Equal(a, b))
 	}
+
 	got, err := apply(a, patch)
 	if err != nil || !bytes.Equal(got, b) {
 		t.Fatalf("%s: apply = %q, %v, want %q\na=%q\npatch:\n%s", name, got, err, b, a, patch)
 	}
+
 	var pa, pd int
 	for _, l := range strings.SplitAfter(patch, "\n") {
 		switch {
@@ -199,6 +270,7 @@ func check(t *testing.T, name string, a, b []byte, patch string, add, del int) {
 			pd++
 		}
 	}
+
 	if pa != add || pd != del {
 		t.Fatalf("%s: counts +%d -%d, patch has +%d -%d", name, add, del, pa, pd)
 	}
@@ -219,16 +291,20 @@ func apply(a []byte, patch string) ([]byte, error) {
 	if len(lines) >= 2 && strings.HasPrefix(lines[0], "--- ") && strings.HasPrefix(lines[1], "+++ ") {
 		lines = lines[2:]
 	}
+
 	for len(lines) > 0 {
 		m := hunkHeader.FindStringSubmatch(lines[0])
 		if m == nil {
 			return nil, fmt.Errorf("bad hunk header %q", lines[0])
 		}
+
 		num := func(s string) int {
 			if s == "" {
 				return 1
 			}
+
 			n, _ := strconv.Atoi(s)
+
 			return n
 		}
 		oldL, oldN, newL, newN := num(m[1]), num(m[2]), num(m[3]), num(m[4])
@@ -245,19 +321,24 @@ func apply(a []byte, patch string) ([]byte, error) {
 				if len(body) == 0 {
 					return nil, errors.New("marker without line")
 				}
+
 				t := body[len(body)-1].text
 				body[len(body)-1].text = t[:len(t)-1]
 				continue
 			}
+
 			if len(l) < 2 || !strings.ContainsRune(" -+", rune(l[0])) {
 				return nil, fmt.Errorf("bad body line %q", l)
 			}
+
 			body = append(body, entry{l[0], []byte(l[1:])})
 		}
+
 		start := oldL - 1
 		if oldN == 0 {
 			start = oldL
 		}
+
 		wantNew := newL - 1
 		if newN == 0 {
 			wantNew = newL
@@ -265,30 +346,37 @@ func apply(a []byte, patch string) ([]byte, error) {
 		if start < pos || start > len(src) {
 			return nil, fmt.Errorf("hunk at old line %d out of order", oldL)
 		}
+
 		out = append(out, src[pos:start]...)
 		pos = start
 		if len(out) != wantNew {
 			return nil, fmt.Errorf("hunk new line %d, but output is at %d", newL, len(out))
 		}
+
 		var gotOld, gotNew int
 		for _, e := range body {
 			if e.kind != '+' {
 				if pos >= len(src) || !bytes.Equal(src[pos], e.text) {
 					return nil, fmt.Errorf("mismatch at old line %d", pos+1)
 				}
+
 				pos++
 				gotOld++
 			}
+
 			if e.kind != '-' {
 				out = append(out, e.text)
 				gotNew++
 			}
 		}
+
 		if gotOld != oldN || gotNew != newN {
 			return nil, fmt.Errorf("hunk counts -%d +%d, header -%d +%d", gotOld, gotNew, oldN, newN)
 		}
 	}
+
 	out = append(out, src[pos:]...)
+
 	return bytes.Join(out, nil), nil
 }
 
@@ -301,6 +389,7 @@ func randomPair(r *rand.Rand) (a, b []byte) {
 		for i := range ls {
 			ls[i] = pool[r.IntN(len(pool))]
 		}
+
 		return ls
 	}
 	join := func(ls []string) []byte {
@@ -308,6 +397,7 @@ func randomPair(r *rand.Rand) (a, b []byte) {
 		if s != "" && r.IntN(4) == 0 {
 			s = strings.TrimSuffix(s, "\n") // drop the final newline
 		}
+
 		return []byte(s)
 	}
 	la := gen(r.IntN(25))
@@ -332,6 +422,7 @@ func randomPair(r *rand.Rand) (a, b []byte) {
 			}
 		}
 	}
+
 	return join(la), join(lb)
 }
 
@@ -345,8 +436,10 @@ func lcsLen(a, b [][]byte) int {
 				cur[j+1] = max(prev[j+1], cur[j])
 			}
 		}
+
 		prev, cur = cur, prev
 	}
+
 	return prev[len(b)]
 }
 
@@ -367,9 +460,16 @@ func runGit(t *testing.T, git, dir string, args ...string) string {
 	var out, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &stderr
 	err := cmd.Run()
-	var ee *exec.ExitError
-	if err != nil && !(errors.As(err, &ee) && ee.ExitCode() == 1 && args[0] == "diff") {
+	if err != nil && !diffFound(err, args) {
 		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, stderr.String())
 	}
+
 	return out.String()
+}
+
+// diffFound reports whether err is git diff's exit status 1.
+func diffFound(err error, args []string) bool {
+	var ee *exec.ExitError
+
+	return errors.As(err, &ee) && ee.ExitCode() == 1 && args[0] == "diff"
 }

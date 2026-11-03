@@ -5,11 +5,14 @@
 FROM --platform=$BUILDPLATFORM golang:1.27-alpine@sha256:d200d2dd76b03a99b52651fd1325aff7dcd35422c35c01bac56571b0507f3deb AS build
 WORKDIR /src
 COPY forge-core/forgeapi/go.mod forge-core/forgeapi/
+COPY forge-core/servicekit/go.mod forge-core/servicekit/go.sum forge-core/servicekit/
 COPY forge-connector/library/go.mod forge-connector/library/go.sum forge-connector/library/
 # Only tests use the broker module; its go.mod completes the module graph.
 COPY forge-connector/broker/go.mod forge-connector/broker/go.sum forge-connector/broker/
 COPY forge-repositories/library/go.mod forge-repositories/library/
 COPY forge-repositories/service/go.mod forge-repositories/service/go.sum forge-repositories/service/
+COPY forge-actions/library/go.mod forge-actions/library/
+COPY forge-actions/service/go.mod forge-actions/service/go.sum forge-actions/service/
 COPY forge-issues/library/go.mod forge-issues/library/
 COPY forge-issues/service/go.mod forge-issues/service/go.sum forge-issues/service/
 COPY forge-tools-management/library/go.mod forge-tools-management/library/
@@ -18,9 +21,12 @@ WORKDIR /src/forge-tools-management/service
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
 WORKDIR /src
 COPY forge-core/forgeapi/ forge-core/forgeapi/
+COPY forge-core/servicekit/ forge-core/servicekit/
 COPY forge-connector/library/ forge-connector/library/
 COPY forge-repositories/library/ forge-repositories/library/
 COPY forge-repositories/service/ forge-repositories/service/
+COPY forge-actions/library/ forge-actions/library/
+COPY forge-actions/service/ forge-actions/service/
 COPY forge-issues/library/ forge-issues/library/
 COPY forge-issues/service/ forge-issues/service/
 COPY forge-tools-management/library/ forge-tools-management/library/

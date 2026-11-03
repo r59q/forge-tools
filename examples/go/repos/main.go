@@ -23,11 +23,18 @@ import (
 	"github.com/r59q/forge-tools/forge-core/forgeapi/forgehttp"
 )
 
-// repoPaths is the first page of the user's repositories on each forge.
-var repoPaths = map[forgeauth.Kind]string{
-	forgeauth.GitHub:  "/user/repos?per_page=100",
-	forgeauth.GitLab:  "/projects?membership=true&per_page=100",
-	forgeauth.Forgejo: "/user/repos?limit=50",
+// repoPath returns the first page of the user's repositories on a forge.
+func repoPath(kind forgeauth.Kind) string {
+	switch kind {
+	case forgeauth.GitHub:
+		return "/user/repos?per_page=100"
+	case forgeauth.GitLab:
+		return "/projects?membership=true&per_page=100"
+	case forgeauth.Forgejo:
+		return "/user/repos?limit=50"
+	}
+
+	return ""
 }
 
 func main() {
@@ -49,26 +56,31 @@ func run(ctx context.Context, conn forgeauth.Connection, creds forgeauth.Credent
 			return err
 		}
 	}
+
 	s, err := reg.Open(ctx, conn, creds)
 	if err != nil {
 		return err
 	}
+
 	me, err := reg.Whoami(ctx, s)
 	if err != nil {
 		return err
 	}
+
 	fmt.Fprintf(out, "Signed in as %s\n", me.Login)
 
 	// Follow Link headers; through the proxy they point back at the proxy.
-	for next := repoPaths[s.Kind]; next != ""; {
+	for next := repoPath(s.Kind); next != ""; {
 		req, err := s.NewRequest(ctx, http.MethodGet, next, nil)
 		if err != nil {
 			return err
 		}
+
 		resp, err := s.Client.Do(req)
 		if err != nil {
 			return err
 		}
+
 		var repos []struct {
 			FullName string `json:"full_name"`           // GitHub, Forgejo
 			Path     string `json:"path_with_namespace"` // GitLab
@@ -77,14 +89,18 @@ func run(ctx context.Context, conn forgeauth.Connection, creds forgeauth.Credent
 		if err == nil {
 			err = json.NewDecoder(resp.Body).Decode(&repos)
 		}
-		resp.Body.Close()
+
+		_ = resp.Body.Close()
 		if err != nil {
 			return err
 		}
+
 		for _, r := range repos {
 			fmt.Fprintln(out, r.FullName+r.Path)
 		}
+
 		next, _ = forgehttp.NextPage(resp.Header)
 	}
+
 	return nil
 }

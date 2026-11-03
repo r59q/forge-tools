@@ -18,22 +18,31 @@ const maxLFSPointer = 1024
 // the body and returns an error if the known size is over max.
 func finishReader(r *Reader, max int64) (*Reader, error) {
 	if r.Size > max {
-		r.Close()
+		_ = r.Close() // the size error is the one to report
 		return nil, fmt.Errorf("%w: blob of %d bytes, limit %d", ErrTooLarge, r.Size, max)
 	}
+
 	body := bufio.NewReaderSize(r.ReadCloser, maxLFSPointer+16)
 	if r.Size < maxLFSPointer {
 		head, err := body.Peek(maxLFSPointer)
 		if err != nil && !errors.Is(err, io.EOF) {
-			r.Close()
+			_ = r.Close() // the read error is the one to report
 			return nil, err
 		}
+
 		if len(head) < maxLFSPointer {
 			r.Size = int64(len(head))
 			r.LFSPointer = isLFSPointer(head)
 		}
 	}
-	r.ReadCloser = &cappedBody{r: body, c: r.ReadCloser, left: max, max: max}
+
+	r.ReadCloser = &cappedBody{
+		r:    body,
+		c:    r.ReadCloser,
+		left: max,
+		max:  max,
+	}
+
 	return r, nil
 }
 
@@ -57,13 +66,17 @@ func (b *cappedBody) Read(p []byte) (int, error) {
 			b.err = fmt.Errorf("%w: blob over %d bytes", ErrTooLarge, b.max)
 			return 0, b.err
 		}
+
 		return 0, err
 	}
+
 	if int64(len(p)) > b.left {
 		p = p[:b.left]
 	}
+
 	n, err := b.r.Read(p)
 	b.left -= int64(n)
+
 	return n, err
 }
 
@@ -75,16 +88,19 @@ func isLFSPointer(data []byte) bool {
 	if len(data) >= maxLFSPointer || !utf8.Valid(data) || !bytes.HasSuffix(data, []byte("\n")) {
 		return false
 	}
+
 	lines := strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
 	if lines[0] != "version https://git-lfs.github.com/spec/v1" {
 		return false
 	}
+
 	oid, size := false, false
 	for _, line := range lines[1:] {
 		key, value, ok := strings.Cut(line, " ")
 		if !ok || key == "" || value == "" {
 			return false
 		}
+
 		switch key {
 		case "oid":
 			hex, ok := strings.CutPrefix(value, "sha256:")
@@ -94,5 +110,6 @@ func isLFSPointer(data []byte) bool {
 			size = err == nil && n >= 0
 		}
 	}
+
 	return oid && size
 }

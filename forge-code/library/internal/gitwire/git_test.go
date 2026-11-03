@@ -28,6 +28,7 @@ func gitServer(t *testing.T) (string, func(args ...string) string) {
 	if err != nil {
 		t.Skip("git not on PATH")
 	}
+
 	root := t.TempDir()
 	repo := filepath.Join(root, "repo.git")
 	run := func(args ...string) string {
@@ -39,6 +40,7 @@ func gitServer(t *testing.T) (string, func(args ...string) string) {
 		if err != nil {
 			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
 		}
+
 		return strings.TrimSpace(string(out))
 	}
 	init := exec.Command(gitPath, "init", "-q", "--bare", "-b", "main", repo)
@@ -46,6 +48,7 @@ func gitServer(t *testing.T) (string, func(args ...string) string) {
 	if out, err := init.CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v\n%s", err, out)
 	}
+
 	for _, kv := range [][2]string{
 		{"http.receivepack", "true"},
 		{"receive.fsckObjects", "true"},
@@ -54,6 +57,7 @@ func gitServer(t *testing.T) (string, func(args ...string) string) {
 	} {
 		run("config", kv[0], kv[1])
 	}
+
 	srv := httptest.NewServer(&cgi.Handler{
 		Path:   gitPath,
 		Args:   []string{"http-backend"},
@@ -61,6 +65,7 @@ func gitServer(t *testing.T) (string, func(args ...string) string) {
 		Stderr: io.Discard,
 	})
 	t.Cleanup(srv.Close)
+
 	return srv.URL + "/repo.git", run
 }
 
@@ -71,6 +76,7 @@ func e2eObjects(t *testing.T) (root, child gitobj.ID, objs []gitobj.Object) {
 	add := func(typ gitobj.Type, data []byte) gitobj.ID {
 		o := gitobj.Object{Type: typ, Data: data}
 		objs = append(objs, o)
+
 		return o.ID()
 	}
 	tree := func(es ...gitobj.TreeEntry) gitobj.ID {
@@ -78,6 +84,7 @@ func e2eObjects(t *testing.T) (root, child gitobj.ID, objs []gitobj.Object) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		return add(gitobj.TypeTree, data)
 	}
 	commit := func(c gitobj.Commit) gitobj.ID {
@@ -85,6 +92,7 @@ func e2eObjects(t *testing.T) (root, child gitobj.ID, objs []gitobj.Object) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		return add(gitobj.TypeCommit, data)
 	}
 	file := add(gitobj.TypeBlob, []byte("hello\n"))
@@ -103,7 +111,12 @@ func e2eObjects(t *testing.T) (root, child gitobj.ID, objs []gitobj.Object) {
 	)
 	when := time.Unix(1700000000, 0).In(time.FixedZone("", -7*3600))
 	sig := gitobj.Signature{Name: "A U Thor", Email: "author@example.com", When: when}
-	root = commit(gitobj.Commit{Tree: t1, Author: sig, Committer: sig, Message: "root\n"})
+	root = commit(gitobj.Commit{
+		Tree:      t1,
+		Author:    sig,
+		Committer: sig,
+		Message:   "root\n",
+	})
 	edited := add(gitobj.TypeBlob, []byte("hello again\n"))
 	t2 := tree(
 		gitobj.TreeEntry{Name: "file.txt", Mode: gitobj.ModeFile, ID: edited},
@@ -113,7 +126,14 @@ func e2eObjects(t *testing.T) (root, child gitobj.ID, objs []gitobj.Object) {
 		gitobj.TreeEntry{Name: "dir.txt", Mode: gitobj.ModeFile, ID: file},
 		gitobj.TreeEntry{Name: "vendor", Mode: gitobj.ModeSubmodule, ID: mod},
 	)
-	child = commit(gitobj.Commit{Tree: t2, Parents: []gitobj.ID{root}, Author: sig, Committer: sig, Message: "edit\n"})
+	child = commit(gitobj.Commit{
+		Tree:      t2,
+		Parents:   []gitobj.ID{root},
+		Author:    sig,
+		Committer: sig,
+		Message:   "edit\n",
+	})
+
 	return root, child, objs
 }
 
@@ -126,11 +146,13 @@ func TestGitEndToEnd(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		for _, c := range []string{"report-status", "atomic", "delete-refs", "side-band-64k"} {
 			if !a.Caps.Has(c) {
 				t.Fatalf("git does not advertise %s: %v", c, a.Caps)
 			}
 		}
+
 		caps := append([]string{"report-status", "object-format=sha1", "agent=forge-code-test"}, extra...)
 		var pack *bytes.Buffer
 		if objs != nil {
@@ -139,15 +161,18 @@ func TestGitEndToEnd(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
+
 		var rep *Report
 		if pack == nil {
 			rep, err = Push(ctx, nil, url, cmds, caps, nil)
 		} else {
 			rep, err = Push(ctx, nil, url, cmds, caps, pack)
 		}
+
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		return rep
 	}
 
@@ -165,6 +190,7 @@ func TestGitEndToEnd(t *testing.T) {
 	if !rep.UnpackOK || !rep.Refs["refs/heads/main"].OK {
 		t.Fatalf("push: %+v", rep)
 	}
+
 	git("fsck", "--strict", "--no-dangling")
 	if got := git("rev-parse", "refs/heads/main"); got != child.String() {
 		t.Fatalf("main = %s, want %s", got, child)
@@ -175,18 +201,24 @@ func TestGitEndToEnd(t *testing.T) {
 	if got := git("rev-parse", "main^"); got != root.String() {
 		t.Fatalf("parent = %s", got)
 	}
+
 	ls := git("ls-tree", "main")
 	for _, want := range []string{"100755 blob", "120000 blob", "160000 commit", "040000 tree"} {
 		if !strings.Contains(ls, want) {
 			t.Fatalf("ls-tree lacks %q:\n%s", want, ls)
 		}
 	}
+
 	if got := git("log", "-1", "--format=%an <%ae> %ad", "--date=raw", "main"); got != "A U Thor <author@example.com> 1700000000 -0700" {
 		t.Fatalf("author %q", got)
 	}
 
 	// Stale old value: ng, ref unchanged.
-	rep = push([]Command{{Name: "refs/heads/main", Old: root, New: root}}, []gitobj.Object{}, "side-band-64k")
+	rep = push([]Command{{
+		Name: "refs/heads/main",
+		Old:  root,
+		New:  root,
+	}}, []gitobj.Object{}, "side-band-64k")
 	if st := rep.Refs["refs/heads/main"]; st.OK || st.Reason == "" {
 		t.Fatalf("stale push: %+v", rep)
 	}
@@ -197,7 +229,11 @@ func TestGitEndToEnd(t *testing.T) {
 	// Atomic: a good update and a stale create fail together.
 	rep = push([]Command{
 		{Name: "refs/heads/old", New: root},
-		{Name: "refs/heads/main", Old: gitobj.ZeroID, New: root},
+		{
+			Name: "refs/heads/main",
+			Old:  gitobj.ID{},
+			New:  root,
+		},
 	}, []gitobj.Object{}, "atomic")
 	if rep.Refs["refs/heads/old"].OK || rep.Refs["refs/heads/main"].OK {
 		t.Fatalf("atomic: %+v", rep)
@@ -220,6 +256,7 @@ func TestGitEndToEnd(t *testing.T) {
 	if !rep.Refs["refs/heads/old"].OK {
 		t.Fatalf("delete: %+v", rep)
 	}
+
 	a, err = Advertise(ctx, nil, url)
 	if err != nil {
 		t.Fatal(err)
@@ -241,6 +278,7 @@ func TestGitEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	c, err := gitobj.DecodeCommit(data)
 	if err != nil {
 		t.Fatal(err)

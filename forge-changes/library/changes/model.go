@@ -181,6 +181,24 @@ type Condition struct {
 	Detail string // Detail is the native status or why it is unavailable.
 }
 
+// Condition, readiness and completeness statuses.
+const (
+	statusMet     = "met"
+	statusUnmet   = "unmet"
+	statusUnknown = "unknown"
+	statusBlocked = "blocked"
+)
+
+// Readiness condition names, in report order.
+const (
+	conditionState     = "state"
+	conditionDraft     = "draft"
+	conditionConflicts = "conflicts"
+	conditionReviews   = "reviews"
+	conditionChecks    = "checks"
+	conditionForge     = "forge"
+)
+
 // Readiness is advisory. The forge enforces all conditions at merge time.
 type Readiness struct {
 	Revision   Revision

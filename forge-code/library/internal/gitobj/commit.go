@@ -26,19 +26,23 @@ func (s Signature) Encode() (string, error) {
 	if strings.ContainsAny(s.Name, "<>\n\x00") || strings.ContainsAny(s.Email, "<>\n\x00") {
 		return "", fmt.Errorf("%w: signature has <, >, newline or NUL", ErrInvalid)
 	}
+
 	sec := s.When.Unix()
 	if sec < 0 {
 		return "", fmt.Errorf("%w: signature time before 1970", ErrInvalid)
 	}
+
 	_, off := s.When.Zone()
 	sign := byte('+')
 	if off < 0 {
 		sign, off = '-', -off
 	}
+
 	mins := off / 60
 	if mins >= 100*60 {
 		return "", fmt.Errorf("%w: signature zone offset too large", ErrInvalid)
 	}
+
 	return fmt.Sprintf("%s <%s> %d %c%02d%02d", s.Name, s.Email, sec, sign, mins/60, mins%60), nil
 }
 
@@ -50,31 +54,38 @@ func ParseSignature(s string) (Signature, error) {
 	if lt < 0 {
 		return Signature{}, bad
 	}
+
 	gt := strings.IndexByte(s[lt+1:], '>')
 	if gt < 0 {
 		return Signature{}, bad
 	}
+
 	gt += lt + 1
 	f := strings.Fields(s[gt+1:])
 	if len(f) != 2 {
 		return Signature{}, bad
 	}
+
 	sec, err := strconv.ParseInt(f[0], 10, 64)
 	if err != nil || sec < 0 {
 		return Signature{}, bad
 	}
+
 	tz := f[1]
 	if len(tz) != 5 || (tz[0] != '+' && tz[0] != '-') {
 		return Signature{}, bad
 	}
+
 	hhmm, err := strconv.Atoi(tz[1:])
 	if err != nil || hhmm < 0 || hhmm%100 >= 60 {
 		return Signature{}, bad
 	}
+
 	off := (hhmm/100*60 + hhmm%100) * 60
 	if tz[0] == '-' {
 		off = -off
 	}
+
 	return Signature{
 		Name:  strings.TrimSpace(s[:lt]),
 		Email: s[lt+1 : gt],
@@ -106,11 +117,13 @@ func EncodeCommit(c Commit) ([]byte, error) {
 	if strings.Contains(c.Message, "\x00") {
 		return nil, fmt.Errorf("%w: NUL in commit message", ErrInvalid)
 	}
+
 	var b bytes.Buffer
 	writeHeader(&b, "tree", c.Tree.String())
 	for _, p := range c.Parents {
 		writeHeader(&b, "parent", p.String())
 	}
+
 	if err := writeSignature(&b, "author", c.Author); err != nil {
 		return nil, err
 	}
@@ -120,8 +133,10 @@ func EncodeCommit(c Commit) ([]byte, error) {
 	if err := writeExtra(&b, c.Extra, "tree", "parent", "author", "committer"); err != nil {
 		return nil, err
 	}
+
 	b.WriteByte('\n')
 	b.WriteString(c.Message)
+
 	return b.Bytes(), nil
 }
 
@@ -132,13 +147,16 @@ func DecodeCommit(data []byte) (Commit, error) {
 	if err != nil {
 		return Commit{}, err
 	}
+
 	var c Commit
 	next := func(key string) (string, error) {
 		if len(hs) == 0 || hs[0].Key != key {
 			return "", fmt.Errorf("%w: commit has no %s header", ErrInvalid, key)
 		}
+
 		v := hs[0].Value
 		hs = hs[1:]
+
 		return v, nil
 	}
 	v, err := next("tree")
@@ -148,14 +166,17 @@ func DecodeCommit(data []byte) (Commit, error) {
 	if c.Tree, err = ParseID(v); err != nil {
 		return Commit{}, err
 	}
+
 	for len(hs) > 0 && hs[0].Key == "parent" {
 		v, _ := next("parent")
 		p, err := ParseID(v)
 		if err != nil {
 			return Commit{}, err
 		}
+
 		c.Parents = append(c.Parents, p)
 	}
+
 	if v, err = next("author"); err != nil {
 		return Commit{}, err
 	}
@@ -171,7 +192,9 @@ func DecodeCommit(data []byte) (Commit, error) {
 	if c.Extra, err = extra(hs, "tree", "parent", "author", "committer"); err != nil {
 		return Commit{}, err
 	}
+
 	c.Message = msg
+
 	return c, nil
 }
 
@@ -199,6 +222,7 @@ func EncodeTag(t Tag) ([]byte, error) {
 	if t.Name == "" || strings.ContainsAny(t.Name, "\n\x00") {
 		return nil, fmt.Errorf("%w: tag name %s", ErrInvalid, quote(t.Name))
 	}
+
 	var b bytes.Buffer
 	writeHeader(&b, "object", t.Object.String())
 	writeHeader(&b, "type", string(t.Type))
@@ -211,8 +235,10 @@ func EncodeTag(t Tag) ([]byte, error) {
 	if err := writeExtra(&b, t.Extra, "object", "type", "tag", "tagger"); err != nil {
 		return nil, err
 	}
+
 	b.WriteByte('\n')
 	b.WriteString(t.Message)
+
 	return b.Bytes(), nil
 }
 
@@ -223,36 +249,45 @@ func DecodeTag(data []byte) (Tag, error) {
 	if err != nil {
 		return Tag{}, err
 	}
+
 	var t Tag
 	for i, key := range []string{"object", "type", "tag"} {
 		if len(hs) <= i || hs[i].Key != key {
 			return Tag{}, fmt.Errorf("%w: tag has no %s header", ErrInvalid, key)
 		}
 	}
+
 	if t.Object, err = ParseID(hs[0].Value); err != nil {
 		return Tag{}, err
 	}
+
 	t.Type = Type(hs[1].Value)
 	if !t.Type.Valid() {
 		return Tag{}, fmt.Errorf("%w: tag target type %s", ErrInvalid, quote(hs[1].Value))
 	}
+
 	t.Name = hs[2].Value
 	if t.Name == "" || strings.Contains(t.Name, "\n") {
 		return Tag{}, fmt.Errorf("%w: tag name %s", ErrInvalid, quote(t.Name))
 	}
+
 	hs = hs[3:]
 	if len(hs) > 0 && hs[0].Key == "tagger" {
 		sig, err := ParseSignature(hs[0].Value)
 		if err != nil {
 			return Tag{}, err
 		}
+
 		t.Tagger = &sig
 		hs = hs[1:]
 	}
+
 	if t.Extra, err = extra(hs, "object", "type", "tag", "tagger"); err != nil {
 		return Tag{}, err
 	}
+
 	t.Message = msg
+
 	return t, nil
 }
 
@@ -268,7 +303,9 @@ func writeSignature(b *bytes.Buffer, key string, s Signature) error {
 	if err != nil {
 		return fmt.Errorf("%s: %w", key, err)
 	}
+
 	writeHeader(b, key, v)
+
 	return nil
 }
 
@@ -279,13 +316,16 @@ func writeExtra(b *bytes.Buffer, hs []Header, reserved ...string) error {
 		if h.Key == "" || strings.ContainsAny(h.Key, " \n\x00") || strings.Contains(h.Value, "\x00") {
 			return fmt.Errorf("%w: bad header %s", ErrInvalid, quote(h.Key))
 		}
+
 		for _, r := range reserved {
 			if h.Key == r {
 				return fmt.Errorf("%w: reserved header %s", ErrInvalid, quote(h.Key))
 			}
 		}
+
 		writeHeader(b, h.Key, h.Value)
 	}
+
 	return nil
 }
 
@@ -298,9 +338,11 @@ func extra(hs []Header, reserved ...string) ([]Header, error) {
 			}
 		}
 	}
+
 	if len(hs) == 0 {
 		return nil, nil
 	}
+
 	return hs, nil
 }
 
@@ -313,10 +355,12 @@ func parseHeaders(data []byte) ([]Header, string, error) {
 		if data[0] == '\n' {
 			return hs, string(data[1:]), nil
 		}
+
 		eol := bytes.IndexByte(data, '\n')
 		if eol < 0 {
 			return nil, "", fmt.Errorf("%w: unterminated header", ErrInvalid)
 		}
+
 		line := data[:eol]
 		data = data[eol+1:]
 		if bytes.IndexByte(line, 0) >= 0 {
@@ -326,14 +370,18 @@ func parseHeaders(data []byte) ([]Header, string, error) {
 			if len(hs) == 0 {
 				return nil, "", fmt.Errorf("%w: continuation before first header", ErrInvalid)
 			}
+
 			hs[len(hs)-1].Value += "\n" + string(line[1:])
 			continue
 		}
+
 		k, v, ok := bytes.Cut(line, []byte{' '})
 		if !ok {
 			return nil, "", fmt.Errorf("%w: header without value", ErrInvalid)
 		}
+
 		hs = append(hs, Header{Key: string(k), Value: string(v)})
 	}
+
 	return hs, "", nil
 }

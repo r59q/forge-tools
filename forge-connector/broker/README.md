@@ -48,16 +48,16 @@ The service refuses to start without a valid key and admin token. It never
 creates a fallback key. Losing the key loses access to stored forge credentials.
 Changing the key does not re-encrypt existing data; key migration is not provided.
 
-| Flag | Environment variable | Default |
-| --- | --- | --- |
-| `--grpc-listen` | `FORGE_BROKER_GRPC_LISTEN` | `127.0.0.1:9090` |
-| `--http-listen` | `FORGE_BROKER_HTTP_LISTEN` | `127.0.0.1:8080` |
-| `--db` | `FORGE_BROKER_DB` | `broker.db` |
-| `--key-file` | `FORGE_BROKER_KEY_FILE` | none |
-| `--key-env` | `FORGE_BROKER_KEY_ENV` | `FORGE_BROKER_KEY` when no source is set |
-| `--admin-token-file` | `FORGE_BROKER_ADMIN_TOKEN_FILE` | none |
-| `--admin-token-env` | `FORGE_BROKER_ADMIN_TOKEN_ENV` | `FORGE_BROKER_ADMIN_TOKEN` when no source is set |
-| `--request-timeout` | `FORGE_BROKER_REQUEST_TIMEOUT` | `30s` |
+| Flag                 | Environment variable            | Default                                          |
+| -------------------- | ------------------------------- | ------------------------------------------------ |
+| `--grpc-listen`      | `FORGE_BROKER_GRPC_LISTEN`      | `127.0.0.1:9090`                                 |
+| `--http-listen`      | `FORGE_BROKER_HTTP_LISTEN`      | `127.0.0.1:8080`                                 |
+| `--db`               | `FORGE_BROKER_DB`               | `broker.db`                                      |
+| `--key-file`         | `FORGE_BROKER_KEY_FILE`         | none                                             |
+| `--key-env`          | `FORGE_BROKER_KEY_ENV`          | `FORGE_BROKER_KEY` when no source is set         |
+| `--admin-token-file` | `FORGE_BROKER_ADMIN_TOKEN_FILE` | none                                             |
+| `--admin-token-env`  | `FORGE_BROKER_ADMIN_TOKEN_ENV`  | `FORGE_BROKER_ADMIN_TOKEN` when no source is set |
+| `--request-timeout`  | `FORGE_BROKER_REQUEST_TIMEOUT`  | `30s`                                            |
 
 Flags override environment settings. Choose one file or environment source for
 each secret; setting both is an error. `--key-env` and `--admin-token-env` name
@@ -93,28 +93,29 @@ environment variables; never bake them into the image.
 
 ## API
 
-The [documented proto](../library/proto/broker.proto) is the source of truth.
+The [documented proto](../library/proto/forge/connector/v1/broker.proto) is the
+source of truth for the `forge.connector.v1.BrokerService` gRPC service.
 Both transports accept only `Authorization: Bearer <token>` (gRPC metadata for
 gRPC). Client tokens cannot call admin methods, and the admin credential does
 not substitute for a client token. Missing, wrong, malformed or repeated
 credentials fail authentication. REST does not trust `Grpc-Metadata-*` headers.
 
-| Admin RPC | REST endpoint |
-| --- | --- |
-| `CreateForge` / `ListForges` | `POST` / `GET /v1/forges` |
-| `DeleteForge` | `DELETE /v1/forges/{id}` |
-| `CreateConnection` / `ListConnections` | `POST` / `GET /v1/connections` |
-| `GetConnection` / `DeleteConnection` | `GET` / `DELETE /v1/connections/{id}` |
-| `TestConnection` | `POST /v1/connections/{id}/test` |
-| `RotateCredential` | `POST /v1/connections/{id}/credential` |
-| `CreateClient` / `ListClients` | `POST` / `GET /v1/clients` |
-| `DeleteClient` | `DELETE /v1/clients/{id}` |
+| Admin RPC                              | REST endpoint                          |
+| -------------------------------------- | -------------------------------------- |
+| `CreateForge` / `ListForges`           | `POST` / `GET /v1/forges`              |
+| `DeleteForge`                          | `DELETE /v1/forges/{id}`               |
+| `CreateConnection` / `ListConnections` | `POST` / `GET /v1/connections`         |
+| `GetConnection` / `DeleteConnection`   | `GET` / `DELETE /v1/connections/{id}`  |
+| `TestConnection`                       | `POST /v1/connections/{id}/test`       |
+| `RotateCredential`                     | `POST /v1/connections/{id}/credential` |
+| `CreateClient` / `ListClients`         | `POST` / `GET /v1/clients`             |
+| `DeleteClient`                         | `DELETE /v1/clients/{id}`              |
 
-| Client RPC | REST endpoint |
-| --- | --- |
-| `IssueToken` | `POST /v1/connections/{connection_id}/token` |
-| `VerifyClient` | `POST /v1/connections/{connection_id}/verify` |
-| `ListClientConnections` | `GET /v1/client/connections` |
+| Client RPC              | REST endpoint                                 |
+| ----------------------- | --------------------------------------------- |
+| `IssueToken`            | `POST /v1/connections/{connection_id}/token`  |
+| `VerifyClient`          | `POST /v1/connections/{connection_id}/verify` |
+| `ListClientConnections` | `GET /v1/client/connections`                  |
 
 Start by creating a forge with `kind`, `baseUrl` (including its API path) and
 optional `name`. The optional `gitBaseUrl` sets the Git host used by the

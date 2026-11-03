@@ -24,9 +24,6 @@ type serviceClient struct {
 	token    forgeauth.StaticToken
 }
 
-// logf reports registration progress. It never receives tokens.
-var logf = log.Printf
-
 // clientTokens reads the service client tokens once. Each must be long
 // enough for the broker and differ from every other token in use.
 func (s settings) clientTokens(ctx context.Context, others ...forgeauth.Credentials) ([]serviceClient, error) {
@@ -36,12 +33,14 @@ func (s settings) clientTokens(ctx context.Context, others ...forgeauth.Credenti
 			seen[forgeauth.StaticToken(token)] = true
 		}
 	}
+
 	var out []serviceClient
 	for _, c := range s.clients {
 		var source forgeauth.Credentials = forgeauth.EnvToken(c.env)
 		if c.file != "" {
 			source = forgeauth.FileToken(c.file)
 		}
+
 		token, err := source.Token(ctx)
 		if err != nil && c.optional {
 			continue
@@ -49,6 +48,7 @@ func (s settings) clientTokens(ctx context.Context, others ...forgeauth.Credenti
 		if err != nil {
 			return nil, fmt.Errorf("%s client token required", c.name)
 		}
+
 		c.token = forgeauth.StaticToken(token)
 		if len(token) < broker.MinClientTokenLength || strings.IndexFunc(token, func(r rune) bool { return r <= ' ' || r >= 0x7f }) >= 0 {
 			return nil, fmt.Errorf("%s client token needs at least %d printable characters", c.name, broker.MinClientTokenLength)
@@ -56,14 +56,17 @@ func (s settings) clientTokens(ctx context.Context, others ...forgeauth.Credenti
 		if seen[c.token] {
 			return nil, fmt.Errorf("%s client token must differ from the other tokens", c.name)
 		}
+
 		seen[c.token] = true
 		out = append(out, c)
 	}
+
 	return out, nil
 }
 
 // register makes the connector accept each service client token, retrying
 // while the broker is unavailable. Services using them get errors until then.
+// It logs progress, never tokens.
 func register(ctx context.Context, client *management.Client, clients []serviceClient, timeout time.Duration) {
 	delay := time.Second
 	for _, c := range clients {
@@ -72,22 +75,25 @@ func register(ctx context.Context, client *management.Client, clients []serviceC
 			err := client.EnsureClient(attempt, c.name, c.canIssueTokens, c.token)
 			cancel()
 			if err == nil {
-				logf("registered connector client %s", c.name)
+				log.Printf("registered connector client %s", c.name)
 				break
 			}
+
 			if ctx.Err() != nil {
 				return
 			}
 			if errors.Is(err, management.ErrInvalid) {
-				logf("connector rejected the %s client token", c.name)
+				log.Printf("connector rejected the %s client token", c.name)
 				break
 			}
-			logf("connector unavailable; retrying %s client registration in %s", c.name, delay)
+
+			log.Printf("connector unavailable; retrying %s client registration in %s", c.name, delay)
 			select {
 			case <-ctx.Done():
 				return
 			case <-time.After(delay):
 			}
+
 			delay = min(2*delay, 30*time.Second)
 		}
 	}

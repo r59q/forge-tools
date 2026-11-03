@@ -51,15 +51,24 @@ func newConfEnvs(t *testing.T) []*confEnv {
 		r := s.NewRepo(f.repo)
 		fx := fakeforge.Seed(r)
 		orphan := r.CommitTree(r.BuildTree(map[string]fakeforge.File{"x": {Data: []byte("x\n")}}),
-			fakeforge.Epoch, "Orphan\n")
+			fakeforge.Epoch(), "Orphan\n")
 		r.SetRef("refs/heads/orphan", orphan)
 		c, err := New(Source{ID: "src", Session: s.Session})
 		if err != nil {
 			t.Fatal(err)
 		}
-		envs = append(envs, &confEnv{kind: f.kind, s: s, repo: r, fx: fx, orphan: orphan, c: c,
-			ref: RepositoryRef{Source: "src", Repository: f.repo}})
+
+		envs = append(envs, &confEnv{
+			kind:   f.kind,
+			s:      s,
+			repo:   r,
+			fx:     fx,
+			orphan: orphan,
+			c:      c,
+			ref:    RepositoryRef{Source: "src", Repository: f.repo},
+		})
 	}
+
 	return envs
 }
 
@@ -92,6 +101,7 @@ func confErr(err error) string {
 	if err == nil {
 		return ""
 	}
+
 	classes := []struct {
 		err  error
 		name string
@@ -108,17 +118,20 @@ func confErr(err error) string {
 		if !errors.Is(err, c.err) {
 			continue
 		}
-		if c.err == ErrRevisionNotFound || c.err == ErrPathNotFound {
+		if errors.Is(c.err, ErrRevisionNotFound) || errors.Is(c.err, ErrPathNotFound) {
 			if !errors.Is(err, forgehttp.ErrNotFound) {
 				return c.name + " without forgehttp.ErrNotFound"
 			}
+
 			var fe *forgehttp.Error
 			if errors.As(err, &fe) && fe.StatusCode != http.StatusNotFound {
 				return fmt.Sprintf("%s wrapping forge status %d", c.name, fe.StatusCode)
 			}
 		}
+
 		return c.name
 	}
+
 	return "other: " + err.Error()
 }
 
@@ -126,18 +139,23 @@ func confErr(err error) string {
 // fields GitLab does not report cleared: commit tree IDs, tree IDs and
 // tree entry sizes.
 func confNorm(v any, gitlab bool) any {
-	sig := func(s Signature) Signature { s.When = s.When.UTC(); return s }
+	sig := func(s Signature) Signature {
+		s.When = s.When.UTC()
+		return s
+	}
 	commit := func(c Commit) Commit {
 		c.Author, c.Committer = sig(c.Author), sig(c.Committer)
 		if gitlab {
 			c.Tree = ""
 		}
+
 		return c
 	}
 	entry := func(e Entry) Entry {
 		if gitlab {
 			e.Size = -1
 		}
+
 		return e
 	}
 	switch v := v.(type) {
@@ -162,6 +180,7 @@ func confNorm(v any, gitlab bool) any {
 		v.Entry = entry(v.Entry)
 		return v
 	}
+
 	return v
 }
 
@@ -170,11 +189,13 @@ func confReadAll(r *Reader, err error) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	defer r.Close()
 	data, err := io.ReadAll(r)
 	if err != nil {
 		return nil, err
 	}
+
 	return confRead{Blob: r.Blob, Data: data}, nil
 }
 
@@ -193,13 +214,16 @@ func confAllHistory(ctx context.Context, e *confEnv, o HistoryOptions) (any, err
 		if len(p.Commits) == 0 && len(out.Commits) > 0 && p.Next != "" {
 			return nil, errors.New("empty page in the middle")
 		}
+
 		out.Tip = p.Tip
 		out.Commits = append(out.Commits, p.Commits...)
 		if p.Next == "" {
 			return out, nil
 		}
+
 		o = HistoryOptions{Cursor: p.Next}
 	}
+
 	return nil, errors.New("history did not end")
 }
 
@@ -209,14 +233,22 @@ func confCommit(e *confEnv, id gitobj.ID) Commit {
 	if err != nil {
 		panic(err)
 	}
+
 	sig := func(s gitobj.Signature) Signature {
 		return Signature{Name: s.Name, Email: s.Email, When: s.When.UTC()}
 	}
-	out := Commit{ID: confOID(id), Tree: confOID(c.Tree), Parents: []OID{},
-		Author: sig(c.Author), Committer: sig(c.Committer), Message: strings.TrimSuffix(c.Message, "\n")}
+	out := Commit{
+		ID:        confOID(id),
+		Tree:      confOID(c.Tree),
+		Parents:   []OID{},
+		Author:    sig(c.Author),
+		Committer: sig(c.Committer),
+		Message:   strings.TrimSuffix(c.Message, "\n"),
+	}
 	for _, p := range c.Parents {
 		out.Parents = append(out.Parents, confOID(p))
 	}
+
 	return out
 }
 
@@ -226,10 +258,12 @@ func confLog(e *confEnv, tip gitobj.ID, path string) any {
 	if err != nil {
 		panic(err)
 	}
+
 	out := confHistory{Tip: confOID(tip), Commits: []Commit{}}
 	for _, id := range ids {
 		out.Commits = append(out.Commits, confCommit(e, id))
 	}
+
 	return out
 }
 
@@ -239,10 +273,12 @@ func confEntries(e *confEnv, commit gitobj.ID, dir string, recursive bool) []Ent
 	if err != nil {
 		panic(err)
 	}
+
 	list, err := e.repo.ListTree(root.ID, recursive)
 	if err != nil {
 		panic(err)
 	}
+
 	out := []Entry{}
 	for _, pe := range list {
 		mode := FileMode(pe.Mode)
@@ -250,13 +286,24 @@ func confEntries(e *confEnv, commit gitobj.ID, dir string, recursive bool) []Ent
 		if dir != "" {
 			path = dir + "/" + path
 		}
+
 		size := int64(-1)
 		if typeOf(mode) == ObjectBlob {
 			size = pe.Size
 		}
-		out = append(out, Entry{Name: pe.Name, Path: path, Mode: mode, Type: typeOf(mode), ID: confOID(pe.ID), Size: size})
+
+		out = append(out, Entry{
+			Name: pe.Name,
+			Path: path,
+			Mode: mode,
+			Type: typeOf(mode),
+			ID:   confOID(pe.ID),
+			Size: size,
+		})
 	}
+
 	slices.SortFunc(out, func(a, b Entry) int { return strings.Compare(a.Path, b.Path) })
+
 	return out
 }
 
@@ -266,7 +313,13 @@ func confTree(e *confEnv, commit gitobj.ID, dir string, recursive bool) Tree {
 	if err != nil {
 		panic(err)
 	}
-	return Tree{Commit: confOID(commit), ID: confOID(root.ID), Path: dir, Entries: confEntries(e, commit, dir, recursive)}
+
+	return Tree{
+		Commit:  confOID(commit),
+		ID:      confOID(root.ID),
+		Path:    dir,
+		Entries: confEntries(e, commit, dir, recursive),
+	}
 }
 
 // confStat returns the fixture's PathInfo of path at commit.
@@ -275,6 +328,7 @@ func confStat(e *confEnv, commit gitobj.ID, path string) PathInfo {
 	if err != nil {
 		panic(err)
 	}
+
 	mode := FileMode(te.Mode)
 	size := int64(-1)
 	if typeOf(mode) == ObjectBlob {
@@ -282,10 +336,20 @@ func confStat(e *confEnv, commit gitobj.ID, path string) PathInfo {
 		if err != nil {
 			panic(err)
 		}
+
 		size = int64(len(data))
 	}
+
 	name := path[strings.LastIndex(path, "/")+1:]
-	return PathInfo{Commit: confOID(commit), Entry: Entry{Name: name, Path: path, Mode: mode, Type: typeOf(mode), ID: confOID(te.ID), Size: size}}
+
+	return PathInfo{Commit: confOID(commit), Entry: Entry{
+		Name: name,
+		Path: path,
+		Mode: mode,
+		Type: typeOf(mode),
+		ID:   confOID(te.ID),
+		Size: size,
+	}}
 }
 
 // confFile returns the fixture's ReadFile result for path at commit.
@@ -294,13 +358,20 @@ func confFile(e *confEnv, commit gitobj.ID, path string) confRead {
 	if err != nil {
 		panic(err)
 	}
+
 	data, err := e.repo.ReadBlob(te.ID)
 	if err != nil {
 		panic(err)
 	}
+
 	return confRead{
-		Blob: Blob{ID: confOID(te.ID), Commit: confOID(commit), Path: path, Size: int64(len(data)),
-			LFSPointer: path == fakeforge.PathLFS},
+		Blob: Blob{
+			ID:         confOID(te.ID),
+			Commit:     confOID(commit),
+			Path:       path,
+			Size:       int64(len(data)),
+			LFSPointer: path == fakeforge.PathLFS,
+		},
 		Data: data,
 	}
 }
@@ -375,6 +446,7 @@ func confCases(fx fakeforge.Fixture) []confCase {
 			want: func(e *confEnv) any { return confCommit(e, rev.id) },
 		})
 	}
+
 	cases = append(cases, confCase{
 		name: "Commit/missing",
 		run: func(ctx context.Context, e *confEnv) (any, error) {
@@ -390,7 +462,7 @@ func confCases(fx fakeforge.Fixture) []confCase {
 		ref("refs/heads/clash", fx.ClashBranch, fx.ClashBranch),
 		ref("refs/heads/feature", fx.Feature[2], fx.Feature[2]),
 		ref("refs/heads/main", fx.Head, fx.Head),
-		ref("refs/heads/orphan", gitobj.ZeroID, gitobj.ZeroID), // filled in want
+		ref("refs/heads/orphan", gitobj.ID{}, gitobj.ID{}), // filled in want
 	}
 	tags := []Ref{
 		ref("refs/tags/chain", fx.TagOuter, fx.Main[1]),
@@ -409,12 +481,14 @@ func confCases(fx fakeforge.Fixture) []confCase {
 			case tagsPrefix:
 				all = tags
 			default:
-				all = append(h, tags...)
+				all = slices.Concat(h, tags)
 			}
+
 			list := RefList{Default: "refs/heads/main", Refs: slices.Clone(all)}
 			if limit > 0 && limit < len(all) {
 				list.Refs, list.Truncated = list.Refs[:limit], true
 			}
+
 			return list
 		}
 	}
@@ -485,6 +559,7 @@ func confCases(fx fakeforge.Fixture) []confCase {
 				if err != nil {
 					return nil, err
 				}
+
 				gitlab := e.kind == forgeauth.GitLab
 				all := confNorm(confTree(e, fx.Head, "", true), gitlab).(Tree).Entries
 				for _, en := range confNorm(t, gitlab).(Tree).Entries {
@@ -492,6 +567,7 @@ func confCases(fx fakeforge.Fixture) []confCase {
 						return nil, fmt.Errorf("entry %+v is not in the tree", en)
 					}
 				}
+
 				return struct {
 					Commit    OID
 					Entries   int
@@ -508,6 +584,7 @@ func confCases(fx fakeforge.Fixture) []confCase {
 			},
 		})
 	}
+
 	for _, dir := range []string{"nope", fakeforge.PathReadme, fakeforge.PathSubmodule, fakeforge.PathSymlink, "docs/nope"} {
 		cases = append(cases, confCase{
 			name: fmt.Sprintf("Tree/main/%q", dir),
@@ -522,6 +599,7 @@ func confCases(fx fakeforge.Fixture) []confCase {
 	for p := range fx.Blobs {
 		paths = append(paths, p)
 	}
+
 	slices.Sort(paths)
 	for _, p := range append(slices.Clone(paths), "docs", "docs/guide", "vendor", "dir with space") {
 		cases = append(cases, confCase{
@@ -532,6 +610,7 @@ func confCases(fx fakeforge.Fixture) []confCase {
 			want: func(e *confEnv) any { return confStat(e, fx.Head, p) },
 		})
 	}
+
 	cases = append(cases, confCase{
 		name: "Stat/old",
 		run: func(ctx context.Context, e *confEnv) (any, error) {
@@ -553,6 +632,7 @@ func confCases(fx fakeforge.Fixture) []confCase {
 		if p == fakeforge.PathSubmodule {
 			continue
 		}
+
 		cases = append(cases, confCase{
 			name: "ReadFile/" + p,
 			run: func(ctx context.Context, e *confEnv) (any, error) {
@@ -568,10 +648,12 @@ func confCases(fx fakeforge.Fixture) []confCase {
 			want: func(e *confEnv) any {
 				r := confFile(e, fx.Head, p)
 				r.Blob.Commit, r.Blob.Path = "", ""
+
 				return r
 			},
 		})
 	}
+
 	cases = append(cases, confCase{
 		name: "ReadFile/old",
 		run: func(ctx context.Context, e *confEnv) (any, error) {
@@ -596,6 +678,7 @@ func confCases(fx fakeforge.Fixture) []confCase {
 			err: p.err,
 		})
 	}
+
 	cases = append(cases, confCase{
 		name: "ReadBlob/missing",
 		run: func(ctx context.Context, e *confEnv) (any, error) {
@@ -634,6 +717,7 @@ func confCases(fx fakeforge.Fixture) []confCase {
 		},
 		err: "revision-not-found",
 	})
+
 	return cases
 }
 
@@ -650,11 +734,14 @@ func confGap(t *testing.T, e *confEnv, name string, got any) any {
 				if r.Commit != confOID(e.fx.TagInner) {
 					t.Errorf("%s: forgejo chain commit = %s, want the documented gap %s", name, r.Commit, e.fx.TagInner)
 				}
+
 				list.Refs[i].Commit = confOID(e.fx.Main[1])
 			}
 		}
+
 		return list
 	}
+
 	return got
 }
 
@@ -674,9 +761,11 @@ func TestConformance(t *testing.T) {
 					t.Errorf("%s: error %q (%v), want %q", e.kind, class, err, tc.err)
 					continue
 				}
+
 				if err != nil {
 					continue
 				}
+
 				got = confNorm(confGap(t, e, tc.name, got), false)
 				gitlab := e.kind == forgeauth.GitLab
 				if tc.want != nil {
@@ -703,7 +792,7 @@ func TestConformanceMessage(t *testing.T) {
 			"Subject\n\nBody.\n": "Subject\n\nBody.",
 			"No newline":         "No newline",
 		} {
-			id := e.repo.CommitTree(tree, fakeforge.Epoch, msg, e.fx.Head)
+			id := e.repo.CommitTree(tree, fakeforge.Epoch(), msg, e.fx.Head)
 			cm, err := e.c.Commit(context.Background(), e.ref, id.String())
 			if err != nil || cm.Message != want {
 				t.Errorf("%s: message %q = %q, %v, want %q", e.kind, msg, cm.Message, err, want)
@@ -718,6 +807,7 @@ func TestConformanceCapabilities(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		want := Capabilities{TreeIDs: e.kind != forgeauth.GitLab, MergeBase: true}
 		if caps != want {
 			t.Errorf("%s: Capabilities = %+v, want %+v", e.kind, caps, want)
@@ -760,18 +850,30 @@ func newSnapEnvs(t *testing.T) []*snapEnv {
 				files[fmt.Sprintf("d%d/f%02d.txt", d, i)] = fakeforge.File{Data: fmt.Appendf(nil, "%d %d\n", d, i)}
 			}
 		}
-		root := big.CommitTree(big.BuildTree(files), fakeforge.Epoch, "Big\n")
-		tip := big.CommitTree(big.BuildTree(files), fakeforge.Epoch.Add(time.Hour), "Same tree\n", root)
+
+		root := big.CommitTree(big.BuildTree(files), fakeforge.Epoch(), "Big\n")
+		tip := big.CommitTree(big.BuildTree(files), fakeforge.Epoch().Add(time.Hour), "Same tree\n", root)
 		other := big.CommitTree(big.BuildTree(map[string]fakeforge.File{"other": {Data: []byte("o\n")}}),
-			fakeforge.Epoch.Add(2*time.Hour), "Other\n", tip)
+			fakeforge.Epoch().Add(2*time.Hour), "Other\n", tip)
 		big.SetRef("refs/heads/main", tip)
 		big.SetRef("refs/heads/keep", root) // so deleting main leaves the repository non-empty
 		c, err := New(Source{ID: "src", Session: s.Session})
 		if err != nil {
 			t.Fatal(err)
 		}
-		envs = append(envs, &snapEnv{kind: f.kind, s: s, repo: r, fx: fx, big: big, tip: tip, other: other, c: c})
+
+		envs = append(envs, &snapEnv{
+			kind:  f.kind,
+			s:     s,
+			repo:  r,
+			fx:    fx,
+			big:   big,
+			tip:   tip,
+			other: other,
+			c:     c,
+		})
 	}
+
 	return envs
 }
 
@@ -780,13 +882,14 @@ func newSnapEnvs(t *testing.T) []*snapEnv {
 // with the ref deleted. It returns the number of requests seen.
 func moveAfter(s *fakeforge.Server, r *fakeforge.Repo, name string, targets ...gitobj.ID) *atomic.Int64 {
 	var n atomic.Int64
-	targets = append(targets, gitobj.ZeroID)
+	targets = append(targets, gitobj.ID{})
 	s.SetHook(func(*http.Request) {
 		k := int(n.Add(1)) - 2
 		if k >= 0 {
 			r.SetRef(name, targets[min(k, len(targets)-1)])
 		}
 	})
+
 	return &n
 }
 
@@ -807,6 +910,7 @@ func TestSnapshotTree(t *testing.T) {
 			if n.Load() < 4 {
 				t.Fatalf("listing took %d requests, want several", n.Load())
 			}
+
 			gitlab := e.kind == forgeauth.GitLab
 			if !reflect.DeepEqual(confNorm(got, gitlab), confNorm(want, gitlab)) {
 				t.Errorf("Tree = %d entries at %s, want %d at %s", len(got.Entries), got.Commit, len(want.Entries), want.Commit)
@@ -877,6 +981,7 @@ func TestSnapshotReads(t *testing.T) {
 			if mb != confOID(e.fx.MergeBase) && mb != confOID(e.fx.Main[0]) {
 				t.Errorf("MergeBase = %s", mb)
 			}
+
 			e.s.SetHook(nil)
 		})
 	}
@@ -905,18 +1010,22 @@ func TestSnapshotHistory(t *testing.T) {
 						moveAfter(e.s, e.repo, "refs/heads/main", e.fx.Feature[2], e.fx.Main[1])
 						e.repo.SetRef("refs/heads/main", e.fx.Main[0])
 					}
+
 					got.Tip = p.Tip
 					got.Commits = append(got.Commits, p.Commits...)
 					if p.Next == "" {
 						break
 					}
+
 					o = HistoryOptions{Cursor: p.Next}
 				}
+
 				want := confLog(ce, e.fx.Head, path)
 				if !reflect.DeepEqual(confNorm(got, true), confNorm(want, true)) {
 					t.Errorf("path %q: history = %v, want %v", path, confIDs(got), confIDs(want.(confHistory)))
 				}
 			}
+
 			e.s.SetHook(nil)
 		})
 	}
@@ -928,5 +1037,6 @@ func confIDs(h confHistory) []OID {
 	for _, c := range h.Commits {
 		out = append(out, c.ID)
 	}
+
 	return out
 }

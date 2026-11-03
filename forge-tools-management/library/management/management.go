@@ -1,7 +1,7 @@
 // Package management sets up and inspects forge-tools. It manages
 // forge-connector connections and lists repositories through
-// forge-repositories and issues through forge-issues, without widening the
-// visibility of their credentials.
+// forge-repositories, issues through forge-issues and pipelines through
+// forge-actions, without widening the visibility of their credentials.
 package management
 
 import (
@@ -44,6 +44,8 @@ type Config struct {
 	Repositories RepositoryReader
 	// Issues lists issues, such as a forge-issues client.
 	Issues IssueReader
+	// Pipelines reads executions and job logs through forge-actions.
+	Pipelines PipelineReader
 	// Connector manages forge connections, such as a broker admin client.
 	Connector ConnectorAdmin
 }
@@ -53,12 +55,18 @@ type Config struct {
 type Client struct {
 	repositories RepositoryReader
 	issues       IssueReader
+	pipelines    PipelineReader
 	connector    ConnectorAdmin
 }
 
 // New constructs a client for the configured capabilities.
 func New(config Config) *Client {
-	return &Client{repositories: config.Repositories, issues: config.Issues, connector: config.Connector}
+	return &Client{
+		repositories: config.Repositories,
+		issues:       config.Issues,
+		connector:    config.Connector,
+		pipelines:    config.Pipelines,
+	}
 }
 
 // ListRepositories returns every repository visible to the reader, in its
@@ -67,24 +75,33 @@ func (c *Client) ListRepositories(ctx context.Context) (Listing, error) {
 	if err := ctx.Err(); err != nil {
 		return Listing{}, err
 	}
+
 	out := Listing{Configured: c.repositories != nil, Repositories: []Repository{}}
 	if !out.Configured {
 		return out, nil
 	}
+
 	values, err := c.repositories.List(ctx, repositories.ListOptions{})
 	if err != nil {
 		if ctx.Err() != nil {
 			return Listing{}, ctx.Err()
 		}
+
 		return Listing{}, ErrUnavailable
 	}
+
 	for _, r := range values {
 		if r.Source.ID == "" || r.Source.Kind == "" || r.Path == "" {
 			return Listing{}, ErrUnavailable
 		}
+
 		out.Repositories = append(out.Repositories, Repository{
-			Source: r.Source, Path: r.Path, Description: r.Description, Visibility: r.Visibility,
+			Source:      r.Source,
+			Path:        r.Path,
+			Description: r.Description,
+			Visibility:  r.Visibility,
 		})
 	}
+
 	return out, nil
 }

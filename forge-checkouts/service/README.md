@@ -1,8 +1,8 @@
 # forge-checkouts service
 
 Durable host-local working copies over REST and gRPC, generated from
-[one protobuf definition](proto/checkouts.proto). Requires Go 1.27, Git
-and a Unix host. From this directory:
+[one protobuf definition](proto/forge/checkouts/v1/checkouts.proto). Requires
+Go 1.27, Git and a Unix host. From this directory:
 
 ```sh
 go build -o /tmp/forge-checkouts-service ./cmd/forge-checkouts-service
@@ -32,17 +32,17 @@ All environment names below have the prefix `FORGE_CHECKOUTS_`. Flags override
 environment values. Token environment settings name variables, not token values;
 token files/variables are reread for rotation. Choose one source per token.
 
-| Flag | Environment suffix | Default |
-| --- | --- | --- |
-| `--data-dir` | `DATA_DIR` | `./checkout-data` |
-| `--http-listen` | `HTTP_LISTEN` | `127.0.0.1:8088` |
-| `--grpc-listen` | `GRPC_LISTEN` | `127.0.0.1:9098` |
-| `--token-file` | `TOKEN_FILE` | none |
-| `--token-env` | `TOKEN_ENV` | variable `FORGE_CHECKOUTS_TOKEN` |
-| `--connector-url` | `CONNECTOR_URL` | none |
-| `--connector-token-file` | `CONNECTOR_TOKEN_FILE` | none |
-| `--connector-token-env` | `CONNECTOR_TOKEN_ENV` | variable `FORGE_CHECKOUTS_CONNECTOR_TOKEN` |
-| `--request-timeout` | `REQUEST_TIMEOUT` | `5m` |
+| Flag                     | Environment suffix     | Default                                    |
+| ------------------------ | ---------------------- | ------------------------------------------ |
+| `--data-dir`             | `DATA_DIR`             | `./checkout-data`                          |
+| `--http-listen`          | `HTTP_LISTEN`          | `127.0.0.1:8088`                           |
+| `--grpc-listen`          | `GRPC_LISTEN`          | `127.0.0.1:9098`                           |
+| `--token-file`           | `TOKEN_FILE`           | none                                       |
+| `--token-env`            | `TOKEN_ENV`            | variable `FORGE_CHECKOUTS_TOKEN`           |
+| `--connector-url`        | `CONNECTOR_URL`        | none                                       |
+| `--connector-token-file` | `CONNECTOR_TOKEN_FILE` | none                                       |
+| `--connector-token-env`  | `CONNECTOR_TOKEN_ENV`  | variable `FORGE_CHECKOUTS_CONNECTOR_TOKEN` |
+| `--request-timeout`      | `REQUEST_TIMEOUT`      | `5m`                                       |
 
 The data directory holds `checkouts.json`, process locks, worktrees in `copies/`
 and connected bare caches in `repositories/`. Metadata updates use private files,
@@ -66,15 +66,15 @@ Every request requires `Authorization: Bearer <service token>` (gRPC metadata
 for gRPC). REST ignores `Grpc-Metadata-*` authentication headers. Responses are
 not cached. List/get read stored metadata; status reads the live checkout.
 
-| RPC | REST endpoint |
-| --- | --- |
-| `CreateCheckout` | `POST /v1/checkouts` |
-| `ListCheckouts` | `GET /v1/checkouts` |
-| `GetCheckout` | `GET /v1/checkouts/{id}` |
-| `RetainCheckout` | `POST /v1/checkouts/{id}/retain` with `{}` |
-| `RemoveCheckout` | `DELETE /v1/checkouts/{id}?discard=false` |
-| `InspectCheckout` | `GET /v1/checkouts/{id}/status` |
-| `ReadDiff` | `GET /v1/checkouts/{id}/diff` |
+| RPC               | REST endpoint                              |
+| ----------------- | ------------------------------------------ |
+| `CreateCheckout`  | `POST /v1/checkouts`                       |
+| `ListCheckouts`   | `GET /v1/checkouts`                        |
+| `GetCheckout`     | `GET /v1/checkouts/{id}`                   |
+| `RetainCheckout`  | `POST /v1/checkouts/{id}/retain` with `{}` |
+| `RemoveCheckout`  | `DELETE /v1/checkouts/{id}?discard=false`  |
+| `InspectCheckout` | `GET /v1/checkouts/{id}/status`            |
+| `ReadDiff`        | `GET /v1/checkouts/{id}/diff`              |
 
 Create from a local repository:
 
@@ -149,17 +149,14 @@ their values, and rerun client registration. Preserve the volume while upgrading
 
 ## Regenerate
 
-Install `protoc` and plugins `protoc-gen-go@v1.36.10`,
-`protoc-gen-go-grpc@v1.5.1` and `protoc-gen-grpc-gateway@v2.27.3` on PATH.
-Set `GOOGLEAPIS_DIR` to a checkout of `googleapis/googleapis` at
-`ff8fd20f3840386e12f4f69750eff6dc99f6e1b7`. From this directory:
+Generated files are committed in `checkoutspb/`. To regenerate, install
+[buf](https://buf.build/docs/installation) 1.74.0 and Go, then run from
+this folder:
 
 ```sh
-protoc -I proto -I "$GOOGLEAPIS_DIR" \
-  --go_out=checkoutspb --go_opt=paths=source_relative \
-  --go-grpc_out=checkoutspb --go-grpc_opt=paths=source_relative \
-  --grpc-gateway_out=checkoutspb --grpc-gateway_opt=paths=source_relative \
-  proto/checkouts.proto
+buf generate
+go vet ./...
+go test ./...
 ```
 
-[MIT](../../LICENSE)
+CI fails when the generated code is out of date.

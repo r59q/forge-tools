@@ -29,6 +29,7 @@ func (b brokerStub) Connection(_ context.Context, id broker.ID) (forgeauth.Conne
 	if c, ok := b[id]; ok {
 		return c, nil
 	}
+
 	return forgeauth.Connection{}, broker.ErrNotFound
 }
 
@@ -36,6 +37,7 @@ func (b brokerStub) VerifyClient(_ context.Context, token forgeauth.StaticToken,
 	if token != "client" {
 		return broker.Client{}, broker.ErrUnauthorized
 	}
+
 	return broker.Client{}, nil
 }
 
@@ -48,10 +50,23 @@ func (b brokerStub) ClientConnections(_ context.Context, token forgeauth.StaticT
 	if token != "client" {
 		return nil, broker.ErrUnauthorized
 	}
+
 	return []broker.ClientConnection{
-		{ID: "fj", Kind: forgeauth.Forgejo, Status: broker.StatusOK},
-		{ID: "gh", Kind: forgeauth.GitHub, Status: broker.StatusOK},
-		{ID: "gl", Kind: forgeauth.GitLab, Status: broker.StatusOK},
+		{
+			ID:     "fj",
+			Kind:   forgeauth.Forgejo,
+			Status: broker.StatusOK,
+		},
+		{
+			ID:     "gh",
+			Kind:   forgeauth.GitHub,
+			Status: broker.StatusOK,
+		},
+		{
+			ID:     "gl",
+			Kind:   forgeauth.GitLab,
+			Status: broker.StatusOK,
+		},
 	}, nil
 }
 
@@ -99,10 +114,17 @@ func TestSourcesThroughProxy(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	h, err := proxy.New(proxy.Config{Verifier: stub, TokenIssuer: stub, Connections: stub, Registry: reg})
+
+	h, err := proxy.New(proxy.Config{
+		Verifier:    stub,
+		TokenIssuer: stub,
+		Connections: stub,
+		Registry:    reg,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	p := httptest.NewServer(h)
 	defer p.Close()
 	conn, err := connector.New(connector.Config{URL: p.URL, Credentials: forgeauth.StaticToken("client")})
@@ -115,17 +137,21 @@ func TestSourcesThroughProxy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	var got []string
 	for _, tc := range []struct{ source, repo string }{{"fj", "mrbean/garden"}, {"gh", "mrbean/teddy"}, {"gl", "mrbean/tools/cli"}} {
 		res, err := client.Resolve(ctx, code.RepositoryRef{Source: tc.source, Repository: tc.repo}, "refs/heads/main")
 		if err != nil {
 			t.Fatalf("%s: %v", tc.source, err)
 		}
+
 		got = append(got, tc.source+":"+string(res.Commit)[:1])
 	}
+
 	if want := "fj:3 gh:1 gl:2"; strings.Join(got, " ") != want {
 		t.Fatalf("resolved %q, want %q", got, want)
 	}
+
 	for _, s := range client.Sources() {
 		if s.Git == nil || !strings.HasPrefix(s.Git.BaseURL, p.URL+"/g/") {
 			t.Errorf("source %s has no Git remote through the proxy: %+v", s.ID, s.Git)
@@ -137,16 +163,19 @@ func TestSourcesThroughProxy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	rest, err := service.REST(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	r := httptest.NewRequest("GET", "/v1/raw?source=gh&repository=mrbean/teddy&path=README.md", nil)
 	r.Header.Set("Authorization", "Bearer service")
 	w := httptest.NewRecorder()
 	rest.ServeHTTP(w, r)
 	body, _ := io.ReadAll(w.Body)
-	if w.Code != 200 || string(body) != "hello\n" || w.Header().Get("X-Forge-Code-Commit") != ghMain || w.Header().Get("X-Forge-Code-Blob") != ghBlob {
+	if w.Code != 200 ||
+		string(body) != "hello\n" || w.Header().Get("X-Forge-Code-Commit") != ghMain || w.Header().Get("X-Forge-Code-Blob") != ghBlob {
 		t.Fatalf("raw through proxy: %d %q %v", w.Code, body, w.Header())
 	}
 }

@@ -22,7 +22,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 const sha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -33,7 +33,7 @@ func setup(t *testing.T) (http.Handler, *grpc.ClientConn) {
 	return setupForge(t, forgeauth.GitHub, func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.Contains(r.URL.Path, "/denied/"):
-			http.Error(w, "private-upstream-sentinel", 403)
+			http.Error(w, "private-upstream-sentinel", http.StatusForbidden)
 		case strings.HasSuffix(r.URL.Path, "/merge"):
 			fmt.Fprint(w, `{"merged":true,"sha":"`+sha+`"}`)
 		case strings.HasSuffix(r.URL.Path, "/comments"):
@@ -64,27 +64,33 @@ func setupForge(t *testing.T, kind forgeauth.Kind, handler http.HandlerFunc) (ht
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	s, err := New(Fixed(c), forgeauth.StaticToken("service"), time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	h, err := s.REST(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	g := grpc.NewServer()
-	pb.RegisterChangesServer(g, s)
+	pb.RegisterChangesServiceServer(g, s)
 	go func() { _ = g.Serve(l) }()
 	t.Cleanup(g.Stop)
 	conn, err := grpc.NewClient(l.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	t.Cleanup(func() { _ = conn.Close() })
+
 	return h, conn
 }
 
@@ -104,28 +110,34 @@ func TestLockedProposalTransports(t *testing.T) {
 		method, path      string
 		request, response proto.Message
 	}{
-		{"GetChange", "/v1/changes/7" + query, r, &pb.ChangeRequest{}},
-		{"ListChanges", "/v1/changes" + query + "&state=all", &pb.ListChangesRequest{Source: r.Source, Repository: r.Repository, State: "all"}, &pb.ListChangesResponse{}},
-		{"GetReadiness", "/v1/changes/7/readiness" + query, r, &pb.Readiness{}},
+		{"GetChange", "/v1/changes/7" + query, named(&pb.GetChangeRequest{}), &pb.GetChangeResponse{}},
+		{"ListChanges", "/v1/changes" + query + "&state=all", &pb.ListChangesRequest{
+			Source:     r.Source,
+			Repository: r.Repository,
+			State:      "all",
+		}, &pb.ListChangesResponse{}},
+		{"GetReadiness", "/v1/changes/7/readiness" + query, named(&pb.GetReadinessRequest{}), &pb.GetReadinessResponse{}},
 	} {
 		t.Run(tt.method, func(t *testing.T) {
-			if err := conn.Invoke(ctx, "/forge.changes.v1.Changes/"+tt.method, tt.request, tt.response); err != nil {
+			if err := conn.Invoke(ctx, "/forge.changes.v1.ChangesService/"+tt.method, tt.request, tt.response); err != nil {
 				t.Fatal(err)
 			}
+
 			switch v := tt.response.(type) {
-			case *pb.ChangeRequest:
-				if v.State != "locked" {
-					t.Fatalf("state = %q", v.State)
+			case *pb.GetChangeResponse:
+				if v.GetChange().GetState() != "locked" {
+					t.Fatalf("state = %q", v.GetChange().GetState())
 				}
 			case *pb.ListChangesResponse:
 				if len(v.Changes) != 1 || v.Changes[0].State != "locked" {
 					t.Fatalf("list = %v", v)
 				}
-			case *pb.Readiness:
+			case *pb.GetReadinessResponse:
 				if v.Status != "blocked" {
 					t.Fatalf("readiness = %v", v)
 				}
 			}
+
 			req := httptest.NewRequest("GET", tt.path, nil)
 			req.Header.Set("Authorization", "Bearer service")
 			w := httptest.NewRecorder()
@@ -133,12 +145,14 @@ func TestLockedProposalTransports(t *testing.T) {
 			if w.Code != http.StatusOK {
 				t.Fatalf("REST %d: %s", w.Code, w.Body.String())
 			}
-			v := tt.response.ProtoReflect().New().Interface()
+
+			want := restBody(tt.response)
+			v := want.ProtoReflect().New().Interface()
 			if err := protojson.Unmarshal(w.Body.Bytes(), v); err != nil {
 				t.Fatal(err)
 			}
-			if !proto.Equal(v, tt.response) {
-				t.Fatalf("REST %v != gRPC %v", v, tt.response)
+			if !proto.Equal(v, want) {
+				t.Fatalf("REST %v != gRPC %v", v, want)
 			}
 		})
 	}
@@ -149,29 +163,63 @@ func TestRESTAndGRPCParity(t *testing.T) {
 	r := &pb.ChangeRef{Source: "connection", Repository: "o/r", Number: 7}
 	query := "?source=connection&repository=o%2Fr"
 	tests := []struct {
-		name, method, path string
-		request, response  proto.Message
+		name              string
+		method            string
+		path              string
+		request, response proto.Message
 	}{
-		{"ListSources", "GET", "/v1/sources", &emptypb.Empty{}, &pb.ListSourcesResponse{}},
-		{"ListChanges", "GET", "/v1/changes" + query + "&draft=false", &pb.ListChangesRequest{Source: r.Source, Repository: r.Repository, Draft: ptr(false)}, &pb.ListChangesResponse{}},
-		{"GetChange", "GET", "/v1/changes/7" + query, r, &pb.ChangeRequest{}},
-		{"CreateChange", "POST", "/v1/changes", &pb.CreateChangeRequest{Source: r.Source, Repository: r.Repository, Title: "Proposal", SourceBranch: "feature", TargetBranch: "main"}, &pb.ChangeRequest{}},
-		{"UpdateChange", "PATCH", "/v1/changes/7", &pb.UpdateChangeRequest{Source: r.Source, Repository: r.Repository, Number: 7, Description: ptr("")}, &pb.ChangeRequest{}},
-		{"SetDraft", "PUT", "/v1/changes/7/draft", &pb.SetDraftRequest{Source: r.Source, Repository: r.Repository, Number: 7, Draft: false}, &pb.ChangeRequest{}},
-		{"ListCommits", "GET", "/v1/changes/7/commits" + query, r, &pb.ListCommitsResponse{}},
-		{"ListFiles", "GET", "/v1/changes/7/files" + query, r, &pb.Files{}},
-		{"GetDiff", "GET", "/v1/changes/7/diff" + query, r, &pb.Diff{}},
-		{"ListComments", "GET", "/v1/changes/7/comments" + query, r, &pb.ListCommentsResponse{}},
-		{"AddComment", "POST", "/v1/changes/7/comments", &pb.AddCommentRequest{Source: r.Source, Repository: r.Repository, Number: 7, Body: "comment"}, &pb.Comment{}},
-		{"GetReadiness", "GET", "/v1/changes/7/readiness" + query, r, &pb.Readiness{}},
-		{"Merge", "POST", "/v1/changes/7/merge", &pb.MergeRequest{Source: r.Source, Repository: r.Repository, Number: 7, Method: "squash", ExpectedHead: sha}, &pb.MergeResult{}},
+		{"ListSources", "GET", "/v1/sources", &pb.ListSourcesRequest{}, &pb.ListSourcesResponse{}},
+		{"ListChanges", "GET", "/v1/changes" + query + "&draft=false", &pb.ListChangesRequest{
+			Source:     r.Source,
+			Repository: r.Repository,
+			Draft:      ptr(false),
+		}, &pb.ListChangesResponse{}},
+		{"GetChange", "GET", "/v1/changes/7" + query, named(&pb.GetChangeRequest{}), &pb.GetChangeResponse{}},
+		{"CreateChange", "POST", "/v1/changes", &pb.CreateChangeRequest{
+			Source:       r.Source,
+			Repository:   r.Repository,
+			Title:        "Proposal",
+			SourceBranch: "feature",
+			TargetBranch: "main",
+		}, &pb.CreateChangeResponse{}},
+		{"UpdateChange", "PATCH", "/v1/changes/7", &pb.UpdateChangeRequest{
+			Source:      r.Source,
+			Repository:  r.Repository,
+			Number:      7,
+			Description: ptr(""),
+		}, &pb.UpdateChangeResponse{}},
+		{"SetDraft", "PUT", "/v1/changes/7/draft", &pb.SetDraftRequest{
+			Source:     r.Source,
+			Repository: r.Repository,
+			Number:     7,
+			Draft:      false,
+		}, &pb.SetDraftResponse{}},
+		{"ListCommits", "GET", "/v1/changes/7/commits" + query, named(&pb.ListCommitsRequest{}), &pb.ListCommitsResponse{}},
+		{"ListFiles", "GET", "/v1/changes/7/files" + query, named(&pb.ListFilesRequest{}), &pb.ListFilesResponse{}},
+		{"GetDiff", "GET", "/v1/changes/7/diff" + query, named(&pb.GetDiffRequest{}), &pb.GetDiffResponse{}},
+		{"ListComments", "GET", "/v1/changes/7/comments" + query, named(&pb.ListCommentsRequest{}), &pb.ListCommentsResponse{}},
+		{"AddComment", "POST", "/v1/changes/7/comments", &pb.AddCommentRequest{
+			Source:     r.Source,
+			Repository: r.Repository,
+			Number:     7,
+			Body:       "comment",
+		}, &pb.AddCommentResponse{}},
+		{"GetReadiness", "GET", "/v1/changes/7/readiness" + query, named(&pb.GetReadinessRequest{}), &pb.GetReadinessResponse{}},
+		{"Merge", "POST", "/v1/changes/7/merge", &pb.MergeRequest{
+			Source:       r.Source,
+			Repository:   r.Repository,
+			Number:       7,
+			Method:       "squash",
+			ExpectedHead: sha,
+		}, &pb.MergeResponse{}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := metadata.AppendToOutgoingContext(context.Background(), "authorization", "Bearer service")
-			if err := conn.Invoke(ctx, "/forge.changes.v1.Changes/"+tt.name, tt.request, tt.response); err != nil {
+			if err := conn.Invoke(ctx, "/forge.changes.v1.ChangesService/"+tt.name, tt.request, tt.response); err != nil {
 				t.Fatal(err)
 			}
+
 			body := []byte{}
 			if tt.method != "GET" {
 				var err error
@@ -180,6 +228,7 @@ func TestRESTAndGRPCParity(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
+
 			req := httptest.NewRequest(tt.method, tt.path, strings.NewReader(string(body)))
 			req.Header.Set("Authorization", "Bearer service")
 			w := httptest.NewRecorder()
@@ -187,20 +236,28 @@ func TestRESTAndGRPCParity(t *testing.T) {
 			if w.Code != 200 {
 				t.Fatalf("REST %d: %s", w.Code, w.Body.String())
 			}
-			v := tt.response.ProtoReflect().New().Interface()
+
+			want := restBody(tt.response)
+			v := want.ProtoReflect().New().Interface()
 			if err := protojson.Unmarshal(w.Body.Bytes(), v); err != nil {
 				t.Fatal(err)
 			}
-			if !proto.Equal(v, tt.response) {
-				t.Fatalf("REST %v != gRPC %v", v, tt.response)
+			if !proto.Equal(v, want) {
+				t.Fatalf("REST %v != gRPC %v", v, want)
 			}
 			if w.Header().Get("Cache-Control") != "no-store" {
 				t.Error("response cached")
 			}
 			// Every RPC authenticates before even resolving its sources.
-			if err := conn.Invoke(context.Background(), "/forge.changes.v1.Changes/"+tt.name, tt.request, tt.response); status.Code(err) != codes.Unauthenticated {
+			if err := conn.Invoke(
+				context.Background(),
+				"/forge.changes.v1.ChangesService/"+tt.name,
+				tt.request,
+				tt.response,
+			); status.Code(err) != codes.Unauthenticated {
 				t.Fatalf("unauthorized RPC: %v", err)
 			}
+
 			req = httptest.NewRequest(tt.method, tt.path, strings.NewReader(string(body)))
 			req.Header.Set("Grpc-Metadata-Authorization", "Bearer service")
 			w = httptest.NewRecorder()
@@ -213,6 +270,29 @@ func TestRESTAndGRPCParity(t *testing.T) {
 }
 
 func ptr[T any](v T) *T { return &v }
+
+// named sets a request's source, repository and number to the test proposal.
+func named[T proto.Message](request T) T {
+	m := request.ProtoReflect()
+	fields := m.Descriptor().Fields()
+	m.Set(fields.ByName("source"), protoreflect.ValueOfString("connection"))
+	m.Set(fields.ByName("repository"), protoreflect.ValueOfString("o/r"))
+	m.Set(fields.ByName("number"), protoreflect.ValueOfInt64(7))
+
+	return request
+}
+
+// restBody returns the part of a gRPC response that REST returns.
+func restBody(response proto.Message) proto.Message {
+	switch v := response.(type) {
+	case interface{ GetChange() *pb.ChangeRequest }:
+		return v.GetChange()
+	case interface{ GetComment() *pb.Comment }:
+		return v.GetComment()
+	}
+
+	return response
+}
 
 func TestErrorMappingAndRedaction(t *testing.T) {
 	for _, tt := range []struct {
@@ -227,10 +307,13 @@ func TestErrorMappingAndRedaction(t *testing.T) {
 			t.Errorf("%v: %v", tt.err, got)
 		}
 	}
+
 	h, _ := setup(t)
 	for _, tt := range []struct {
-		method, path, body string
-		code               int
+		method string
+		path   string
+		body   string
+		code   int
 	}{
 		{"GET", "/v1/changes/7?source=connection&repository=denied/r", "", 403},
 		{"PATCH", "/v1/changes/7", `{"source":"connection","repository":"o/r","sourceBranch":"new"}`, 501},
@@ -253,14 +336,17 @@ func TestDeadlineAndNilSource(t *testing.T) {
 			if nilClient {
 				return nil, nil
 			}
+
 			<-ctx.Done()
+
 			return nil, ctx.Err()
 		}, forgeauth.StaticToken("service"), time.Millisecond)
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer service"))
-		_, err = s.ListSources(ctx, &emptypb.Empty{})
+		_, err = s.ListSources(ctx, &pb.ListSourcesRequest{})
 		want := codes.DeadlineExceeded
 		if nilClient {
 			want = codes.Unavailable
@@ -273,7 +359,11 @@ func TestDeadlineAndNilSource(t *testing.T) {
 
 func TestRESTBodyLimit(t *testing.T) {
 	h, _ := setup(t)
-	r := httptest.NewRequest("POST", "/v1/changes", io.LimitReader(strings.NewReader(`{"description":"`+strings.Repeat("x", 2<<20)+`"}`), 3<<20))
+	r := httptest.NewRequest(
+		"POST",
+		"/v1/changes",
+		io.LimitReader(strings.NewReader(`{"description":"`+strings.Repeat("x", 2<<20)+`"}`), 3<<20),
+	)
 	r.Header.Set("Authorization", "Bearer service")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)

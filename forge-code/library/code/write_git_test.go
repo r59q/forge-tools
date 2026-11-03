@@ -48,6 +48,7 @@ func forEachRealGit(t *testing.T, fn func(t *testing.T, g *realGit)) {
 	if err != nil {
 		t.Skip("git not on PATH")
 	}
+
 	for _, f := range confForges {
 		t.Run(string(f.kind), func(t *testing.T) {
 			fn(t, newRealGit(t, gitPath, f.kind, f.front, f.repo))
@@ -71,11 +72,13 @@ func newRealGit(t *testing.T, gitPath string, kind forgeauth.Kind, front fakefor
 		if err != nil {
 			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, stderr.String())
 		}
+
 		return out
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
+
 	_ = run(nil, "init", "-q", "--bare", "-b", "main", "--object-format=sha1", ".")
 	for _, kv := range [][2]string{
 		{"http.receivepack", "true"},
@@ -94,10 +97,12 @@ func newRealGit(t *testing.T, gitPath string, kind forgeauth.Kind, front fakefor
 		o, _ := r.Object(id)
 		objs = append(objs, o)
 	}
+
 	var pack bytes.Buffer
 	if err := gitwire.WritePack(&pack, objs); err != nil {
 		t.Fatal(err)
 	}
+
 	run(pack.Bytes(), "unpack-objects", "-q")
 	for _, ref := range r.Refs("refs/") {
 		run(nil, "update-ref", ref.Name, ref.ID.String())
@@ -117,6 +122,7 @@ func newRealGit(t *testing.T, gitPath string, kind forgeauth.Kind, front fakefor
 		if before != nil {
 			before(req)
 		}
+
 		backend.ServeHTTP(w, req)
 	}))
 	t.Cleanup(srv.Close)
@@ -126,10 +132,19 @@ func newRealGit(t *testing.T, gitPath string, kind forgeauth.Kind, front fakefor
 	if err != nil {
 		t.Fatal(err)
 	}
-	g.writeEnv = &writeEnv{kind: kind, s: s, repo: r, fx: fx, c: c, path: path,
-		ref: RepositoryRef{Source: "src", Repository: path}}
+
+	g.writeEnv = &writeEnv{
+		kind: kind,
+		s:    s,
+		repo: r,
+		fx:   fx,
+		c:    c,
+		path: path,
+		ref:  RepositoryRef{Source: "src", Repository: path},
+	}
 	g.git = func(args ...string) string { return strings.TrimSpace(string(run(nil, args...))) }
 	g.raw = func(args ...string) []byte { return run(nil, args...) }
+
 	return g
 }
 
@@ -149,10 +164,12 @@ func (g *realGit) sync(t *testing.T) {
 		if err == io.EOF {
 			break
 		}
+
 		f := strings.Fields(header)
 		if err != nil || len(f) != 3 {
 			t.Fatalf("cat-file header %q: %v", header, err)
 		}
+
 		size, _ := strconv.Atoi(f[2])
 		data := make([]byte, size+1)
 		if _, err := io.ReadFull(br, data); err != nil {
@@ -162,15 +179,18 @@ func (g *realGit) sync(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+
 	for _, ref := range g.repo.Refs("refs/") {
-		g.repo.SetRef(ref.Name, gitobj.ZeroID)
+		g.repo.SetRef(ref.Name, gitobj.ID{})
 	}
+
 	for line := range strings.SplitSeq(g.git("for-each-ref", "--format=%(objectname) %(refname)"), "\n") {
 		hex, name, _ := strings.Cut(line, " ")
 		id, err := gitobj.ParseID(hex)
 		if err != nil {
 			t.Fatalf("for-each-ref line %q", line)
 		}
+
 		g.repo.SetRef(name, id)
 	}
 }
@@ -187,23 +207,29 @@ func TestRealGitCreateCommit(t *testing.T) {
 		ctx := context.Background()
 		head := confOID(g.fx.Head)
 		cm, err := g.c.CreateCommit(ctx, g.ref, NewCommit{
-			Parents: []OID{head}, Changes: editChanges, Author: testAuthor,
-			Message: "Edit files\n", Ref: mainRef, Old: head,
+			Parents: []OID{head},
+			Changes: editChanges,
+			Author:  testAuthor,
+			Message: "Edit files\n",
+			Ref:     mainRef,
+			Old:     head,
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		ids[g.kind] = cm.ID
 		g.fsck(t)
 		if got := g.git("rev-parse", "refs/heads/main", "main^{tree}"); got != string(cm.ID)+"\n"+string(cm.Tree) {
 			t.Errorf("rev-parse = %q, want %s %s", got, cm.ID, cm.Tree)
 		}
+
 		ls := g.git("ls-tree", "-r", "main")
 		for _, want := range []string{
 			"\t" + fakeforge.PathMain,
 			"\tlink2",
 			"160000 commit " + string(otherSubmodule) + "\tvendor/other",
-			"160000 commit " + fakeforge.SubmoduleCommit.String() + "\tvendor/lib",
+			"160000 commit " + fakeforge.SubmoduleCommit().String() + "\tvendor/lib",
 			"100644 blob e69de29bb2d1d6434b8b29ae775ad8c2e48c5391\tempty.txt",
 			"\ta/b/c.txt",
 		} {
@@ -211,17 +237,20 @@ func TestRealGitCreateCommit(t *testing.T) {
 				t.Errorf("ls-tree lacks %q:\n%s", want, ls)
 			}
 		}
+
 		for p, mode := range map[string]string{fakeforge.PathMain: "100755", fakeforge.PathExec: "100755", "link2": "120000"} {
 			if got := g.git("ls-tree", "main", p); !strings.HasPrefix(got, mode+" ") {
 				t.Errorf("%s: ls-tree %q, want mode %s", p, got, mode)
 			}
 		}
+
 		if strings.Contains(ls, "docs/") || strings.Contains(ls, "\tlink\n") {
 			t.Errorf("deleted paths still in ls-tree:\n%s", ls)
 		}
 		if got := g.git("cat-file", "-p", "main:link2"); got != "src/main.go" {
 			t.Errorf("symlink target %q", got)
 		}
+
 		raw := g.git("cat-file", "commit", "main")
 		sig := fmt.Sprintf("Ada Lovelace <ada@example.com> %d +0200", testAuthor.When.Unix())
 		if !strings.Contains(raw, "author "+sig) || !strings.Contains(raw, "committer "+sig) ||
@@ -233,9 +262,12 @@ func TestRealGitCreateCommit(t *testing.T) {
 		// branch from a commit that is not a tip.
 		g.sync(t)
 		_, err = g.c.CreateCommit(ctx, g.ref, NewCommit{
-			Parents: []OID{cm.ID, confOID(g.fx.Feature[2])}, Author: testAuthor, Message: "Merge\n",
+			Parents: []OID{cm.ID, confOID(g.fx.Feature[2])},
+			Author:  testAuthor,
+			Message: "Merge\n",
 			Changes: []FileChange{{Path: fakeforge.PathFeature, Content: []byte("merged\n")}},
-			Ref:     mainRef, Old: cm.ID,
+			Ref:     mainRef,
+			Old:     cm.ID,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -243,9 +275,17 @@ func TestRealGitCreateCommit(t *testing.T) {
 		if got := g.git("rev-parse", "main^1", "main^2"); got != string(cm.ID)+"\n"+g.fx.Feature[2].String() {
 			t.Errorf("merge parents %q", got)
 		}
+
 		root, err := g.c.CreateCommit(ctx, g.ref, NewCommit{
-			Author: testAuthor, Message: "Root\n", Ref: "refs/heads/root", Old: ZeroOID,
-			Changes: []FileChange{{Path: "x/y", Content: []byte("y\n")}, {Path: "l", Mode: ModeSymlink, Content: []byte("x/y")}},
+			Author:  testAuthor,
+			Message: "Root\n",
+			Ref:     "refs/heads/root",
+			Old:     ZeroOID,
+			Changes: []FileChange{{Path: "x/y", Content: []byte("y\n")}, {
+				Path:    "l",
+				Mode:    ModeSymlink,
+				Content: []byte("x/y"),
+			}},
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -256,10 +296,14 @@ func TestRealGitCreateCommit(t *testing.T) {
 		if got := g.git("rev-parse", "refs/heads/root^{tree}"); got != string(root.Tree) {
 			t.Errorf("root tree %s, want %s", got, root.Tree)
 		}
+
 		side, err := g.c.CreateCommit(ctx, g.ref, NewCommit{
-			Parents: []OID{confOID(g.fx.Main[1])}, Author: testAuthor, Message: "Side\n",
+			Parents: []OID{confOID(g.fx.Main[1])},
+			Author:  testAuthor,
+			Message: "Side\n",
 			Changes: []FileChange{{Path: fakeforge.PathReadme, Delete: true}},
-			Ref:     "refs/heads/side", Old: ZeroOID,
+			Ref:     "refs/heads/side",
+			Old:     ZeroOID,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -267,6 +311,7 @@ func TestRealGitCreateCommit(t *testing.T) {
 		if got := g.git("rev-parse", "refs/heads/side"); got != string(side.ID) {
 			t.Errorf("side at %s, want %s", got, side.ID)
 		}
+
 		g.fsck(t)
 	})
 	if len(ids) == 3 && (ids[forgeauth.GitHub] != ids[forgeauth.GitLab] || ids[forgeauth.GitHub] != ids[forgeauth.Forgejo]) {
@@ -307,16 +352,19 @@ func TestRealGitUpdateRefs(t *testing.T) {
 		if got := g.git("rev-parse", "refs/heads/feature"); got != string(feat) {
 			t.Errorf("feature moved to %s in a failed atomic push", got)
 		}
+
 		g.setBefore(nil)
 
 		hook := filepath.Join(g.dir, "hooks", "pre-receive")
 		if err := os.WriteFile(hook, []byte("#!/bin/sh\necho no >&2\nexit 1\n"), 0o755); err != nil {
 			t.Fatal(err)
 		}
+
 		wantErr(t, "hook declined", up(RefUpdate{Name: "refs/heads/feature", Old: feat, New: head}), ErrRejected)
 		if got := g.git("rev-parse", "refs/heads/feature"); got != string(feat) {
 			t.Errorf("declined push moved feature to %s", got)
 		}
+
 		g.fsck(t)
 	})
 }

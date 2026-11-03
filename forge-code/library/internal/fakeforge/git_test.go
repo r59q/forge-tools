@@ -19,6 +19,7 @@ func gitRepo(t *testing.T, r *Repo) func(args ...string) string {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not on PATH")
 	}
+
 	dir := t.TempDir()
 	run := func(stdin []byte, args ...string) string {
 		t.Helper()
@@ -31,6 +32,7 @@ func gitRepo(t *testing.T, r *Repo) func(args ...string) string {
 		if err != nil {
 			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, stderr.String())
 		}
+
 		return string(out)
 	}
 	run(nil, "init", "-q", "--bare", "--object-format=sha1", ".")
@@ -41,9 +43,11 @@ func gitRepo(t *testing.T, r *Repo) func(args ...string) string {
 			t.Fatalf("git hash-object %s = %s, store has %s", o.Type, got, id)
 		}
 	}
+
 	for _, ref := range r.Refs("refs/") {
 		run(nil, "update-ref", ref.Name, ref.ID.String())
 	}
+
 	return func(args ...string) string { return run(nil, args...) }
 }
 
@@ -54,8 +58,10 @@ func ids(out string) []gitobj.ID {
 		if err != nil {
 			panic(err)
 		}
+
 		res = append(res, id)
 	}
+
 	return res
 }
 
@@ -72,16 +78,56 @@ func TestSeedMatchesGit(t *testing.T) {
 	}{
 		{tip: head},
 		{tip: fx.Feature[2].String()},
-		{tip: head, args: []string{"--", PathFeature}, o: LogOptions{Path: PathFeature}},
-		{tip: head, args: []string{"--", PathReadme}, o: LogOptions{Path: PathReadme}},
-		{tip: head, args: []string{"--", PathOldName}, o: LogOptions{Path: PathOldName}},
-		{tip: head, args: []string{"--", PathNewName}, o: LogOptions{Path: PathNewName}},
-		{tip: head, args: []string{"--", "docs"}, o: LogOptions{Path: "docs"}},
-		{tip: head, args: []string{"--", "assets"}, o: LogOptions{Path: "assets"}},
-		{tip: head, args: []string{"--", "nope"}, o: LogOptions{Path: "nope"}},
-		{tip: head, args: []string{"^" + fx.Feature[2].String()}, o: LogOptions{Not: []gitobj.ID{fx.Feature[2]}}},
-		{tip: head, args: []string{"^" + fx.Main[4].String(), "--", PathFeature}, o: LogOptions{Path: PathFeature, Not: []gitobj.ID{fx.Main[4]}}},
-		{tip: fx.Feature[2].String(), args: []string{"^" + head, "--", PathFeature}, o: LogOptions{Path: PathFeature, Not: []gitobj.ID{fx.Head}}},
+		{
+			tip:  head,
+			args: []string{"--", PathFeature},
+			o:    LogOptions{Path: PathFeature},
+		},
+		{
+			tip:  head,
+			args: []string{"--", PathReadme},
+			o:    LogOptions{Path: PathReadme},
+		},
+		{
+			tip:  head,
+			args: []string{"--", PathOldName},
+			o:    LogOptions{Path: PathOldName},
+		},
+		{
+			tip:  head,
+			args: []string{"--", PathNewName},
+			o:    LogOptions{Path: PathNewName},
+		},
+		{
+			tip:  head,
+			args: []string{"--", "docs"},
+			o:    LogOptions{Path: "docs"},
+		},
+		{
+			tip:  head,
+			args: []string{"--", "assets"},
+			o:    LogOptions{Path: "assets"},
+		},
+		{
+			tip:  head,
+			args: []string{"--", "nope"},
+			o:    LogOptions{Path: "nope"},
+		},
+		{
+			tip:  head,
+			args: []string{"^" + fx.Feature[2].String()},
+			o:    LogOptions{Not: []gitobj.ID{fx.Feature[2]}},
+		},
+		{
+			tip:  head,
+			args: []string{"^" + fx.Main[4].String(), "--", PathFeature},
+			o:    LogOptions{Path: PathFeature, Not: []gitobj.ID{fx.Main[4]}},
+		},
+		{
+			tip:  fx.Feature[2].String(),
+			args: []string{"^" + head, "--", PathFeature},
+			o:    LogOptions{Path: PathFeature, Not: []gitobj.ID{fx.Head}},
+		},
 	} {
 		want := ids(git(append([]string{"log", "--format=%H", tc.tip}, tc.args...)...))
 		tip, _ := gitobj.ParseID(tc.tip)
@@ -94,6 +140,7 @@ func TestSeedMatchesGit(t *testing.T) {
 	if want := ids(git("merge-base", "--all", "main", "feature")); !slices.Equal(want, []gitobj.ID{fx.MergeBase}) {
 		t.Errorf("git merge-base = %v", want)
 	}
+
 	for ref, want := range map[string]gitobj.ID{"chain": fx.Main[1], "v1.0": fx.Main[3]} {
 		if got := ids(git("rev-parse", "refs/tags/"+ref+"^{commit}")); got[0] != want {
 			t.Errorf("%s peels to %s in git", ref, got[0])
@@ -107,18 +154,22 @@ func TestSeedMatchesGit(t *testing.T) {
 		f := strings.Fields(meta)
 		want = append(want, fmt.Sprintf("%s %s %s %s", strings.TrimLeft(f[0], "0"), f[2], f[3], path))
 	}
+
 	list, err := r.ListTree(fx.Head, true)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	var got []string
 	for _, e := range list {
 		size := "-"
 		if e.Mode != gitobj.ModeTree && e.Mode != gitobj.ModeSubmodule {
 			size = fmt.Sprint(e.Size)
 		}
+
 		got = append(got, fmt.Sprintf("%s %s %s %s", e.Mode, e.ID, size, e.Path))
 	}
+
 	if !slices.Equal(got, want) {
 		t.Errorf("ListTree:\n got %q\nwant %q", got, want)
 	}
@@ -137,6 +188,7 @@ func TestCrissCrossMatchesGit(t *testing.T) {
 	if !slices.Equal(got, want) {
 		t.Errorf("MergeBases = %v, git %v", got, want)
 	}
+
 	for _, tip := range []gitobj.ID{x, y} {
 		want := ids(git("log", "--format=%H", tip.String(), "--", "f"))
 		got, _ := r.Log(tip, LogOptions{Path: "f"})
@@ -149,11 +201,11 @@ func TestCrissCrossMatchesGit(t *testing.T) {
 func TestTiesMatchGit(t *testing.T) {
 	r := NewRepo()
 	tree := r.BuildTree(nil)
-	root := r.CommitTree(tree, Epoch, "root")
-	a := r.CommitTree(tree, Epoch, "a", root)
-	b := r.CommitTree(tree, Epoch, "b", root)
-	c := r.CommitTree(tree, Epoch, "c", b)
-	m := r.CommitTree(tree, Epoch, "m", a, c)
+	root := r.CommitTree(tree, Epoch(), "root")
+	a := r.CommitTree(tree, Epoch(), "a", root)
+	b := r.CommitTree(tree, Epoch(), "b", root)
+	c := r.CommitTree(tree, Epoch(), "c", b)
+	m := r.CommitTree(tree, Epoch(), "m", a, c)
 	r.SetRef("refs/heads/m", m)
 	git := gitRepo(t, r)
 	want := ids(git("log", "--format=%H", "m"))

@@ -17,7 +17,12 @@ func TestProvider(t *testing.T) {
 		Header:   "Authorization",
 		Prefix:   "token ",
 		User:     `{"id":42,"login":"alice","login_name":"","full_name":"Alice Example","email":"alice@example.com","is_admin":false}`,
-		Want:     forgeauth.Identity{ID: "42", Login: "alice", Name: "Alice Example", Email: "alice@example.com"},
+		Want: forgeauth.Identity{
+			ID:    "42",
+			Login: "alice",
+			Name:  "Alice Example",
+			Email: "alice@example.com",
+		},
 	})
 }
 
@@ -54,6 +59,7 @@ func TestSetGitToken(t *testing.T) {
 	if got := h.Get("Authorization"); got != "Basic "+base64.StdEncoding.EncodeToString([]byte("forge-tools:tok-123")) {
 		t.Fatalf("Authorization = %q", got)
 	}
+
 	r := &http.Request{Header: h}
 	if user, pass, ok := r.BasicAuth(); !ok || user != "forge-tools" || pass != "tok-123" {
 		t.Errorf("BasicAuth() = %q, %q, %v", user, pass, ok)

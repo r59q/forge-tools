@@ -21,16 +21,28 @@ var pushCaps = []string{"report-status", "atomic", "delete-refs", "object-format
 func testCommit(t *testing.T, content string, parents ...gitobj.ID) []gitobj.Object {
 	t.Helper()
 	blob := gitobj.Object{Type: gitobj.TypeBlob, Data: []byte(content)}
-	tree, err := gitobj.EncodeTree([]gitobj.TreeEntry{{Name: "file.txt", Mode: gitobj.ModeFile, ID: blob.ID()}})
+	tree, err := gitobj.EncodeTree([]gitobj.TreeEntry{{
+		Name: "file.txt",
+		Mode: gitobj.ModeFile,
+		ID:   blob.ID(),
+	}})
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	treeObj := gitobj.Object{Type: gitobj.TypeTree, Data: tree}
 	sig := gitobj.Signature{Name: "Test", Email: "test@example.com", When: time.Unix(1700000000, 0).In(time.FixedZone("", 3600))}
-	commit, err := gitobj.EncodeCommit(gitobj.Commit{Tree: treeObj.ID(), Parents: parents, Author: sig, Committer: sig, Message: content + "\n"})
+	commit, err := gitobj.EncodeCommit(gitobj.Commit{
+		Tree:      treeObj.ID(),
+		Parents:   parents,
+		Author:    sig,
+		Committer: sig,
+		Message:   content + "\n",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return []gitobj.Object{blob, treeObj, {Type: gitobj.TypeCommit, Data: commit}}
 }
 
@@ -40,6 +52,7 @@ func packOf(t *testing.T, objs []gitobj.Object) io.Reader {
 	if err := WritePack(&b, objs); err != nil {
 		t.Fatal(err)
 	}
+
 	return &b
 }
 
@@ -62,6 +75,7 @@ func TestAdvertise(t *testing.T) {
 	if a.Caps.Has("ofs") {
 		t.Fatal("prefix matched")
 	}
+
 	h := f.headers[0]
 	if h.Get("Cache-Control") != "no-cache" || h.Get("Git-Protocol") != "" {
 		t.Fatalf("headers %v", h)
@@ -87,7 +101,8 @@ func TestAdvertiseErrors(t *testing.T) {
 		f.hook = func(w http.ResponseWriter, r *http.Request) bool {
 			w.Header().Set("Content-Type", ctype)
 			w.WriteHeader(status)
-			io.WriteString(w, body)
+			_, _ = io.WriteString(w, body)
+
 			return true
 		}
 	}
@@ -116,6 +131,7 @@ func TestAdvertiseErrors(t *testing.T) {
 			t.Errorf("%d %s %q: err = %v, want %v", tc.status, tc.ctype, tc.body, err, tc.want)
 		}
 	}
+
 	for _, bad := range []string{"ftp://x/r.git", "https://u:p@x/r.git", "https://x/r.git?a=b", "https://x/r.git#f", "/r.git", "%"} {
 		if _, err := Advertise(ctx, nil, bad); err == nil || strings.Contains(err.Error(), "p@") {
 			t.Errorf("Advertise(%q) err = %v", bad, err)
@@ -125,7 +141,10 @@ func TestAdvertiseErrors(t *testing.T) {
 
 func pkt(s string) string {
 	var b bytes.Buffer
-	NewPktWriter(&b).Data([]byte(s))
+	if err := NewPktWriter(&b).Data([]byte(s)); err != nil {
+		panic(err)
+	}
+
 	return b.String()
 }
 
@@ -165,6 +184,7 @@ func TestPush(t *testing.T) {
 		if sideband {
 			caps = append(caps, "side-band-64k")
 		}
+
 		objs := testCommit(t, "one")
 		c1 := objs[2].ID()
 		rep, err := Push(ctx, nil, f.url(), []Command{{Name: "refs/heads/main", New: c1}}, caps, packOf(t, objs))
@@ -174,6 +194,7 @@ func TestPush(t *testing.T) {
 		if !rep.UnpackOK || !rep.Refs["refs/heads/main"].OK || f.refs["refs/heads/main"] != c1 {
 			t.Fatalf("create: %+v", rep)
 		}
+
 		h := f.headers[len(f.headers)-1]
 		if h.Get("Content-Type") != receivePackRequest || h.Get("Accept") != receivePackResult {
 			t.Fatalf("headers %v", h)
@@ -200,7 +221,11 @@ func TestPush(t *testing.T) {
 		// Stale old value: ng, ref unchanged.
 		objs2 := testCommit(t, "two", c1)
 		c2 := objs2[2].ID()
-		rep, err = Push(ctx, nil, f.url(), []Command{{Name: "refs/heads/main", Old: c2, New: c2}}, caps, packOf(t, objs2))
+		rep, err = Push(ctx, nil, f.url(), []Command{{
+			Name: "refs/heads/main",
+			Old:  c2,
+			New:  c2,
+		}}, caps, packOf(t, objs2))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -210,13 +235,18 @@ func TestPush(t *testing.T) {
 
 		// Atomic: one bad command fails both.
 		rep, err = Push(ctx, nil, f.url(), []Command{
-			{Name: "refs/heads/main", Old: c1, New: c2},
+			{
+				Name: "refs/heads/main",
+				Old:  c1,
+				New:  c2,
+			},
 			{Name: "refs/heads/protected", New: c2},
 		}, caps, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if rep.Refs["refs/heads/main"].OK || rep.Refs["refs/heads/protected"].Reason != "pre-receive hook declined" || f.refs["refs/heads/main"] != c1 {
+		if rep.Refs["refs/heads/main"].OK ||
+			rep.Refs["refs/heads/protected"].Reason != "pre-receive hook declined" || f.refs["refs/heads/main"] != c1 {
 			t.Fatalf("atomic: %+v", rep)
 		}
 
@@ -275,10 +305,11 @@ func TestPushResponseErrors(t *testing.T) {
 		{200, receivePackResult, pkt("\x01"+pkt("unpack ok\n")+pkt("ok refs/heads/a\n")+"0000") + "0000", nil},
 	} {
 		f.hook = func(w http.ResponseWriter, r *http.Request) bool {
-			io.Copy(io.Discard, r.Body)
+			_, _ = io.Copy(io.Discard, r.Body)
 			w.Header().Set("Content-Type", tc.ctype)
 			w.WriteHeader(tc.status)
-			io.WriteString(w, tc.body)
+			_, _ = io.WriteString(w, tc.body)
+
 			return true
 		}
 		_, err := Push(ctx, nil, f.url(), cmds, append(pushCaps, "side-band-64k"), packOf(t, objs))
@@ -311,9 +342,11 @@ func TestParseReport(t *testing.T) {
 			t.Errorf("%s: err = %v, want %v", name, err, tc.err)
 			continue
 		}
+
 		if tc.want != nil && (got.UnpackOK != tc.want.UnpackOK || got.Unpack != tc.want.Unpack || len(got.Refs) != len(tc.want.Refs)) {
 			t.Errorf("%s: %+v", name, got)
 		}
+
 		for n, st := range tc.want.refs() {
 			if got.Refs[n] != st {
 				t.Errorf("%s: %s = %+v, want %+v", name, n, got.Refs[n], st)
@@ -326,6 +359,7 @@ func (r *Report) refs() map[string]RefStatus {
 	if r == nil {
 		return nil
 	}
+
 	return r.Refs
 }
 
@@ -336,13 +370,15 @@ func TestWriteReportRoundTrip(t *testing.T) {
 		if err := WriteReport(&b, rep, sb); err != nil {
 			t.Fatal(err)
 		}
+
 		got, err := readReport(&b, sb)
 		if err != nil || !got.UnpackOK || got.Refs["refs/heads/b"].Reason != "x y" || !got.Refs["refs/heads/a"].OK {
 			t.Fatalf("sideband=%v: %+v %v", sb, got, err)
 		}
 	}
+
 	var b bytes.Buffer
-	WriteReport(&b, &Report{}, false)
+	must(t, WriteReport(&b, &Report{}, false))
 	if got, err := readReport(&b, false); err != nil || got.UnpackOK || got.Unpack != "error" {
 		t.Fatalf("unpack error: %+v %v", got, err)
 	}
@@ -361,6 +397,7 @@ func TestParseCommands(t *testing.T) {
 	if r, _ := io.ReadAll(rest); string(r) != "PACKrest" {
 		t.Fatalf("rest %q", r)
 	}
+
 	for _, bad := range []string{
 		pkt(a+" "+c+"\n") + "0000",
 		pkt(a+" "+c+" HEAD\n") + "0000",
@@ -387,21 +424,30 @@ func TestFetchCommit(t *testing.T) {
 	if !bytes.Equal(got, want.Data) {
 		t.Fatalf("commit %q", got)
 	}
+
 	wantArgs := []string{"no-progress", "want " + want.ID().String(), "deepen 1", "filter tree:0", "done"}
 	if strings.Join(f.lastArgs, "|") != strings.Join(wantArgs, "|") || strings.Join(f.lastCaps, "|") != "object-format=sha1" {
 		t.Fatalf("request caps %v args %v", f.lastCaps, f.lastArgs)
 	}
+
 	for _, h := range f.headers {
 		if h.Get("Git-Protocol") != "version=2" {
 			t.Fatalf("missing Git-Protocol: %v", h)
 		}
 	}
+
 	if h := f.headers[1]; h.Get("Content-Type") != uploadPackRequest || h.Get("Accept") != uploadPackResult {
 		t.Fatalf("POST headers %v", h)
 	}
 
 	// Unknown object: the server says ERR.
-	if _, err := FetchCommit(ctx, nil, f.url(), testCommit(t, "nope")[2].ID()); !errors.Is(err, ErrRemote) || !strings.Contains(err.Error(), "not our ref") {
+	if _, err := FetchCommit(
+		ctx,
+		nil,
+		f.url(),
+		testCommit(t, "nope")[2].ID(),
+	); !errors.Is(err, ErrRemote) ||
+		!strings.Contains(err.Error(), "not our ref") {
 		t.Fatalf("unknown: %v", err)
 	}
 	// The pack must hold the commit we asked for.
@@ -424,7 +470,8 @@ func TestFetchCommitErrors(t *testing.T) {
 		"sha256":     {caps: []string{"fetch=shallow filter", "object-format=sha256"}, want: ErrUnsupported},
 		"v0": {hook: func(w http.ResponseWriter, r *http.Request) bool {
 			w.Header().Set("Content-Type", uploadPackAdvertisement)
-			io.WriteString(w, "001e# service=git-upload-pack\n0000"+pkt(strings.Repeat("a", 40)+" HEAD\x00multi_ack\n")+"0000")
+			_, _ = io.WriteString(w, "001e# service=git-upload-pack\n0000"+pkt(strings.Repeat("a", 40)+" HEAD\x00multi_ack\n")+"0000")
+
 			return true
 		}, want: ErrUnsupported},
 		"401": {hook: func(w http.ResponseWriter, r *http.Request) bool {
@@ -435,24 +482,30 @@ func TestFetchCommitErrors(t *testing.T) {
 			if r.Method == "GET" {
 				return false
 			}
+
 			w.Header().Set("Content-Type", uploadPackResult)
-			io.WriteString(w, pkt("shallow-info\n")+pkt("shallow "+strings.Repeat("a", 40)+"\n")+"0000")
+			_, _ = io.WriteString(w, pkt("shallow-info\n")+pkt("shallow "+strings.Repeat("a", 40)+"\n")+"0000")
+
 			return true
 		}, want: ErrProtocol},
 		"odd section": {hook: func(w http.ResponseWriter, r *http.Request) bool {
 			if r.Method == "GET" {
 				return false
 			}
+
 			w.Header().Set("Content-Type", uploadPackResult)
-			io.WriteString(w, pkt("surprise\n")+"0001")
+			_, _ = io.WriteString(w, pkt("surprise\n")+"0001")
+
 			return true
 		}, want: ErrProtocol},
 		"band 3": {hook: func(w http.ResponseWriter, r *http.Request) bool {
 			if r.Method == "GET" {
 				return false
 			}
+
 			w.Header().Set("Content-Type", uploadPackResult)
-			io.WriteString(w, pkt("packfile\n")+pkt("\x03pack-objects died")+"0000")
+			_, _ = io.WriteString(w, pkt("packfile\n")+pkt("\x03pack-objects died")+"0000")
+
 			return true
 		}, want: ErrRemote},
 	} {
@@ -461,6 +514,7 @@ func TestFetchCommitErrors(t *testing.T) {
 		if tc.caps != nil {
 			f.v2caps = tc.caps
 		}
+
 		f.hook = tc.hook
 		if _, err := FetchCommit(ctx, nil, f.url(), objs[2].ID()); !errors.Is(err, tc.want) {
 			t.Errorf("%s: err = %v, want %v", name, err, tc.want)
@@ -473,6 +527,7 @@ func TestParseV2Advertisement(t *testing.T) {
 	if err != nil || len(caps) != 1 || !caps.Has("fetch") {
 		t.Fatalf("%v %v", caps, err)
 	}
+
 	for _, bad := range []string{"", pkt("version 2\n"), pkt("version 2\n") + "0001", pkt("version 2\n") + "0004" + "0000", pkt("ERR nope\n")} {
 		if _, err := parseV2Advertisement(strings.NewReader(bad)); err == nil {
 			t.Errorf("parseV2Advertisement(%q) ok", bad)
@@ -486,11 +541,13 @@ func TestParseV2Request(t *testing.T) {
 	if err != nil || req.Command != "fetch" || len(req.Caps) != 1 || strings.Join(req.Args, ",") != "want a,done" {
 		t.Fatalf("%+v %v", req, err)
 	}
+
 	for _, bad := range []string{"0000", pkt("agent=x\n") + "0000", pkt("command=fetch\n") + "00010001", pkt("command=fetch\n"), pkt("command=fetch\n") + "0002"} {
 		if _, err := ParseV2Request(strings.NewReader(bad)); !errors.Is(err, ErrProtocol) {
 			t.Errorf("ParseV2Request(%q) err = %v", bad, err)
 		}
 	}
+
 	if WriteError(io.Discard, "a\nb") == nil || WriteError(io.Discard, "") == nil {
 		t.Fatal("WriteError accepted a bad message")
 	}

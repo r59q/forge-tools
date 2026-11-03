@@ -14,8 +14,9 @@ import (
 func (r *Repo) rootTree(id gitobj.ID) (gitobj.ID, error) {
 	p, t, err := r.peel(id)
 	if err != nil {
-		return gitobj.ZeroID, err
+		return gitobj.ID{}, err
 	}
+
 	switch t {
 	case gitobj.TypeTree:
 		return p, nil
@@ -23,7 +24,8 @@ func (r *Repo) rootTree(id gitobj.ID) (gitobj.ID, error) {
 		c, err := r.commit(p)
 		return c.Tree, err
 	}
-	return gitobj.ZeroID, fmt.Errorf("%w: %s is not a tree-ish", ErrWrongType, id)
+
+	return gitobj.ID{}, fmt.Errorf("%w: %s is not a tree-ish", ErrWrongType, id)
 }
 
 // Lookup walks path from root, which may be a commit, tag or tree, and
@@ -37,6 +39,7 @@ func (r *Repo) Lookup(root gitobj.ID, path string) (gitobj.TreeEntry, error) {
 	if err != nil {
 		return gitobj.TreeEntry{}, err
 	}
+
 	return r.lookup(tree, path)
 }
 
@@ -45,20 +48,25 @@ func (r *Repo) lookup(tree gitobj.ID, path string) (gitobj.TreeEntry, error) {
 	if path == "" {
 		return e, nil
 	}
+
 	for _, name := range strings.Split(path, "/") {
 		if e.Mode != gitobj.ModeTree || name == "" {
 			return gitobj.TreeEntry{}, fmt.Errorf("%w: path %q", ErrNotFound, path)
 		}
+
 		entries, err := r.tree(e.ID)
 		if err != nil {
 			return gitobj.TreeEntry{}, err
 		}
+
 		i := slices.IndexFunc(entries, func(x gitobj.TreeEntry) bool { return x.Name == name })
 		if i < 0 {
 			return gitobj.TreeEntry{}, fmt.Errorf("%w: path %q", ErrNotFound, path)
 		}
+
 		e = entries[i]
 	}
+
 	return e, nil
 }
 
@@ -82,7 +90,9 @@ func (r *Repo) ListTree(root gitobj.ID, recursive bool) ([]PathEntry, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	var out []PathEntry
+
 	return out, r.list(tree, "", recursive, &out)
 }
 
@@ -91,6 +101,7 @@ func (r *Repo) list(tree gitobj.ID, dir string, recursive bool, out *[]PathEntry
 	if err != nil {
 		return err
 	}
+
 	for _, e := range entries {
 		pe := PathEntry{TreeEntry: e, Path: dir + e.Name}
 		if e.Mode != gitobj.ModeTree && e.Mode != gitobj.ModeSubmodule {
@@ -98,6 +109,7 @@ func (r *Repo) list(tree gitobj.ID, dir string, recursive bool, out *[]PathEntry
 				pe.Size = int64(len(o.Data))
 			}
 		}
+
 		*out = append(*out, pe)
 		if recursive && e.Mode == gitobj.ModeTree {
 			if err := r.list(e.ID, pe.Path+"/", true, out); err != nil {
@@ -105,6 +117,7 @@ func (r *Repo) list(tree gitobj.ID, dir string, recursive bool, out *[]PathEntry
 			}
 		}
 	}
+
 	return nil
 }
 
@@ -131,6 +144,7 @@ func (r *Repo) Log(tip gitobj.ID, o LogOptions) ([]gitobj.ID, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	hidden := map[gitobj.ID]bool{}
 	for _, n := range o.Not {
 		c, err := r.peelCommit(n)
@@ -141,6 +155,7 @@ func (r *Repo) Log(tip gitobj.ID, o LogOptions) ([]gitobj.ID, error) {
 			return nil, err
 		}
 	}
+
 	var out []gitobj.ID
 	q := &commitQueue{}
 	seen := map[gitobj.ID]bool{}
@@ -148,18 +163,22 @@ func (r *Repo) Log(tip gitobj.ID, o LogOptions) ([]gitobj.ID, error) {
 		if seen[id] || hidden[id] {
 			return nil
 		}
+
 		seen[id] = true
 		c, err := r.commit(id)
 		if err != nil {
 			return err
 		}
+
 		q.seq++
 		heap.Push(q, queued{id: id, c: c, seq: q.seq})
+
 		return nil
 	}
 	if err := push(start); err != nil {
 		return nil, err
 	}
+
 	for q.Len() > 0 {
 		cur := heap.Pop(q).(queued)
 		parents, show, err := r.simplify(cur.c, o.Path, hidden)
@@ -169,12 +188,14 @@ func (r *Repo) Log(tip gitobj.ID, o LogOptions) ([]gitobj.ID, error) {
 		if show {
 			out = append(out, cur.id)
 		}
+
 		for _, p := range parents {
 			if err := push(p); err != nil {
 				return nil, err
 			}
 		}
 	}
+
 	return out, nil
 }
 
@@ -184,6 +205,7 @@ func (r *Repo) simplify(c gitobj.Commit, path string, hidden map[gitobj.ID]bool)
 	if path == "" {
 		return c.Parents, true, nil
 	}
+
 	mine, err := r.pathEntry(c.Tree, path)
 	if err != nil {
 		return nil, false, err
@@ -191,6 +213,7 @@ func (r *Repo) simplify(c gitobj.Commit, path string, hidden map[gitobj.ID]bool)
 	if len(c.Parents) == 0 {
 		return nil, mine != nil, nil
 	}
+
 	// Hidden parents never simplify, and count only when all are hidden.
 	var changedVisible, changedHidden bool
 	for _, p := range c.Parents {
@@ -198,10 +221,12 @@ func (r *Repo) simplify(c gitobj.Commit, path string, hidden map[gitobj.ID]bool)
 		if err != nil {
 			return nil, false, err
 		}
+
 		theirs, err := r.pathEntry(pc.Tree, path)
 		if err != nil {
 			return nil, false, err
 		}
+
 		same := (mine == nil && theirs == nil) || (mine != nil && theirs != nil && *mine == *theirs)
 		switch {
 		case hidden[p] && !same:
@@ -213,6 +238,7 @@ func (r *Repo) simplify(c gitobj.Commit, path string, hidden map[gitobj.ID]bool)
 			changedVisible = true
 		}
 	}
+
 	// Any visible parent here differs from c.
 	return c.Parents, changedVisible || changedHidden, nil
 }
@@ -224,9 +250,12 @@ func (r *Repo) pathEntry(tree gitobj.ID, path string) (*gitobj.TreeEntry, error)
 		if isNotFound(err) {
 			return nil, nil
 		}
+
 		return nil, err
 	}
+
 	e.Name = ""
+
 	return &e, nil
 }
 
@@ -239,13 +268,16 @@ func (r *Repo) ancestors(id gitobj.ID, set map[gitobj.ID]bool) error {
 		if set[id] {
 			continue
 		}
+
 		c, err := r.commit(id)
 		if err != nil {
 			return err
 		}
+
 		set[id] = true
 		stack = append(stack, c.Parents...)
 	}
+
 	return nil
 }
 
@@ -258,14 +290,17 @@ func (r *Repo) IsAncestor(a, b gitobj.ID) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+
 	cb, err := r.peelCommit(b)
 	if err != nil {
 		return false, err
 	}
+
 	set := map[gitobj.ID]bool{}
 	if err := r.ancestors(cb, set); err != nil {
 		return false, err
 	}
+
 	return set[ca], nil
 }
 
@@ -280,10 +315,12 @@ func (r *Repo) MergeBases(a, b gitobj.ID) ([]gitobj.ID, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	cb, err := r.peelCommit(b)
 	if err != nil {
 		return nil, err
 	}
+
 	sa, sb := map[gitobj.ID]bool{}, map[gitobj.ID]bool{}
 	if err := r.ancestors(ca, sa); err != nil {
 		return nil, err
@@ -291,17 +328,20 @@ func (r *Repo) MergeBases(a, b gitobj.ID) ([]gitobj.ID, error) {
 	if err := r.ancestors(cb, sb); err != nil {
 		return nil, err
 	}
+
 	common := map[gitobj.ID]bool{}
 	for id := range sa {
 		if sb[id] {
 			common[id] = true
 		}
 	}
+
 	redundant := map[gitobj.ID]bool{}
 	for id := range common {
 		if redundant[id] {
 			continue
 		}
+
 		c, _ := r.commit(id)
 		below := map[gitobj.ID]bool{}
 		for _, p := range c.Parents {
@@ -309,10 +349,12 @@ func (r *Repo) MergeBases(a, b gitobj.ID) ([]gitobj.ID, error) {
 				return nil, err
 			}
 		}
+
 		for x := range below {
 			redundant[x] = true
 		}
 	}
+
 	var out []gitobj.ID
 	when := map[gitobj.ID]int64{}
 	for id := range common {
@@ -322,15 +364,19 @@ func (r *Repo) MergeBases(a, b gitobj.ID) ([]gitobj.ID, error) {
 			out = append(out, id)
 		}
 	}
+
 	slices.SortFunc(out, func(x, y gitobj.ID) int {
 		if when[x] != when[y] {
 			if when[x] > when[y] {
 				return -1
 			}
+
 			return 1
 		}
+
 		return strings.Compare(x.String(), y.String())
 	})
+
 	return out, nil
 }
 
@@ -339,8 +385,9 @@ func (r *Repo) MergeBases(a, b gitobj.ID) ([]gitobj.ID, error) {
 func (r *Repo) MergeBase(a, b gitobj.ID) (gitobj.ID, bool, error) {
 	all, err := r.MergeBases(a, b)
 	if err != nil || len(all) == 0 {
-		return gitobj.ZeroID, false, err
+		return gitobj.ID{}, false, err
 	}
+
 	return all[0], true, nil
 }
 
@@ -359,18 +406,24 @@ type commitQueue struct {
 }
 
 func (q *commitQueue) Len() int { return len(q.items) }
+
 func (q *commitQueue) Less(i, j int) bool {
 	a, b := q.items[i], q.items[j]
 	ta, tb := a.c.Committer.When.Unix(), b.c.Committer.When.Unix()
 	if ta != tb {
 		return ta > tb
 	}
+
 	return a.seq < b.seq
 }
+
 func (q *commitQueue) Swap(i, j int) { q.items[i], q.items[j] = q.items[j], q.items[i] }
-func (q *commitQueue) Push(x any)    { q.items = append(q.items, x.(queued)) }
+
+func (q *commitQueue) Push(x any) { q.items = append(q.items, x.(queued)) }
+
 func (q *commitQueue) Pop() any {
 	x := q.items[len(q.items)-1]
 	q.items = q.items[:len(q.items)-1]
+
 	return x
 }

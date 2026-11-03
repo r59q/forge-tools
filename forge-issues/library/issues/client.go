@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"net/url"
 	"strings"
 	"sync"
@@ -28,6 +27,8 @@ type source struct {
 	forge forge
 }
 
+// jscpd:ignore-start - each library owns its client.
+
 // New returns a Client for the given sources. Each needs a unique, non-empty
 // ID and an open session of a supported kind. A Client without sources lists
 // nothing and finds nothing.
@@ -43,16 +44,21 @@ func New(sources ...Source) (*Client, error) {
 		if s.Session == nil || s.Session.Client == nil {
 			return nil, fmt.Errorf("%w: source %q has no open session", ErrInvalid, s.ID)
 		}
-		f, ok := forges[s.Session.Kind]
+
+		f, ok := forges()[s.Session.Kind]
 		if !ok {
 			return nil, fmt.Errorf("%w: source %q has unsupported kind %q", ErrInvalid, s.ID, s.Session.Kind)
 		}
+
 		src := &source{Source: s, forge: f}
 		c.sources = append(c.sources, src)
 		c.byID[s.ID] = src
 	}
+
 	return c, nil
 }
+
+// jscpd:ignore-end
 
 // Sources returns the configured sources in order.
 func (c *Client) Sources() []Source {
@@ -60,6 +66,7 @@ func (c *Client) Sources() []Source {
 	for i, s := range c.sources {
 		out[i] = s.Source
 	}
+
 	return out
 }
 
@@ -73,14 +80,17 @@ func (c *Client) List(ctx context.Context, opts ListOptions) ([]Issue, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	sources, err := c.pick(opts.Source)
 	if err != nil {
 		return nil, err
 	}
+
 	path := ""
 	if opts.Repository != "" {
 		path, _ = forgerest.CleanPath(opts.Repository)
 	}
+
 	type result struct {
 		issues []Issue
 		found  bool
@@ -92,32 +102,40 @@ func (c *Client) List(ctx context.Context, opts ListOptions) ([]Issue, error) {
 			if !ok {
 				return result{}, nil // this forge cannot hold such a path
 			}
+
 			first = s.forge.listPath(repo, f)
 		}
+
 		list, err := s.issues(ctx, first, path)
 		if err = gone(err); err != nil {
 			if path != "" && opts.Source == "" && errors.Is(err, forgehttp.ErrNotFound) {
 				return result{}, nil
 			}
+
 			return result{}, err
 		}
+
 		return result{issues: withLabels(list, f.labels), found: true}, nil
 	})
 	if err != nil {
 		return nil, err
 	}
+
 	var out []Issue
 	found := false
 	for _, r := range results {
 		out = append(out, r.issues...)
 		found = found || r.found
 	}
+
 	if path != "" && !found {
 		if len(sources) == 1 {
 			return nil, notFound(sources[0], path)
 		}
+
 		return nil, fmt.Errorf("issues: %q: %w", path, forgehttp.ErrNotFound)
 	}
+
 	return out, nil
 }
 
@@ -146,22 +164,27 @@ func (c *Client) Create(ctx context.Context, ref RepositoryRef, n NewIssue) (Iss
 	if ref.Source == "" {
 		return Issue{}, fmt.Errorf("%w: source required", ErrInvalid)
 	}
+
 	path, ok := forgerest.CleanPath(ref.Repository)
 	if !ok {
 		return Issue{}, invalidPath(ref.Repository)
 	}
+
 	s, err := c.one(ref.Source)
 	if err != nil {
 		return Issue{}, err
 	}
+
 	repo, ok := s.forge.repoPath(path)
 	if !ok {
 		return Issue{}, notFound(s, path)
 	}
+
 	iss, err := s.forge.create(ctx, s.Session, repo, n)
 	if err != nil {
 		return Issue{}, fmt.Errorf("issues: source %s: %w", s.ID, err)
 	}
+
 	return s.stamp(iss, path), nil
 }
 
@@ -190,75 +213,19 @@ func (c *Client) Update(ctx context.Context, ref Ref, u Update) (Issue, error) {
 	if ref.Source == "" {
 		return Issue{}, fmt.Errorf("%w: source required", ErrInvalid)
 	}
+
 	// Read the issue first, so a pull request is never changed.
 	s, cur, api, err := c.get(ctx, ref)
 	if err != nil {
 		return Issue{}, err
 	}
+
 	iss, err := s.forge.update(ctx, s.Session, api, u)
 	if err != nil {
 		return Issue{}, fmt.Errorf("issues: source %s: %w", s.ID, err)
 	}
+
 	return s.stamp(iss, cur.Repository), nil
-}
-
-// Comments returns the comments on the issue ref names, oldest first.
-// GitLab system notes are left out.
-func (c *Client) Comments(ctx context.Context, ref Ref) ([]Comment, error) {
-	s, iss, api, err := c.get(ctx, ref)
-	if err != nil {
-		return nil, err
-	}
-	list, _ := s.forge.commentsPath(api)
-	type entry struct {
-		comment Comment
-		keep    bool
-	}
-	entries, err := forgerest.Pages(ctx, s.Session, list, func(raw json.RawMessage) (entry, error) {
-		cm, keep, err := s.forge.comment(raw)
-		return entry{cm, keep}, err
-	})
-	if err = gone(err); err != nil {
-		return nil, fmt.Errorf("issues: source %s: %w", s.ID, err)
-	}
-	out := []Comment{}
-	for _, e := range entries {
-		if e.keep {
-			out = append(out, withURL(e.comment, iss))
-		}
-	}
-	return out, nil
-}
-
-// AddComment adds a comment to the issue ref names and returns it.
-// ref.Source and a non-empty body are required. On GitLab, a body of only
-// quick actions, such as "/close", runs them and adds no comment; the
-// returned Comment then has no ID.
-func (c *Client) AddComment(ctx context.Context, ref Ref, body string) (Comment, error) {
-	if strings.TrimSpace(body) == "" {
-		return Comment{}, fmt.Errorf("%w: empty comment", ErrInvalid)
-	}
-	if ref.Source == "" {
-		return Comment{}, fmt.Errorf("%w: source required", ErrInvalid)
-	}
-	// Read the issue first, so a pull request never gets the comment.
-	s, iss, api, err := c.get(ctx, ref)
-	if err != nil {
-		return Comment{}, err
-	}
-	_, add := s.forge.commentsPath(api)
-	var raw json.RawMessage
-	if err := forgerest.Send(ctx, s.Session, "POST", add, map[string]string{"body": body}, &raw); err != nil {
-		return Comment{}, fmt.Errorf("issues: source %s: %w", s.ID, err)
-	}
-	cm, kept, err := s.forge.comment(raw)
-	if err != nil {
-		return Comment{}, fmt.Errorf("issues: source %s: %w", s.ID, err)
-	}
-	if !kept {
-		return Comment{}, nil // only quick actions ran
-	}
-	return withURL(cm, iss), nil
 }
 
 // get returns ref's issue, the source it is on and its API path. The path
@@ -272,15 +239,18 @@ func (c *Client) get(ctx context.Context, ref Ref) (*source, Issue, string, erro
 	if ref.Number <= 0 {
 		return nil, Issue{}, "", fmt.Errorf("%w: issue number %d", ErrInvalid, ref.Number)
 	}
+
 	sources, err := c.pick(ref.Source)
 	if err != nil {
 		return nil, Issue{}, "", err
 	}
+
 	results, err := each(sources, func(s *source) ([]Issue, error) {
 		repo, ok := s.forge.repoPath(path)
 		if !ok {
 			return nil, nil // this forge cannot hold such a path
 		}
+
 		var raw json.RawMessage
 		err := gone(forgerest.Send(ctx, s.Session, "GET", s.forge.issuePath(repo, ref.Number), nil, &raw))
 		if errors.Is(err, forgehttp.ErrNotFound) && ref.Source == "" {
@@ -289,19 +259,23 @@ func (c *Client) get(ctx context.Context, ref Ref) (*source, Issue, string, erro
 		if err != nil {
 			return nil, err
 		}
+
 		iss, isIssue, err := s.forge.issue(raw)
 		if err != nil || !isIssue {
 			return nil, err
 		}
+
 		return []Issue{s.stamp(iss, path)}, nil
 	})
 	if err != nil {
 		return nil, Issue{}, "", err
 	}
+
 	var found []Issue
 	for _, r := range results {
 		found = append(found, r...)
 	}
+
 	switch {
 	case len(found) == 1:
 		s, iss := c.byID[found[0].Source.ID], found[0]
@@ -315,6 +289,7 @@ func (c *Client) get(ctx context.Context, ref Ref) (*source, Issue, string, erro
 	case len(sources) == 1:
 		return nil, Issue{}, "", fmt.Errorf("issues: source %s: %s#%d: %w", sources[0].ID, path, ref.Number, forgehttp.ErrNotFound)
 	}
+
 	return nil, Issue{}, "", fmt.Errorf("issues: %s#%d: %w", path, ref.Number, forgehttp.ErrNotFound)
 }
 
@@ -323,10 +298,12 @@ func (c *Client) pick(id string) ([]*source, error) {
 	if id == "" {
 		return c.sources, nil
 	}
+
 	s, err := c.one(id)
 	if err != nil {
 		return nil, err
 	}
+
 	return []*source{s}, nil
 }
 
@@ -336,6 +313,7 @@ func (c *Client) one(id string) (*source, error) {
 	if !ok {
 		return nil, fmt.Errorf("%w: %q", ErrUnknownSource, id)
 	}
+
 	return s, nil
 }
 
@@ -353,10 +331,12 @@ func each[T any](sources []*source, fn func(*source) (T, error)) ([]T, error) {
 			}
 		})
 	}
+
 	wg.Wait()
 	if err := errors.Join(errs...); err != nil {
 		return nil, err
 	}
+
 	return results, nil
 }
 
@@ -374,12 +354,14 @@ func (s *source) issues(ctx context.Context, first, path string) ([]Issue, error
 	if err != nil {
 		return nil, err
 	}
+
 	out := []Issue{}
 	for _, e := range entries {
 		if e.keep {
 			out = append(out, s.stamp(e.issue, path))
 		}
 	}
+
 	return out, nil
 }
 
@@ -395,6 +377,7 @@ func (s *source) apiPath(iss Issue, path string, n int64) string {
 	if iss.Number > 0 {
 		n = iss.Number
 	}
+
 	return s.forge.issuePath(repo, n)
 }
 
@@ -408,103 +391,6 @@ func (s *source) stamp(iss Issue, path string) Issue {
 	if iss.Repository == "" {
 		iss.Repository = path
 	}
+
 	return iss
-}
-
-// withURL fills a comment's missing web URL from its issue, as GitLab
-// notes have none.
-func withURL(cm Comment, iss Issue) Comment {
-	if cm.WebURL == "" && cm.ID != "" && iss.WebURL != "" {
-		cm.WebURL = iss.WebURL + "#note_" + cm.ID
-	}
-	return cm
-}
-
-// withLabels keeps the issues that have every label, ignoring case. Forges
-// filter too, but not always for all labels, such as Forgejo's search.
-func withLabels(list []Issue, labels []string) []Issue {
-	if len(labels) == 0 {
-		return list
-	}
-	kept := list[:0]
-	for _, iss := range list {
-		if hasAll(iss.Labels, labels) {
-			kept = append(kept, iss)
-		}
-	}
-	return kept
-}
-
-// hasAll reports whether have contains every name in want, ignoring case.
-func hasAll(have, want []string) bool {
-	for _, w := range want {
-		ok := false
-		for _, h := range have {
-			if strings.EqualFold(h, w) {
-				ok = true
-				break
-			}
-		}
-		if !ok {
-			return false
-		}
-	}
-	return true
-}
-
-// checkList checks opts and returns its forge filter.
-func checkList(opts ListOptions) (filter, error) {
-	f := filter{state: opts.State, labels: opts.Labels}
-	switch f.state {
-	case "":
-		f.state = StateOpen
-	case StateOpen, StateClosed, StateAll:
-	default:
-		return filter{}, fmt.Errorf("%w: state %q, want open, closed or all", ErrInvalid, opts.State)
-	}
-	switch opts.Scope {
-	case "", Assigned, Created:
-	default:
-		return filter{}, fmt.Errorf("%w: scope %q, want assigned or created", ErrInvalid, opts.Scope)
-	}
-	if opts.Repository != "" {
-		if opts.Scope != "" {
-			return filter{}, fmt.Errorf("%w: scope applies only without a repository", ErrInvalid)
-		}
-		if _, ok := forgerest.CleanPath(opts.Repository); !ok {
-			return filter{}, invalidPath(opts.Repository)
-		}
-	}
-	return f, checkNames("label", opts.Labels)
-}
-
-// checkNames checks label names or logins. Forges join them with commas,
-// so a comma would split one name in two.
-func checkNames(what string, names []string) error {
-	for _, n := range names {
-		if strings.TrimSpace(n) == "" || strings.Contains(n, ",") {
-			return fmt.Errorf("%w: %s %q", ErrInvalid, what, n)
-		}
-	}
-	return nil
-}
-
-// gone wraps a 410 Gone, which GitHub sends for a deleted issue or when
-// issues are disabled, with forgehttp.ErrNotFound.
-func gone(err error) error {
-	var fe *forgehttp.Error
-	if errors.As(err, &fe) && fe.StatusCode == http.StatusGone {
-		return fmt.Errorf("%w: %w", forgehttp.ErrNotFound, err)
-	}
-	return err
-}
-
-// notFound is the error for a repository path that cannot exist on s.
-func notFound(s *source, path string) error {
-	return fmt.Errorf("issues: source %s: %q: %w", s.ID, path, forgehttp.ErrNotFound)
-}
-
-// invalidPath is the error for a path that forgerest.CleanPath rejects.
-func invalidPath(path string) error {
-	return fmt.Errorf("%w: repository %q, want owner/name", ErrInvalid, path)
 }

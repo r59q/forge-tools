@@ -56,6 +56,7 @@ func parseRateLimit(h http.Header, now time.Time) (RateLimit, bool) {
 			}
 		}
 	}
+
 	// GitLab also sends the reset time as an HTTP date.
 	if rl.Reset.IsZero() {
 		if t, err := http.ParseTime(h.Get("RateLimit-ResetTime")); err == nil {
@@ -66,6 +67,7 @@ func parseRateLimit(h http.Header, now time.Time) (RateLimit, bool) {
 	if d, ok := retryAfter(h.Get("Retry-After"), now); ok {
 		rl.RetryAfter, found = d, true
 	}
+
 	return rl, found
 }
 
@@ -79,12 +81,15 @@ func retryAfter(v string, now time.Time) (time.Duration, bool) {
 		if n < 0 {
 			return 0, false
 		}
+
 		return time.Duration(n) * time.Second, true
 	}
+
 	t, err := http.ParseTime(v)
 	if err != nil {
 		return 0, false
 	}
+
 	return max(t.Sub(now), 0), true
 }
 
@@ -93,9 +98,11 @@ func headerInt(h http.Header, key string) (int, bool) {
 	if v == "" {
 		return 0, false
 	}
+
 	n, err := strconv.Atoi(v)
 	if err != nil || n < 0 {
 		return 0, false
 	}
+
 	return n, true
 }

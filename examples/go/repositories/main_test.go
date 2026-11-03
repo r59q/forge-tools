@@ -29,6 +29,7 @@ func (b fakeBroker) Connection(_ context.Context, id broker.ID) (forgeauth.Conne
 	if !ok {
 		return forgeauth.Connection{}, broker.ErrNotFound
 	}
+
 	return c, nil
 }
 
@@ -36,6 +37,7 @@ func (b fakeBroker) VerifyClient(_ context.Context, token forgeauth.StaticToken,
 	if _, ok := b[id]; !ok || string(token) != clientToken {
 		return broker.Client{}, broker.ErrUnauthorized
 	}
+
 	return broker.Client{}, nil
 }
 
@@ -43,10 +45,12 @@ func (b fakeBroker) ClientConnections(_ context.Context, token forgeauth.StaticT
 	if string(token) != clientToken {
 		return nil, broker.ErrUnauthorized
 	}
+
 	var out []broker.ClientConnection
 	for _, id := range []broker.ID{"gh-conn", "gl-conn"} {
 		out = append(out, broker.ClientConnection{ID: id, Kind: b[id].Kind, Status: broker.StatusOK})
 	}
+
 	return out, nil
 }
 
@@ -55,6 +59,7 @@ func (b fakeBroker) IssueToken(_ context.Context, id broker.ID) (broker.IssuedTo
 	if !ok {
 		return broker.IssuedToken{}, broker.ErrNotFound
 	}
+
 	return broker.IssuedToken{Kind: c.Kind, BaseURL: c.BaseURL, Token: forgeToken}, nil
 }
 
@@ -78,10 +83,12 @@ func newForge(t *testing.T, prefix string, token func(http.Header) (string, bool
 			http.Error(w, `{"message":"bad credentials"}`, http.StatusUnauthorized)
 			return
 		}
+
 		path := strings.TrimPrefix(r.URL.EscapedPath(), prefix)
 		if r.URL.Query().Get("page") == "2" {
 			path += "?page=2"
 		}
+
 		f.mu.Lock()
 		f.seen = append(f.seen, path)
 		f.mu.Unlock()
@@ -90,13 +97,16 @@ func newForge(t *testing.T, prefix string, token func(http.Header) (string, bool
 			http.Error(w, `{"message":"404 Not Found"}`, http.StatusNotFound)
 			return
 		}
+
 		if _, ok := routes[path+"?page=2"]; ok {
 			w.Header().Set("Link", fmt.Sprintf(`<%s%s?page=2>; rel="next"`, f.srv.URL, r.URL.EscapedPath()))
 		}
+
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, body)
 	}))
 	t.Cleanup(f.srv.Close)
+
 	return f
 }
 
@@ -122,16 +132,24 @@ func setup(t *testing.T) (proxyURL string, gh, gl *fakeForge) {
 			t.Fatal(err)
 		}
 	}
+
 	b := fakeBroker{
 		"gh-conn": {Kind: forgeauth.GitHub, BaseURL: gh.srv.URL},
 		"gl-conn": {Kind: forgeauth.GitLab, BaseURL: gl.srv.URL + "/api/v4"},
 	}
-	h, err := proxy.New(proxy.Config{Verifier: b, TokenIssuer: b, Connections: b, Registry: &reg})
+	h, err := proxy.New(proxy.Config{
+		Verifier:    b,
+		TokenIssuer: b,
+		Connections: b,
+		Registry:    &reg,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	p := httptest.NewServer(h)
 	t.Cleanup(p.Close)
+
 	return p.URL, gh, gl
 }
 
@@ -141,6 +159,7 @@ func lines(s string) []string {
 	for _, l := range strings.Split(strings.TrimSpace(s), "\n") {
 		out = append(out, strings.Join(strings.Fields(l), " "))
 	}
+
 	return out
 }
 
@@ -151,6 +170,7 @@ func TestListThroughProxy(t *testing.T) {
 	if err := run(context.Background(), opts, forgeauth.StaticToken(clientToken), &out); err != nil {
 		t.Fatal(err)
 	}
+
 	want := []string{
 		"github mrbean/teddy public https://github.com/mrbean/teddy",
 		"gitlab mrbean/tools/cli internal https://gitlab.com/mrbean/tools/cli",
@@ -182,6 +202,7 @@ func TestRefsNestedPathThroughProxy(t *testing.T) {
 	if err := run(context.Background(), opts, forgeauth.StaticToken(clientToken), &out); err != nil {
 		t.Fatal(err)
 	}
+
 	want := []string{
 		"gitlab mrbean/tools/cli https://gitlab.com/mrbean/tools/cli",
 		"branch dev d3v",

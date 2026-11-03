@@ -16,16 +16,16 @@ go test -race ./...
   --token-file service-token --connector-token-file connector-token
 ```
 
-| Flag | Environment variable | Default |
-| --- | --- | --- |
-| `--grpc-listen` | `FORGE_CHANGES_GRPC_LISTEN` | `127.0.0.1:9096` |
-| `--http-listen` | `FORGE_CHANGES_HTTP_LISTEN` | `127.0.0.1:8086` |
-| `--token-file` | `FORGE_CHANGES_TOKEN_FILE` | none |
-| `--token-env` | `FORGE_CHANGES_TOKEN_ENV` | `FORGE_CHANGES_TOKEN` |
-| `--connector-url` | `FORGE_CHANGES_CONNECTOR_URL` | required |
-| `--connector-token-file` | `FORGE_CHANGES_CONNECTOR_TOKEN_FILE` | none |
-| `--connector-token-env` | `FORGE_CHANGES_CONNECTOR_TOKEN_ENV` | `FORGE_CHANGES_CONNECTOR_TOKEN` |
-| `--request-timeout` | `FORGE_CHANGES_REQUEST_TIMEOUT` | `30s` |
+| Flag                     | Environment variable                 | Default                         |
+| ------------------------ | ------------------------------------ | ------------------------------- |
+| `--grpc-listen`          | `FORGE_CHANGES_GRPC_LISTEN`          | `127.0.0.1:9096`                |
+| `--http-listen`          | `FORGE_CHANGES_HTTP_LISTEN`          | `127.0.0.1:8086`                |
+| `--token-file`           | `FORGE_CHANGES_TOKEN_FILE`           | none                            |
+| `--token-env`            | `FORGE_CHANGES_TOKEN_ENV`            | `FORGE_CHANGES_TOKEN`           |
+| `--connector-url`        | `FORGE_CHANGES_CONNECTOR_URL`        | required                        |
+| `--connector-token-file` | `FORGE_CHANGES_CONNECTOR_TOKEN_FILE` | none                            |
+| `--connector-token-env`  | `FORGE_CHANGES_CONNECTOR_TOKEN_ENV`  | `FORGE_CHANGES_CONNECTOR_TOKEN` |
+| `--request-timeout`      | `FORGE_CHANGES_REQUEST_TIMEOUT`      | `30s`                           |
 
 Flags override environment values. Choose one file or environment source for
 each token. `--token-env` names a variable, not a token. Defaults apply only
@@ -51,26 +51,27 @@ without registry access and deploys on pushes to master.
 
 ## API
 
-[changes.proto](proto/changes.proto) is the source for both transports. All
-calls require `Authorization: Bearer <service token>` (metadata for gRPC).
-REST ignores `Grpc-Metadata-*` headers. JSON uses lowerCamelCase, RFC 3339
-timestamps and strings for int64 numbers. Empty default fields are omitted.
+[changes.proto](proto/forge/changes/v1/changes.proto) defines `ChangesService`
+for both transports. All calls require `Authorization: Bearer <service token>`
+(metadata for gRPC). REST ignores `Grpc-Metadata-*` headers. JSON uses
+lowerCamelCase, RFC 3339 timestamps and strings for int64 numbers. Empty
+default fields are omitted.
 
-| RPC | REST route |
-| --- | --- |
-| `ListSources` | `GET /v1/sources` |
-| `ListChanges` | `GET /v1/changes?repository=&source=&author=&state=&draft=` |
-| `GetChange` | `GET /v1/changes/{number}?source=&repository=` |
-| `CreateChange` | `POST /v1/changes` |
-| `UpdateChange` | `PATCH /v1/changes/{number}` |
-| `SetDraft` | `PUT /v1/changes/{number}/draft` |
-| `ListCommits` | `GET /v1/changes/{number}/commits?source=&repository=` |
-| `ListFiles` | `GET /v1/changes/{number}/files?source=&repository=` |
-| `GetDiff` | `GET /v1/changes/{number}/diff?source=&repository=` |
-| `ListComments` | `GET /v1/changes/{number}/comments?source=&repository=` |
-| `AddComment` | `POST /v1/changes/{number}/comments` |
-| `GetReadiness` | `GET /v1/changes/{number}/readiness?source=&repository=` |
-| `Merge` | `POST /v1/changes/{number}/merge` |
+| RPC            | REST route                                                  |
+| -------------- | ----------------------------------------------------------- |
+| `ListSources`  | `GET /v1/sources`                                           |
+| `ListChanges`  | `GET /v1/changes?repository=&source=&author=&state=&draft=` |
+| `GetChange`    | `GET /v1/changes/{number}?source=&repository=`              |
+| `CreateChange` | `POST /v1/changes`                                          |
+| `UpdateChange` | `PATCH /v1/changes/{number}`                                |
+| `SetDraft`     | `PUT /v1/changes/{number}/draft`                            |
+| `ListCommits`  | `GET /v1/changes/{number}/commits?source=&repository=`      |
+| `ListFiles`    | `GET /v1/changes/{number}/files?source=&repository=`        |
+| `GetDiff`      | `GET /v1/changes/{number}/diff?source=&repository=`         |
+| `ListComments` | `GET /v1/changes/{number}/comments?source=&repository=`     |
+| `AddComment`   | `POST /v1/changes/{number}/comments`                        |
+| `GetReadiness` | `GET /v1/changes/{number}/readiness?source=&repository=`    |
+| `Merge`        | `POST /v1/changes/{number}/merge`                           |
 
 `repository` is a required plain path, such as `owner/project` or GitLab
 `group/sub/project`. List accepts an optional source; other operations require
@@ -103,40 +104,31 @@ document methods, GitHub GraphQL routing, draft title prefixes and diff limits.
 Readiness is advisory and includes explicit unknown conditions. Merging
 requires no forge-review service; the forge enforces its policies.
 
-| Cause | gRPC | HTTP |
-| --- | --- | --- |
-| Missing/wrong service token | UNAUTHENTICATED | 401 |
-| Invalid argument, unknown source, forge validation | INVALID_ARGUMENT | 400 |
-| Unsupported operation | UNIMPLEMENTED | 501 |
-| Head changed, merge rejected, conflict | FAILED_PRECONDITION | 400 |
-| Missing proposal/repository | NOT_FOUND | 404 |
-| Forge denied access | PERMISSION_DENIED | 403 |
-| Rate limit or oversized result | RESOURCE_EXHAUSTED | 429 |
-| Deadline | DEADLINE_EXCEEDED | 504 |
-| Other connector/forge failure | UNAVAILABLE | 503 |
+| Cause                                              | gRPC                | HTTP |
+| -------------------------------------------------- | ------------------- | ---- |
+| Missing/wrong service token                        | UNAUTHENTICATED     | 401  |
+| Invalid argument, unknown source, forge validation | INVALID_ARGUMENT    | 400  |
+| Unsupported operation                              | UNIMPLEMENTED       | 501  |
+| Head changed, merge rejected, conflict             | FAILED_PRECONDITION | 400  |
+| Missing proposal/repository                        | NOT_FOUND           | 404  |
+| Forge denied access                                | PERMISSION_DENIED   | 403  |
+| Rate limit or oversized result                     | RESOURCE_EXHAUSTED  | 429  |
+| Deadline                                           | DEADLINE_EXCEEDED   | 504  |
+| Other connector/forge failure                      | UNAVAILABLE         | 503  |
 
 ## Regenerate
 
-Use protoc 33.0 with its bundled includes and these pinned plugins:
+Generated files are committed in `changespb/`. To regenerate, install
+[buf](https://buf.build/docs/installation) 1.74.0 and Go, then run from
+this folder:
 
 ```sh
-go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.10
-go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
-go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway@v2.27.3
-```
-
-Set `GOOGLEAPIS_DIR` to a googleapis/googleapis checkout at
-`ff8fd20f3840386e12f4f69750eff6dc99f6e1b7`. From this directory:
-
-```sh
-protoc -I proto -I "$GOOGLEAPIS_DIR" \
-  --go_out=changespb --go_opt=paths=source_relative \
-  --go-grpc_out=changespb --go-grpc_opt=paths=source_relative \
-  --grpc-gateway_out=changespb --grpc-gateway_opt=paths=source_relative \
-  proto/changes.proto
+buf generate
 go vet ./...
 go test ./...
 ```
+
+CI fails when the generated code is out of date.
 
 ## License
 

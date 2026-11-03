@@ -86,10 +86,12 @@ func isMissing(err error) bool {
 	if !errors.As(err, &fe) {
 		return false
 	}
+
 	switch fe.StatusCode {
 	case http.StatusNotFound, http.StatusBadRequest, http.StatusUnprocessableEntity:
 		return true
 	}
+
 	return false
 }
 
@@ -99,6 +101,7 @@ func missing(err, notFound error) error {
 	if isMissing(err) {
 		return notFound
 	}
+
 	return err
 }
 

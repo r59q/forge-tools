@@ -15,19 +15,23 @@ func TestAESGCMSealer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	for _, plaintext := range [][]byte{nil, []byte("forge-secret"), bytes.Repeat([]byte("x"), 4096)} {
 		sealed, err := s.Seal(plaintext)
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		other, err := s.Seal(plaintext)
 		if err != nil || bytes.Equal(sealed, other) {
 			t.Fatal("Seal must use a fresh nonce")
 		}
+
 		opened, err := s.Open(sealed)
 		if err != nil || !bytes.Equal(opened, plaintext) {
 			t.Fatalf("round trip failed: %v", err)
 		}
+
 		for i := range sealed {
 			tampered := bytes.Clone(sealed)
 			tampered[i] ^= 1
@@ -35,11 +39,13 @@ func TestAESGCMSealer(t *testing.T) {
 				t.Fatalf("modified byte %d accepted", i)
 			}
 		}
+
 		for i := range sealed {
 			if data, err := s.Open(sealed[:i]); !errors.Is(err, broker.ErrSealing) || data != nil {
 				t.Fatalf("truncated length %d accepted", i)
 			}
 		}
+
 		wrong, err := broker.NewAESGCMSealer(bytes.Repeat([]byte{0x43}, 32))
 		if err != nil {
 			t.Fatal(err)
@@ -48,12 +54,14 @@ func TestAESGCMSealer(t *testing.T) {
 			t.Fatal("wrong key accepted")
 		}
 	}
+
 	// Changing the caller's key does not change the cipher.
 	sealed, _ := s.Seal([]byte("secret"))
 	clear(key)
 	if _, err := s.Open(sealed); err != nil {
 		t.Fatal("sealer retained caller's key slice")
 	}
+
 	for _, verb := range []string{"%v", "%+v", "%#v", "%x", "%s"} {
 		if got := fmt.Sprintf(verb, s); got != "[REDACTED]" {
 			t.Errorf("sealer formatting = %s", got)
@@ -67,6 +75,7 @@ func TestAESGCMSealerInvalid(t *testing.T) {
 			t.Errorf("accepted key length %d", length)
 		}
 	}
+
 	for _, s := range []*broker.AESGCMSealer{nil, {}} {
 		if _, err := s.Seal([]byte("secret")); !errors.Is(err, broker.ErrSealing) {
 			t.Error("uninitialized Seal succeeded")

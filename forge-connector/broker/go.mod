@@ -3,9 +3,9 @@ module github.com/r59q/forge-tools/forge-connector/broker
 go 1.27
 
 require (
-	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.3
 	github.com/r59q/forge-tools/forge-connector/library v0.0.0
 	github.com/r59q/forge-tools/forge-core/forgeapi v0.0.0
+	github.com/r59q/forge-tools/forge-core/servicekit v0.0.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20250929231259-57b25ae835d4
 	google.golang.org/grpc v1.75.1
 	google.golang.org/protobuf v1.36.10
@@ -15,6 +15,7 @@ require (
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.3 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
@@ -31,3 +32,5 @@ require (
 replace github.com/r59q/forge-tools/forge-connector/library => ../library
 
 replace github.com/r59q/forge-tools/forge-core/forgeapi => ../../forge-core/forgeapi
+
+replace github.com/r59q/forge-tools/forge-core/servicekit => ../../forge-core/servicekit

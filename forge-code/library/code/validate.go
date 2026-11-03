@@ -27,6 +27,7 @@ func cleanRepo(repo string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("%w: repository %q, want owner/name", ErrInvalid, repo)
 	}
+
 	return p, nil
 }
 
@@ -46,16 +47,19 @@ func cleanFilePath(p string) (string, error) {
 	case !utf8.ValidString(p):
 		return bad("invalid UTF-8")
 	}
+
 	for _, r := range p {
 		if r < 0x20 || r == 0x7f {
 			return bad("control character")
 		}
 	}
+
 	for _, seg := range strings.Split(p, "/") {
 		if seg == "" || seg == "." || seg == ".." {
 			return bad("empty, . or .. segment")
 		}
 	}
+
 	return p, nil
 }
 
@@ -64,6 +68,7 @@ func cleanDir(p string) (string, error) {
 	if p == "" {
 		return "", nil
 	}
+
 	return cleanFilePath(p)
 }
 
@@ -74,11 +79,13 @@ func checkWritePath(p string) error {
 	if _, err := cleanFilePath(p); err != nil {
 		return err
 	}
+
 	for _, seg := range strings.Split(p, "/") {
 		if strings.EqualFold(strings.TrimRight(seg, ". "), ".git") {
 			return fmt.Errorf("%w: path %q: .git segment", ErrInvalid, p)
 		}
 	}
+
 	return nil
 }
 
@@ -89,6 +96,7 @@ func checkRefName(name string) error {
 	if err := checkRefNameGit(name); err != nil {
 		return err
 	}
+
 	short := strings.TrimPrefix(strings.TrimPrefix(name, headsPrefix), tagsPrefix)
 	switch {
 	case strings.HasPrefix(short, "-"):
@@ -96,6 +104,7 @@ func checkRefName(name string) error {
 	case strings.Contains(name, "%"):
 		return fmt.Errorf("%w: ref %q: contains '%%'", ErrInvalid, name)
 	}
+
 	return nil
 }
 
@@ -110,6 +119,7 @@ func checkRefNameGit(name string) error {
 	if !ok {
 		short, ok = strings.CutPrefix(name, tagsPrefix)
 	}
+
 	switch {
 	case !ok:
 		return bad("want refs/heads/ or refs/tags/")
@@ -126,16 +136,19 @@ func checkRefNameGit(name string) error {
 	case strings.HasSuffix(name, "."):
 		return bad("ends with .")
 	}
+
 	for _, r := range name {
 		if r < 0x20 || r == 0x7f || strings.ContainsRune(" ~^:?*[\\", r) {
 			return bad(fmt.Sprintf("contains %q", r))
 		}
 	}
+
 	for _, seg := range strings.Split(short, "/") {
 		if seg == "" || strings.HasPrefix(seg, ".") || strings.HasSuffix(seg, ".lock") {
 			return bad("empty segment, or segment starting with . or ending with .lock")
 		}
 	}
+
 	return nil
 }
 
@@ -144,6 +157,7 @@ func checkOID(what string, id OID) error {
 	if !id.Valid() {
 		return fmt.Errorf("%w: %s %q, want a full lowercase object ID", ErrInvalid, what, id)
 	}
+
 	return nil
 }
 
@@ -155,6 +169,7 @@ func escapePath(p string) string {
 	for i, s := range segs {
 		segs[i] = url.PathEscape(s)
 	}
+
 	return strings.Join(segs, "/")
 }
 
@@ -166,6 +181,7 @@ func reposPath(repo string) (string, bool) {
 	if !ok || strings.Contains(name, "/") {
 		return "", false
 	}
+
 	return "/repos/" + url.PathEscape(owner) + "/" + url.PathEscape(name), true
 }
 
@@ -175,5 +191,6 @@ func parseOID(s string) (OID, error) {
 	if !id.Valid() {
 		return "", fmt.Errorf("code: forge sent invalid object ID %q", s)
 	}
+
 	return id, nil
 }

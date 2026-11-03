@@ -36,6 +36,7 @@ func TestStaticTokenRedacted(t *testing.T) {
 	for _, verb := range []string{"%v", "%+v", "%#v", "%s", "%q", "%x", "%X", "%d", "%10.3s"} {
 		outs = append(outs, fmt.Sprintf(verb, tok), fmt.Sprintf(verb, w), fmt.Sprintf(verb, &w))
 	}
+
 	outs = append(outs, fmt.Sprint(tok), fmt.Sprintln(tok), tok.String(), tok.GoString())
 
 	var buf bytes.Buffer
@@ -48,6 +49,7 @@ func TestStaticTokenRedacted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	outs = append(outs, string(j))
 
 	for _, out := range outs {
@@ -81,13 +83,16 @@ func TestEnvToken(t *testing.T) {
 				t.Setenv(name, "")
 				os.Unsetenv(name)
 			}
+
 			got, err := EnvToken(name).Token(context.Background())
 			if tt.wantErr != "" {
 				if !errors.Is(err, ErrNoToken) || !strings.Contains(err.Error(), tt.wantErr) || !strings.Contains(err.Error(), name) {
 					t.Fatalf("Token() error = %v, want ErrNoToken containing %q", err, tt.wantErr)
 				}
+
 				return
 			}
+
 			if err != nil || got != tt.want {
 				t.Fatalf("Token() = %q, %v, want %q", got, err, tt.want)
 			}
@@ -102,6 +107,7 @@ func TestEnvTokenReadEachCall(t *testing.T) {
 	if got, _ := creds.Token(context.Background()); got != "one" {
 		t.Fatalf("Token() = %q, want one", got)
 	}
+
 	t.Setenv(name, "two")
 	if got, _ := creds.Token(context.Background()); got != "two" {
 		t.Fatalf("Token() = %q, want two", got)
@@ -115,6 +121,7 @@ func TestFileToken(t *testing.T) {
 		if err := os.WriteFile(p, []byte(data), 0o600); err != nil {
 			t.Fatal(err)
 		}
+
 		return p
 	}
 	tests := []struct {
@@ -138,8 +145,10 @@ func TestFileToken(t *testing.T) {
 				if !errors.Is(err, ErrNoToken) || !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("Token() = %q, %v, want ErrNoToken containing %q", got, err, tt.wantErr)
 				}
+
 				return
 			}
+
 			if err != nil || got != tt.want {
 				t.Fatalf("Token() = %q, %v, want %q", got, err, tt.want)
 			}
@@ -169,6 +178,7 @@ func TestCheckToken(t *testing.T) {
 			t.Errorf("checkToken(%q) error contains token: %v", tok, err)
 		}
 	}
+
 	for _, tok := range []string{"abc", "ghp_AbC123", "glpat-x_y.z", "a/b+c="} {
 		if err := checkToken(tok); err != nil {
 			t.Errorf("checkToken(%q) = %v", tok, err)

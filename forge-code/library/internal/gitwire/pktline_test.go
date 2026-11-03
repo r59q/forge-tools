@@ -8,21 +8,30 @@ import (
 	"testing"
 )
 
+// must fails tb on err.
+func must(tb testing.TB, err error) {
+	tb.Helper()
+	if err != nil {
+		tb.Fatal(err)
+	}
+}
+
 func TestPktRoundTrip(t *testing.T) {
 	var b bytes.Buffer
 	pw := NewPktWriter(&b)
-	pw.Line("hello")
-	pw.Data([]byte{0, 1, 2})
-	pw.Delim()
-	pw.ResponseEnd()
+	must(t, pw.Line("hello"))
+	must(t, pw.Data([]byte{0, 1, 2}))
+	must(t, pw.Delim())
+	must(t, pw.ResponseEnd())
 	big := bytes.Repeat([]byte("x"), MaxPktData)
-	pw.Data(big)
+	must(t, pw.Data(big))
 	if err := pw.Flush(); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.HasPrefix(b.String(), "000ahello\n0007\x00\x01\x02") {
 		t.Fatalf("encoding %q", b.String()[:20])
 	}
+
 	b.WriteString("rest")
 	pr := NewPktReader(&b)
 	want := []struct {
@@ -37,11 +46,12 @@ func TestPktRoundTrip(t *testing.T) {
 			t.Fatalf("pkt %d: %v %d %q", i, err, kind, data[:min(len(data), 10)])
 		}
 	}
+
 	rest, _ := io.ReadAll(pr.Rest())
 	if string(rest) != "rest" {
 		t.Fatalf("rest %q", rest)
 	}
-	if _, _, err := NewPktReader(strings.NewReader("")).Next(); err != io.EOF {
+	if _, _, err := NewPktReader(strings.NewReader("")).Next(); !errors.Is(err, io.EOF) {
 		t.Fatalf("empty input: %v", err)
 	}
 }
@@ -65,11 +75,13 @@ func TestPktReaderErrors(t *testing.T) {
 			t.Errorf("Next(%.10q) err = %v", in, err)
 		}
 	}
+
 	// Upper-case hex and an empty data line are accepted.
 	kind, data, err := NewPktReader(strings.NewReader("000Aabcdef")).Next()
 	if err != nil || kind != PktData || string(data) != "abcdef" {
 		t.Fatalf("upper hex: %v %q", err, data)
 	}
+
 	kind, data, err = NewPktReader(strings.NewReader("0004")).Next()
 	if err != nil || kind != PktData || len(data) != 0 {
 		t.Fatalf("empty line: %v %q", err, data)
@@ -79,10 +91,10 @@ func TestPktReaderErrors(t *testing.T) {
 func TestDemux(t *testing.T) {
 	var b bytes.Buffer
 	pw := NewPktWriter(&b)
-	pw.Data([]byte("\x01abc"))
-	pw.Data([]byte("\x02progress"))
-	pw.Data([]byte("\x01def"))
-	pw.Flush()
+	must(t, pw.Data([]byte("\x01abc")))
+	must(t, pw.Data([]byte("\x02progress")))
+	must(t, pw.Data([]byte("\x01def")))
+	must(t, pw.Flush())
 	var out bytes.Buffer
 	if err := demux(NewPktReader(bytes.NewReader(b.Bytes())), &out, 100); err != nil || out.String() != "abcdef" {
 		t.Fatalf("demux: %v %q", err, out.String())
@@ -90,6 +102,7 @@ func TestDemux(t *testing.T) {
 	if err := demux(NewPktReader(bytes.NewReader(b.Bytes())), io.Discard, 5); !errors.Is(err, ErrTooLarge) {
 		t.Fatalf("cap: %v", err)
 	}
+
 	for in, want := range map[string]error{
 		"000c\x03failed\n0000": ErrRemote,
 		"000aERR no0000":       ErrRemote,
@@ -103,6 +116,7 @@ func TestDemux(t *testing.T) {
 			t.Errorf("demux(%q) = %v, want %v", in, err, want)
 		}
 	}
+
 	err := demux(NewPktReader(strings.NewReader("000c\x03failed\n0000")), io.Discard, 100)
 	if !strings.Contains(err.Error(), "failed") {
 		t.Fatalf("message lost: %v", err)

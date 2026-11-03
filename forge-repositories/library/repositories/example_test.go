@@ -12,8 +12,11 @@ import (
 
 func ExampleClient_List() {
 	var reg forgeauth.Registry
-	reg.Register(github.Provider{})
-	reg.Register(gitlab.Provider{})
+	for _, p := range []forgeauth.Provider{github.Provider{}, gitlab.Provider{}} {
+		if err := reg.Register(p); err != nil {
+			panic(err)
+		}
+	}
 
 	// Each source is one forge-connector proxy connection. The caller states
 	// its kind; the proxy client token comes from FORGE_TOKEN.
@@ -26,6 +29,7 @@ func ExampleClient_List() {
 		if err != nil {
 			panic(err)
 		}
+
 		return repositories.Source{ID: connection, Session: s}
 	}
 	c, err := repositories.New(
@@ -42,6 +46,7 @@ func ExampleClient_List() {
 		fmt.Println(err)
 		return
 	}
+
 	for _, r := range repos {
 		fmt.Println(r.Source.Kind, r.Path, r.WebURL)
 	}

@@ -30,10 +30,12 @@ func connector(t *testing.T) (*broker.Manager, string, *atomic.Value) {
 		for _, v := range valid.Load().([]string) {
 			ok = ok || token == v
 		}
+
 		if r.URL.Path != "/api/v4/user" || !ok {
 			http.Error(w, "rejected "+token, http.StatusUnauthorized)
 			return
 		}
+
 		_ = json.NewEncoder(w).Encode(map[string]any{"id": 7, "username": "owner"})
 	}))
 	t.Cleanup(forge.Close)
@@ -41,14 +43,17 @@ func connector(t *testing.T) (*broker.Manager, string, *atomic.Value) {
 	if err := registry.Register(gitlab.Provider{}); err != nil {
 		t.Fatal(err)
 	}
+
 	sealer, err := broker.NewAESGCMSealer(bytes.Repeat([]byte{1}, 32))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	m, err := broker.NewManager(&broker.MemoryStore{}, sealer, registry)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return m, forge.URL, &valid
 }
 
@@ -59,14 +64,22 @@ func TestConnectionLifecycle(t *testing.T) {
 	if got, err := c.ListConnections(ctx); err != nil || !got.Configured || len(got.Connections) != 0 {
 		t.Fatalf("empty ListConnections = %+v, %v", got, err)
 	}
-	add := NewConnection{Kind: forgeauth.GitLab, Host: host, Name: " me ", Credential: goodToken}
+
+	add := NewConnection{
+		Kind:       forgeauth.GitLab,
+		Host:       host,
+		Name:       " me ",
+		Credential: goodToken,
+	}
 	first, err := c.AddConnection(ctx, add)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first.ID == "" || first.Name != "me" || first.Kind != forgeauth.GitLab || first.BaseURL != host+"/api/v4" || first.Login != "owner" || first.Status != broker.StatusOK {
+	if first.ID == "" ||
+		first.Name != "me" || first.Kind != forgeauth.GitLab || first.BaseURL != host+"/api/v4" || first.Login != "owner" || first.Status != broker.StatusOK {
 		t.Fatalf("AddConnection = %+v", first)
 	}
+
 	second, err := c.AddConnection(ctx, add)
 	if err != nil {
 		t.Fatal(err)
@@ -76,16 +89,33 @@ func TestConnectionLifecycle(t *testing.T) {
 	}
 
 	for _, bad := range []NewConnection{
-		{Kind: forgeauth.GitLab, Host: host, Credential: "wrong"},
+		{
+			Kind:       forgeauth.GitLab,
+			Host:       host,
+			Credential: "wrong",
+		},
 		{Kind: forgeauth.GitLab, Host: host},
-		{Kind: "svn", Host: host, Credential: goodToken},
-		{Kind: forgeauth.GitLab, Host: "ftp://example.com", Credential: goodToken},
+		{
+			Kind:       "svn",
+			Host:       host,
+			Credential: goodToken,
+		},
+		{
+			Kind:       forgeauth.GitLab,
+			Host:       "ftp://example.com",
+			Credential: goodToken,
+		},
 	} {
 		if _, err := c.AddConnection(ctx, bad); !errors.Is(err, ErrInvalid) || strings.Contains(err.Error(), "wrong") {
 			t.Fatalf("AddConnection(%+v) = %v", bad, err)
 		}
 	}
-	if _, err := c.AddConnection(ctx, NewConnection{Kind: forgeauth.GitLab, Host: host + "/other", Credential: "wrong"}); !errors.Is(err, ErrInvalid) {
+
+	if _, err := c.AddConnection(ctx, NewConnection{
+		Kind:       forgeauth.GitLab,
+		Host:       host + "/other",
+		Credential: "wrong",
+	}); !errors.Is(err, ErrInvalid) {
 		t.Fatal(err)
 	}
 	if forges, _ := m.ListForges(ctx); len(forges) != 1 {
@@ -104,14 +134,17 @@ func TestConnectionLifecycle(t *testing.T) {
 	if got, err := c.TestConnection(ctx, first.ID); err != nil || got.Status != broker.StatusOK {
 		t.Fatalf("TestConnection = %+v, %v", got, err)
 	}
+
 	valid.Store([]string{newToken})
 	if _, err := c.TestConnection(ctx, second.ID); !errors.Is(err, ErrCheckFailed) {
 		t.Fatalf("failed TestConnection = %v", err)
 	}
+
 	list, err := c.ListConnections(ctx)
 	if err != nil || len(list.Connections) != 2 {
 		t.Fatalf("ListConnections = %+v, %v", list, err)
 	}
+
 	for _, conn := range list.Connections {
 		if want := map[string]broker.Status{first.ID: broker.StatusOK, second.ID: broker.StatusRevoked}[conn.ID]; conn.Status != want {
 			t.Fatalf("%s status = %s, want %s", conn.ID, conn.Status, want)
@@ -126,6 +159,7 @@ func TestConnectionLifecycle(t *testing.T) {
 			t.Fatalf("RemoveConnection(%q) = %v", id, err)
 		}
 	}
+
 	if err := c.RemoveConnection(ctx, first.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +176,9 @@ func TestConnectionLifecycle(t *testing.T) {
 
 func TestDefaultHosts(t *testing.T) {
 	for kind, want := range map[forgeauth.Kind]string{
-		forgeauth.GitHub: "https://api.github.com", forgeauth.GitLab: "https://gitlab.com/api/v4", forgeauth.Forgejo: "https://codeberg.org/api/v1",
+		forgeauth.GitHub:  "https://api.github.com",
+		forgeauth.GitLab:  "https://gitlab.com/api/v4",
+		forgeauth.Forgejo: "https://codeberg.org/api/v1",
 	} {
 		var got string
 		admin := &fakeAdmin{ConnectorAdmin: nil, createForge: func(_ forgeauth.Kind, baseURL string) { got = baseURL }}
@@ -160,6 +196,7 @@ type fakeAdmin struct {
 }
 
 func (f *fakeAdmin) ListForges(context.Context) ([]broker.Forge, error) { return nil, nil }
+
 func (f *fakeAdmin) CreateForge(_ context.Context, kind forgeauth.Kind, baseURL, _ string) (broker.Forge, error) {
 	f.createForge(kind, baseURL)
 	return broker.Forge{}, errors.New("upstream-secret")
@@ -171,10 +208,20 @@ func TestConnectorErrors(t *testing.T) {
 	if got, err := unconfigured.ListConnections(ctx); err != nil || got.Configured || got.Connections == nil {
 		t.Fatalf("unconfigured ListConnections = %+v, %v", got, err)
 	}
+
 	for name, err := range map[string]error{
-		"add":    func() error { _, err := unconfigured.AddConnection(ctx, NewConnection{}); return err }(),
-		"test":   func() error { _, err := unconfigured.TestConnection(ctx, "id"); return err }(),
-		"rotate": func() error { _, err := unconfigured.RotateCredential(ctx, "id", "token"); return err }(),
+		"add": func() error {
+			_, err := unconfigured.AddConnection(ctx, NewConnection{})
+			return err
+		}(),
+		"test": func() error {
+			_, err := unconfigured.TestConnection(ctx, "id")
+			return err
+		}(),
+		"rotate": func() error {
+			_, err := unconfigured.RotateCredential(ctx, "id", "token")
+			return err
+		}(),
 		"remove": unconfigured.RemoveConnection(ctx, "id"),
 		"ensure": unconfigured.EnsureClient(ctx, "proxy", true, "token"),
 	} {
@@ -182,11 +229,13 @@ func TestConnectorErrors(t *testing.T) {
 			t.Errorf("%s = %v", name, err)
 		}
 	}
+
 	failing := New(Config{Connector: &fakeAdmin{createForge: func(forgeauth.Kind, string) {}}})
 	_, err := failing.AddConnection(ctx, NewConnection{Kind: forgeauth.GitHub, Credential: "token"})
 	if !errors.Is(err, ErrUnavailable) || strings.Contains(err.Error(), "secret") {
 		t.Fatalf("upstream failure = %v", err)
 	}
+
 	canceled, cancel := context.WithCancel(ctx)
 	cancel()
 	m, _, _ := connector(t)
@@ -208,6 +257,7 @@ func TestEnsureClient(t *testing.T) {
 			t.Fatalf("EnsureClient(%q) = %v", bad.name, err)
 		}
 	}
+
 	if err := c.EnsureClient(ctx, "proxy", true, token); err != nil {
 		t.Fatal(err)
 	}
@@ -217,6 +267,7 @@ func TestEnsureClient(t *testing.T) {
 	if clients, _ := m.ListClients(ctx); len(clients) != 1 || !clients[0].AllConnections || !clients[0].CanIssueTokens {
 		t.Fatalf("clients = %+v", clients)
 	}
+
 	conn, err := c.AddConnection(ctx, NewConnection{Kind: forgeauth.GitLab, Host: host, Credential: goodToken})
 	if err != nil {
 		t.Fatal(err)
@@ -224,6 +275,7 @@ func TestEnsureClient(t *testing.T) {
 	if _, err := m.IssueToken(ctx, token, broker.ID(conn.ID)); err != nil {
 		t.Fatalf("client cannot use a later connection: %v", err)
 	}
+
 	rotated := token + "-rotated"
 	if err := c.EnsureClient(ctx, "proxy", true, rotated); err != nil {
 		t.Fatal(err)

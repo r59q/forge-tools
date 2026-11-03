@@ -50,16 +50,16 @@ chmod 600 service-token
   --connector-url http://127.0.0.1:8081 --connector-token-file connector-token
 ```
 
-| Flag | Environment variable | Default |
-| --- | --- | --- |
-| `--grpc-listen` | `FORGE_REPOSITORIES_GRPC_LISTEN` | `127.0.0.1:9092` |
-| `--http-listen` | `FORGE_REPOSITORIES_HTTP_LISTEN` | `127.0.0.1:8082` |
-| `--token-file` | `FORGE_REPOSITORIES_TOKEN_FILE` | none |
-| `--token-env` | `FORGE_REPOSITORIES_TOKEN_ENV` | `FORGE_REPOSITORIES_TOKEN` when no source is set |
-| `--connector-url` | `FORGE_REPOSITORIES_CONNECTOR_URL` | required |
-| `--connector-token-file` | `FORGE_REPOSITORIES_CONNECTOR_TOKEN_FILE` | none |
-| `--connector-token-env` | `FORGE_REPOSITORIES_CONNECTOR_TOKEN_ENV` | `FORGE_REPOSITORIES_CONNECTOR_TOKEN` when no source is set |
-| `--request-timeout` | `FORGE_REPOSITORIES_REQUEST_TIMEOUT` | `30s` |
+| Flag                     | Environment variable                      | Default                                                    |
+| ------------------------ | ----------------------------------------- | ---------------------------------------------------------- |
+| `--grpc-listen`          | `FORGE_REPOSITORIES_GRPC_LISTEN`          | `127.0.0.1:9092`                                           |
+| `--http-listen`          | `FORGE_REPOSITORIES_HTTP_LISTEN`          | `127.0.0.1:8082`                                           |
+| `--token-file`           | `FORGE_REPOSITORIES_TOKEN_FILE`           | none                                                       |
+| `--token-env`            | `FORGE_REPOSITORIES_TOKEN_ENV`            | `FORGE_REPOSITORIES_TOKEN` when no source is set           |
+| `--connector-url`        | `FORGE_REPOSITORIES_CONNECTOR_URL`        | required                                                   |
+| `--connector-token-file` | `FORGE_REPOSITORIES_CONNECTOR_TOKEN_FILE` | none                                                       |
+| `--connector-token-env`  | `FORGE_REPOSITORIES_CONNECTOR_TOKEN_ENV`  | `FORGE_REPOSITORIES_CONNECTOR_TOKEN` when no source is set |
+| `--request-timeout`      | `FORGE_REPOSITORIES_REQUEST_TIMEOUT`      | `30s`                                                      |
 
 Flags override environment settings. The service token is the bearer token
 callers must send. The connector token is the broker client token. Choose one
@@ -92,19 +92,20 @@ connector in Docker Compose.
 
 ## API
 
-The [documented proto](proto/repositories.proto) is the source of truth.
+The [documented proto](proto/forge/repositories/v1/repositories.proto) is the
+source of truth for the `forge.repositories.v1.RepositoriesService` gRPC service.
 Every RPC requires `Authorization: Bearer <service token>` (gRPC metadata for
 gRPC). REST does not trust `Grpc-Metadata-*` headers. JSON uses lowerCamelCase
 field names and RFC 3339 timestamps, and omits empty fields.
 
-| RPC | REST endpoint |
-| --- | --- |
-| `ListSources` | `GET /v1/sources` (usable connections) |
-| `ListRepositories` | `GET /v1/repositories?owner=&source=` |
-| `GetRepository` | `GET /v1/repositories/{path}?source=` |
+| RPC                | REST endpoint                                                                   |
+| ------------------ | ------------------------------------------------------------------------------- |
+| `ListSources`      | `GET /v1/sources` (usable connections)                                          |
+| `ListRepositories` | `GET /v1/repositories?owner=&source=`                                           |
+| `GetRepository`    | `GET /v1/repositories/{path}?source=`                                           |
 | `UpdateRepository` | `PATCH /v1/repositories/{path}` with `{"source","description","defaultBranch"}` |
-| `ListBranches` | `GET /v1/branches/{path}?source=` |
-| `ListTags` | `GET /v1/tags/{path}?source=` |
+| `ListBranches`     | `GET /v1/branches/{path}?source=`                                               |
+| `ListTags`         | `GET /v1/tags/{path}?source=`                                                   |
 
 `{path}` is the plain repository path and may be nested, such as
 `/v1/branches/group/sub/project`. Without `source`, the path must exist on
@@ -120,39 +121,29 @@ api -X PATCH localhost:8082/v1/repositories/mrbean/teddy \
 
 Errors carry only a status code, never input or forge responses:
 
-| Cause | gRPC | HTTP |
-| --- | --- | --- |
-| Missing or wrong service token | `UNAUTHENTICATED` | 401 |
-| Bad path, unknown source, empty update, forge rejected the update | `INVALID_ARGUMENT` | 400 |
-| Path exists on several sources | `FAILED_PRECONDITION` | 400 |
-| Repository not found | `NOT_FOUND` | 404 |
-| Forge denied access | `PERMISSION_DENIED` | 403 |
-| Forge rate limit | `RESOURCE_EXHAUSTED` | 429 |
-| Connector or forge rejected the connector token, or failed | `UNAVAILABLE` | 503 |
+| Cause                                                             | gRPC                  | HTTP |
+| ----------------------------------------------------------------- | --------------------- | ---- |
+| Missing or wrong service token                                    | `UNAUTHENTICATED`     | 401  |
+| Bad path, unknown source, empty update, forge rejected the update | `INVALID_ARGUMENT`    | 400  |
+| Path exists on several sources                                    | `FAILED_PRECONDITION` | 400  |
+| Repository not found                                              | `NOT_FOUND`           | 404  |
+| Forge denied access                                               | `PERMISSION_DENIED`   | 403  |
+| Forge rate limit                                                  | `RESOURCE_EXHAUSTED`  | 429  |
+| Connector or forge rejected the connector token, or failed        | `UNAVAILABLE`         | 503  |
 
 ## Regenerate
 
-Install protoc 33.0 and these plugins on PATH:
+Generated files are committed in `repositoriespb/`. To regenerate, install
+[buf](https://buf.build/docs/installation) 1.74.0 and Go, then run from
+this folder:
 
 ```sh
-go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.10
-go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
-go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway@v2.27.3
-```
-
-Check out `googleapis/googleapis` at
-`ff8fd20f3840386e12f4f69750eff6dc99f6e1b7` and set `GOOGLEAPIS_DIR` to its
-root. From this directory, with protoc's bundled includes available:
-
-```sh
-protoc -I proto -I "$GOOGLEAPIS_DIR" \
-  --go_out=repositoriespb --go_opt=paths=source_relative \
-  --go-grpc_out=repositoriespb --go-grpc_opt=paths=source_relative \
-  --grpc-gateway_out=repositoriespb --grpc-gateway_opt=paths=source_relative \
-  proto/repositories.proto
+buf generate
 go vet ./...
 go test ./...
 ```
+
+CI fails when the generated code is out of date.
 
 ## License
 

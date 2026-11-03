@@ -42,6 +42,7 @@ func newFakeRemote(t *testing.T) *fakeRemote {
 	}
 	f.srv = httptest.NewServer(http.HandlerFunc(f.serve))
 	t.Cleanup(f.srv.Close)
+
 	return f
 }
 
@@ -64,19 +65,20 @@ func (f *fakeRemote) serve(w http.ResponseWriter, r *http.Request) {
 	if hook != nil && hook(w, r) {
 		return
 	}
+
 	switch {
 	case r.Method == "GET" && r.URL.Path == "/repo.git/info/refs" && r.URL.RawQuery == "service=git-receive-pack":
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		w.Header().Set("Content-Type", receivePackAdvertisement)
-		WriteAdvertisement(w, f.refs, f.caps)
+		_ = WriteAdvertisement(w, f.refs, f.caps)
 	case r.Method == "GET" && r.URL.Path == "/repo.git/info/refs" && r.URL.RawQuery == "service=git-upload-pack":
 		w.Header().Set("Content-Type", uploadPackAdvertisement)
 		if r.Header.Get("Git-Protocol") != "version=2" {
 			http.Error(w, "v2 only", http.StatusBadRequest)
 			return
 		}
-		WriteV2Advertisement(w, f.v2caps)
+		_ = WriteV2Advertisement(w, f.v2caps)
 	case r.Method == "POST" && r.URL.Path == "/repo.git/git-receive-pack":
 		f.receive(w, r)
 	case r.Method == "POST" && r.URL.Path == "/repo.git/git-upload-pack":
@@ -91,11 +93,13 @@ func (f *fakeRemote) receive(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad type", http.StatusUnsupportedMediaType)
 		return
 	}
+
 	cmds, caps, rest, err := ParseCommands(r.Body)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.bodies++
@@ -108,6 +112,7 @@ func (f *fakeRemote) receive(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			rep.UnpackOK, rep.Unpack = false, err.Error()
 		}
+
 		for _, o := range objs {
 			f.objects[o.ID()] = o
 		}
@@ -117,6 +122,7 @@ func (f *fakeRemote) receive(w http.ResponseWriter, r *http.Request) {
 			f.hadPack = true
 		}
 	}
+
 	ok := rep.UnpackOK
 	for _, c := range cmds {
 		reason := ""
@@ -130,11 +136,13 @@ func (f *fakeRemote) receive(w http.ResponseWriter, r *http.Request) {
 		case strings.HasPrefix(c.Name, "refs/heads/protected"):
 			reason = "pre-receive hook declined"
 		}
+
 		if reason != "" {
 			ok = false
 			rep.Refs[c.Name] = RefStatus{Reason: reason}
 		}
 	}
+
 	atomic := caps.Has("atomic")
 	for _, c := range cmds {
 		if _, failed := rep.Refs[c.Name]; failed {
@@ -144,16 +152,19 @@ func (f *fakeRemote) receive(w http.ResponseWriter, r *http.Request) {
 			rep.Refs[c.Name] = RefStatus{Reason: "atomic transaction failed"}
 			continue
 		}
+
 		if c.New.IsZero() {
 			delete(f.refs, c.Name)
 		} else {
 			f.refs[c.Name] = c.New
 		}
+
 		rep.Refs[c.Name] = RefStatus{OK: true}
 	}
+
 	w.Header().Set("Content-Type", receivePackResult)
 	if caps.Has("report-status") {
-		WriteReport(w, rep, f.sideband && caps.Has("side-band-64k"))
+		_ = WriteReport(w, rep, f.sideband && caps.Has("side-band-64k"))
 	}
 }
 
@@ -163,6 +174,7 @@ func (f *fakeRemote) upload(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
+
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.lastCaps, f.lastArgs = req.Caps, req.Args
@@ -174,12 +186,14 @@ func (f *fakeRemote) upload(w http.ResponseWriter, r *http.Request) {
 			id, err := gitobj.ParseID(hex)
 			o, found := f.objects[id]
 			if err != nil || !found {
-				WriteError(w, "upload-pack: not our ref "+hex)
+				_ = WriteError(w, "upload-pack: not our ref "+hex)
 				return
 			}
+
 			objs = append(objs, o)
 			shallow = append(shallow, id)
 		}
 	}
-	WriteFetchResponse(w, shallow, objs)
+
+	_ = WriteFetchResponse(w, shallow, objs)
 }

@@ -54,3 +54,11 @@ Keep the checkout layout for the relative module replacements. Tests run a
 real broker against fake forges; no services or live credentials are needed.
 This is a library; run the [service](../service/) for REST, gRPC and the web
 interface.
+
+## Pipelines
+
+Set `Config.Pipelines` to an `actions.Client` or `PipelineReader` adapter.
+`ListPipelines` returns one page and a configured flag. `GetPipeline`,
+`ListJobs`, `GetJob` and `ReadJobLog` expose details. Source and repository are
+required; identities are checked before displaying results. Missing capability,
+missing resources, unsupported reads and backend failures remain distinct.

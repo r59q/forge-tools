@@ -3,21 +3,15 @@ package api
 
 import (
 	"context"
-	"crypto/sha256"
-	"crypto/subtle"
 	"errors"
 	"net/http"
 	"time"
 
-	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/r59q/forge-tools/forge-core/forgeapi/forgeauth"
-	"github.com/r59q/forge-tools/forge-core/forgeapi/forgehttp"
+	"github.com/r59q/forge-tools/forge-core/servicekit"
 	"github.com/r59q/forge-tools/forge-review/library/review"
 	pb "github.com/r59q/forge-tools/forge-review/service/reviewpb"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/encoding/protojson"
 )
 
 // ErrInvalid means New was given nil storage or credential source, or a
@@ -47,115 +41,95 @@ func New(store review.Store, sources Sources, token forgeauth.Credentials, timeo
 	if store == nil || token == nil || timeout <= 0 {
 		return nil, ErrInvalid
 	}
-	return &Server{store: store, sources: sources, token: token, timeout: timeout}, nil
+
+	return &Server{
+		store:   store,
+		sources: sources,
+		token:   token,
+		timeout: timeout,
+	}, nil
 }
+
+// maxBody caps REST request bodies, which may hold large patches.
+const maxBody = 20 << 20
 
 // REST registers generated routes. Authorization is the sole forwarded header;
 // Grpc-Metadata-* headers cannot inject credentials. Errors never echo input
 // or forge responses. Responses are not cached.
 func (s *Server) REST(ctx context.Context) (http.Handler, error) {
-	mux := runtime.NewServeMux(
-		runtime.WithMarshalerOption(runtime.MIMEWildcard, &runtime.JSONPb{UnmarshalOptions: protojson.UnmarshalOptions{DiscardUnknown: false}}),
-		runtime.WithIncomingHeaderMatcher(func(string) (string, bool) { return "", false }),
-		runtime.WithErrorHandler(func(ctx context.Context, mux *runtime.ServeMux, marshaler runtime.Marshaler, w http.ResponseWriter, r *http.Request, err error) {
-			code := status.Code(err)
-			if code == codes.Unknown {
-				code = codes.Internal
-			}
-			runtime.DefaultHTTPErrorHandler(ctx, mux, marshaler, w, r, status.Error(code, code.String()))
-		}),
-	)
+	mux := servicekit.NewMux(false)
 	if err := pb.RegisterReviewServiceHandlerServer(ctx, mux, s); err != nil {
 		return nil, err
 	}
+
+	return secure(mux), nil
+}
+
+// secure is servicekit.Secure with a body cap that fits patches.
+func secure(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		r.Body = http.MaxBytesReader(w, r.Body, 20<<20)
-		mux.ServeHTTP(w, r)
-	}), nil
+		r.Body = http.MaxBytesReader(w, r.Body, maxBody)
+		next.ServeHTTP(w, r)
+	})
 }
 
-func (s *Server) authorize(ctx context.Context) error {
-	md, _ := metadata.FromIncomingContext(ctx)
-	h := http.Header{}
-	for _, value := range md.Get("authorization") {
-		h.Add("Authorization", value)
+// call authorizes an RPC, builds a client and runs fn within the timeout.
+// Connected calls also read the current sources.
+func call[T any](s *Server, ctx context.Context, connected bool, fn func(context.Context, *review.Client) (*T, error)) (*T, error) {
+	rpc := servicekit.RPC[*Server]{
+		Timeout: s.timeout,
+		Token:   s.token,
+		Client:  func(context.Context) (*Server, error) { return s, nil },
+		Code:    code,
 	}
-	token, ok := forgeauth.AuthorizationToken(h, "Bearer")
-	if !ok {
-		return status.Error(codes.Unauthenticated, "authentication required")
-	}
-	expected, err := s.token.Token(ctx)
-	if err != nil || expected == "" {
-		return status.Error(codes.Unauthenticated, "authentication required")
-	}
-	a, b := sha256.Sum256([]byte(token)), sha256.Sum256([]byte(expected))
-	if subtle.ConstantTimeCompare(a[:], b[:]) != 1 {
-		return status.Error(codes.Unauthenticated, "authentication required")
-	}
-	return nil
-}
 
-func call[T any](s *Server, ctx context.Context, connected bool, fn func(context.Context, *review.Client) (T, error)) (T, error) {
-	var zero T
-	ctx, cancel := context.WithTimeout(ctx, s.timeout)
-	defer cancel()
-	if err := s.authorize(ctx); err != nil {
-		return zero, err
-	}
-	var sources []review.Source
-	if connected {
-		if s.sources == nil {
-			return zero, rpcError(review.ErrUnsupported)
-		}
-		var err error
-		sources, err = s.sources(ctx)
+	return servicekit.Call(ctx, rpc, func(ctx context.Context, s *Server) (*T, error) {
+		client, err := s.client(ctx, connected)
 		if err != nil {
-			return zero, rpcError(err)
+			return nil, err
 		}
-	}
-	client, err := review.New(s.store, sources...)
-	if err != nil {
-		return zero, rpcError(err)
-	}
-	result, err := fn(ctx, client)
-	if err != nil {
-		return zero, rpcError(err)
-	}
-	return result, nil
+
+		return fn(ctx, client)
+	})
 }
 
-// rpcError maps library and forge errors to a bare status code. A forge
-// rejecting the service's own credentials is Unavailable, not
-// Unauthenticated, so callers do not mistake it for a bad service token.
-func rpcError(err error) error {
-	code := codes.Unavailable
-	var forgeErr *forgehttp.Error
-	switch {
-	case errors.Is(err, context.Canceled):
-		code = codes.Canceled
-	case errors.Is(err, context.DeadlineExceeded):
-		code = codes.DeadlineExceeded
-	case errors.Is(err, review.ErrInvalid):
-		code = codes.InvalidArgument
-	case errors.Is(err, review.ErrUnsupported):
-		code = codes.Unimplemented
-	case errors.Is(err, review.ErrTooLarge):
-		code = codes.ResourceExhausted
-	case errors.Is(err, review.ErrConflict):
-		code = codes.FailedPrecondition
-	case errors.Is(err, forgehttp.ErrNotFound), errors.Is(err, review.ErrNotFound):
-		code = codes.NotFound
-	case errors.Is(err, forgehttp.ErrForbidden):
-		code = codes.PermissionDenied
-	case errors.Is(err, forgehttp.ErrRateLimited):
-		code = codes.ResourceExhausted
-	case errors.Is(err, forgehttp.ErrConflict):
-		code = codes.FailedPrecondition
-	case errors.As(err, &forgeErr) && (forgeErr.StatusCode == http.StatusBadRequest || forgeErr.StatusCode == http.StatusUnprocessableEntity):
-		// The forge rejected the write, such as an unknown branch.
-		code = codes.InvalidArgument
+// client builds a review client, with the current sources when connected.
+func (s *Server) client(ctx context.Context, connected bool) (*review.Client, error) {
+	if !connected {
+		return review.New(s.store)
 	}
-	return status.Error(code, code.String())
+
+	if s.sources == nil {
+		return nil, review.ErrUnsupported
+	}
+
+	sources, err := s.sources(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return review.New(s.store, sources...)
+}
+
+// code maps context errors, then library errors, then forge errors to a
+// status code.
+func code(err error) codes.Code {
+	switch {
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+		return servicekit.ForgeCode(err)
+	case errors.Is(err, review.ErrInvalid):
+		return codes.InvalidArgument
+	case errors.Is(err, review.ErrUnsupported):
+		return codes.Unimplemented
+	case errors.Is(err, review.ErrTooLarge):
+		return codes.ResourceExhausted
+	case errors.Is(err, review.ErrConflict):
+		return codes.FailedPrecondition
+	case errors.Is(err, review.ErrNotFound):
+		return codes.NotFound
+	}
+
+	return servicekit.ForgeCode(err)
 }

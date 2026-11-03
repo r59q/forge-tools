@@ -21,6 +21,7 @@ func (f *File) loadLegacy() (checkouts.State, error) {
 	if err != nil {
 		return checkouts.State{}, err
 	}
+
 	var legacy struct {
 		Version int `json:"version"`
 		State   struct {
@@ -36,8 +37,10 @@ func (f *File) loadLegacy() (checkouts.State, error) {
 	if legacy.Version != 1 || legacy.State.Workspaces == nil {
 		return checkouts.State{}, errors.New("storage: invalid legacy database version or state")
 	}
+
 	for id, record := range legacy.State.Workspaces {
 		state.Checkouts[id] = checkouts.Record{Checkout: record.Workspace, GitDirectory: record.GitDirectory}
 	}
+
 	return state, nil
 }

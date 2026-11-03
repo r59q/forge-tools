@@ -24,17 +24,20 @@ func echoFront(f *Forge) http.Handler {
 			WriteMessage(w, http.StatusNotFound, "Not Found")
 			return
 		}
+
 		repo, status := f.Authorize(path, r.Method != http.MethodGet)
 		if status != 0 {
 			WriteMessage(w, status, http.StatusText(status))
 			return
 		}
+
 		refs := repo.Refs("")
 		start, end := Paginate(w, r, len(refs), Paging{SizeParam: "per_page", DefaultSize: 2, MaxSize: 3})
 		var names []string
 		for _, ref := range refs[start:end] {
 			names = append(names, ref.Name)
 		}
+
 		WriteJSON(w, http.StatusOK, names)
 	})
 }
@@ -53,6 +56,7 @@ func TestServerAuthPerKind(t *testing.T) {
 			if err := get(t, s.Session, "/repo/group/sub/proj/refs", &names); err != nil || len(names) != 2 {
 				t.Fatalf("names = %v, %v", names, err)
 			}
+
 			bad, err := s.SessionWithToken("wrong")
 			if err != nil {
 				t.Fatal(err)
@@ -60,10 +64,12 @@ func TestServerAuthPerKind(t *testing.T) {
 			if err := get(t, bad, "/repo/group/sub/proj/refs", &names); !errors.Is(err, forgehttp.ErrUnauthorized) {
 				t.Errorf("wrong token: %v", err)
 			}
+
 			resp, err := http.Get(s.APIBase() + "/repo/group/sub/proj/refs")
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			resp.Body.Close()
 			if resp.StatusCode != http.StatusUnauthorized {
 				t.Errorf("no token: %d", resp.StatusCode)
@@ -84,11 +90,13 @@ func TestServerGitRemoteAuth(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	u, _ := g.URL("o/r")
 	resp, err := g.Client.Get(u + "/info/refs")
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status %d", resp.StatusCode)
@@ -100,6 +108,7 @@ func TestServerGitRemoteAuth(t *testing.T) {
 	if err := get(t, s.Session, "/x", new(any)); !errors.Is(err, forgehttp.ErrNotFound) {
 		t.Errorf("nil front: %v", err)
 	}
+
 	resp, _ = http.Get(s.HTTP.URL + "/elsewhere")
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
@@ -117,6 +126,7 @@ func TestServerAccess(t *testing.T) {
 	if p, r, ok := s.RepoByID(2); !ok || r != priv || p != "o/priv" {
 		t.Error("RepoByID")
 	}
+
 	s.SetAccess("o/pub", AccessNone)
 	s.SetAccess("o/priv", AccessNone)
 	var names []string
@@ -129,6 +139,7 @@ func TestServerAccess(t *testing.T) {
 	if err := get(t, s.Session, "/repo/o/none/refs", &names); !errors.Is(err, forgehttp.ErrNotFound) {
 		t.Errorf("missing repo: %v", err)
 	}
+
 	for _, tc := range []struct {
 		access Access
 		want   int
@@ -138,6 +149,7 @@ func TestServerAccess(t *testing.T) {
 			t.Errorf("write with %v: %d", tc.access, got)
 		}
 	}
+
 	if got := s.Repos(); len(got) != 2 || got[0] != "o/priv" {
 		t.Errorf("Repos = %v", got)
 	}
@@ -168,15 +180,18 @@ func TestServerFaultsHookCalls(t *testing.T) {
 	if _, ok := repo.Ref("refs/heads/moved"); !ok || hooked.Load() != 2 {
 		t.Errorf("hook ran %d times", hooked.Load())
 	}
+
 	s.Fail(http.MethodGet, "/repo/o/r/*", http.StatusTeapot)
 	if err := get(t, s.Session, "/repo/o/r/refs", &names); err == nil {
 		t.Error("Fail did not fire")
 	}
+
 	s.ClearFaults()
 	s.Inject(Fault{Path: "*", Status: http.StatusBadGateway, Body: "upstream down"})
 	if err := get(t, s.Session, "/repo/o/r/refs", &names); err == nil || !strings.Contains(err.Error(), "upstream down") {
 		t.Errorf("custom body: %v", err)
 	}
+
 	s.ClearFaults()
 	s.SetHook(nil)
 	if got := s.Calls(http.MethodGet, "/repo/o/r/refs"); got != 4 {
@@ -188,6 +203,7 @@ func TestServerFaultsHookCalls(t *testing.T) {
 	if got := s.Requests(); len(got) != 4 || got[0] != "GET /repo/o/r/refs?" {
 		t.Errorf("Requests = %q", got)
 	}
+
 	s.ResetCalls()
 	if s.Calls("", "*") != 0 {
 		t.Error("ResetCalls")
@@ -196,10 +212,12 @@ func TestServerFaultsHookCalls(t *testing.T) {
 
 func TestPaginate(t *testing.T) {
 	for _, tc := range []struct {
-		query             string
-		total             int
-		start, end        int
-		next, prev, other bool
+		query      string
+		total      int
+		start, end int
+		next       bool
+		prev       bool
+		other      bool
 	}{
 		{"", 5, 0, 2, true, false, true},
 		{"page=2&per_page=2", 5, 2, 4, true, true, true},
@@ -214,6 +232,7 @@ func TestPaginate(t *testing.T) {
 		if start != tc.start || end != tc.end {
 			t.Errorf("%q: [%d:%d], want [%d:%d]", tc.query, start, end, tc.start, tc.end)
 		}
+
 		links := forgehttp.ParseLinks(w.Header())
 		next, hasNext := links.Get("next")
 		_, hasPrev := links.Get("prev")
@@ -268,15 +287,18 @@ func TestForgeTokenAndRepo(t *testing.T) {
 	if _, ok := s.Repo("o/x"); ok {
 		t.Error("found a missing repo")
 	}
+
 	s.SetToken("other")
 	var names []string
 	if err := get(t, s.Session, "/repo/o/r/refs", &names); !errors.Is(err, forgehttp.ErrUnauthorized) {
 		t.Errorf("old token: %v", err)
 	}
+
 	other, _ := s.SessionWithToken("other")
 	if err := get(t, other, "/repo/o/r/refs", &names); err != nil {
 		t.Errorf("new token: %v", err)
 	}
+
 	for _, bad := range []string{"", "a//b", "/a"} {
 		func() {
 			defer func() { _ = recover() }()

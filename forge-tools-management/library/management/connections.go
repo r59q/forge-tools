@@ -29,14 +29,29 @@ var (
 // as do adapters for the broker admin API. Implementations return broker
 // errors, such as broker.ErrNotFound, so they can be told apart.
 type ConnectorAdmin interface {
+	ForgeAdmin
+	ConnectionAdmin
+	ClientAdmin
+}
+
+// ForgeAdmin manages the forge endpoints of forge-connector.
+type ForgeAdmin interface {
 	ListForges(context.Context) ([]broker.Forge, error)
 	CreateForge(ctx context.Context, kind forgeauth.Kind, baseURL, name string) (broker.Forge, error)
 	DeleteForge(context.Context, broker.ID) error
+}
+
+// ConnectionAdmin manages the forge connections of forge-connector.
+type ConnectionAdmin interface {
 	ListConnections(context.Context) ([]broker.Connection, error)
 	CreateConnection(ctx context.Context, forgeID broker.ID, name string, credential forgeauth.StaticToken) (broker.Connection, error)
 	TestConnection(context.Context, broker.ID) (broker.Connection, error)
 	RotateCredential(context.Context, broker.ID, forgeauth.StaticToken) (broker.Connection, error)
 	DeleteConnection(context.Context, broker.ID) error
+}
+
+// ClientAdmin manages the clients of forge-connector.
+type ClientAdmin interface {
 	ListClients(context.Context) ([]broker.Client, error)
 	RegisterClient(context.Context, broker.Client, forgeauth.StaticToken) (broker.Client, error)
 	DeleteClient(context.Context, broker.ID) error
@@ -73,10 +88,18 @@ type NewConnection struct {
 	Credential forgeauth.StaticToken
 }
 
-var defaultHosts = map[forgeauth.Kind]string{
-	forgeauth.GitHub:  "github.com",
-	forgeauth.GitLab:  "gitlab.com",
-	forgeauth.Forgejo: "codeberg.org",
+// defaultHost returns the public host for kind, or "" if it has none.
+func defaultHost(kind forgeauth.Kind) string {
+	switch kind {
+	case forgeauth.GitHub:
+		return "github.com"
+	case forgeauth.GitLab:
+		return "gitlab.com"
+	case forgeauth.Forgejo:
+		return "codeberg.org"
+	default:
+		return ""
+	}
 }
 
 // ListConnections returns every connection, ordered by ID.
@@ -84,18 +107,22 @@ func (c *Client) ListConnections(ctx context.Context) (Connections, error) {
 	if c.connector == nil {
 		return Connections{Connections: []Connection{}}, ctx.Err()
 	}
+
 	forges, err := c.connector.ListForges(ctx)
 	if err != nil {
 		return Connections{}, connectorError(ctx, err)
 	}
+
 	conns, err := c.connector.ListConnections(ctx)
 	if err != nil {
 		return Connections{}, connectorError(ctx, err)
 	}
+
 	out := Connections{Configured: true, Connections: make([]Connection, 0, len(conns))}
 	for _, conn := range conns {
 		out.Connections = append(out.Connections, view(conn, forges))
 	}
+
 	return out, nil
 }
 
@@ -105,18 +132,22 @@ func (c *Client) AddConnection(ctx context.Context, n NewConnection) (Connection
 	if c.connector == nil {
 		return Connection{}, ErrNotConfigured
 	}
+
 	host := strings.TrimSpace(n.Host)
 	if host == "" {
-		host = defaultHosts[n.Kind]
+		host = defaultHost(n.Kind)
 	}
+
 	baseURL, err := forgeauth.DefaultBaseURL(n.Kind, host)
 	if err != nil || strings.TrimSpace(string(n.Credential)) == "" {
 		return Connection{}, ErrInvalid
 	}
+
 	forges, err := c.connector.ListForges(ctx)
 	if err != nil {
 		return Connection{}, connectorError(ctx, err)
 	}
+
 	i := slices.IndexFunc(forges, func(f broker.Forge) bool { return f.Kind == n.Kind && f.BaseURL == baseURL })
 	var forge broker.Forge
 	created := i < 0
@@ -124,18 +155,22 @@ func (c *Client) AddConnection(ctx context.Context, n NewConnection) (Connection
 		if forge, err = c.connector.CreateForge(ctx, n.Kind, baseURL, host); err != nil {
 			return Connection{}, connectorError(ctx, err)
 		}
+
 		forges = append(forges, forge)
 	} else {
 		forge = forges[i]
 	}
+
 	name := strings.TrimSpace(n.Name)
 	conn, err := c.connector.CreateConnection(ctx, forge.ID, name, n.Credential)
 	if err != nil {
 		if created {
 			_ = c.connector.DeleteForge(context.WithoutCancel(ctx), forge.ID)
 		}
+
 		return Connection{}, connectorError(ctx, err)
 	}
+
 	return view(conn, forges), nil
 }
 
@@ -147,6 +182,7 @@ func (c *Client) TestConnection(ctx context.Context, id string) (Connection, err
 		if errors.Is(err, broker.ErrInvalid) || errors.Is(err, broker.ErrInvalidCredential) {
 			return conn, ErrCheckFailed
 		}
+
 		return conn, err
 	})
 }
@@ -157,6 +193,7 @@ func (c *Client) RotateCredential(ctx context.Context, id string, credential for
 	if strings.TrimSpace(string(credential)) == "" {
 		return Connection{}, ErrInvalid
 	}
+
 	return c.update(ctx, id, func() (broker.Connection, error) {
 		return c.connector.RotateCredential(ctx, broker.ID(id), credential)
 	})
@@ -168,10 +205,12 @@ func (c *Client) RemoveConnection(ctx context.Context, id string) error {
 	if c.connector == nil {
 		return ErrNotConfigured
 	}
+
 	conns, err := c.connector.ListConnections(ctx)
 	if err != nil {
 		return connectorError(ctx, err)
 	}
+
 	i := slices.IndexFunc(conns, func(conn broker.Connection) bool { return conn.ID == broker.ID(id) })
 	if i < 0 {
 		return ErrNotFound
@@ -179,8 +218,10 @@ func (c *Client) RemoveConnection(ctx context.Context, id string) error {
 	if err := c.connector.DeleteConnection(ctx, broker.ID(id)); err != nil {
 		return connectorError(ctx, err)
 	}
+
 	// A forge still in use cannot be deleted; that error is expected.
 	_ = c.connector.DeleteForge(ctx, conns[i].ForgeID)
+
 	return nil
 }
 
@@ -196,6 +237,7 @@ func (c *Client) EnsureClient(ctx context.Context, name string, canIssueTokens b
 	if name == "" || len(token) < broker.MinClientTokenLength {
 		return ErrInvalid
 	}
+
 	_, err := c.connector.ClientConnections(ctx, token)
 	if err == nil {
 		return nil
@@ -203,10 +245,12 @@ func (c *Client) EnsureClient(ctx context.Context, name string, canIssueTokens b
 	if !errors.Is(err, broker.ErrUnauthorized) {
 		return connectorError(ctx, err)
 	}
+
 	clients, err := c.connector.ListClients(ctx)
 	if err != nil {
 		return connectorError(ctx, err)
 	}
+
 	for _, client := range clients {
 		if client.Name != name {
 			continue
@@ -215,7 +259,9 @@ func (c *Client) EnsureClient(ctx context.Context, name string, canIssueTokens b
 			return connectorError(ctx, err)
 		}
 	}
+
 	_, err = c.connector.RegisterClient(ctx, broker.Client{Name: name, AllConnections: true, CanIssueTokens: canIssueTokens}, token)
+
 	return connectorError(ctx, err)
 }
 
@@ -226,6 +272,7 @@ func (c *Client) update(ctx context.Context, id string, fn func() (broker.Connec
 	if id == "" {
 		return Connection{}, ErrNotFound
 	}
+
 	conn, err := fn()
 	if errors.Is(err, ErrCheckFailed) {
 		return Connection{}, err
@@ -233,21 +280,27 @@ func (c *Client) update(ctx context.Context, id string, fn func() (broker.Connec
 	if err != nil {
 		return Connection{}, connectorError(ctx, err)
 	}
+
 	forges, err := c.connector.ListForges(ctx)
 	if err != nil {
 		return Connection{}, connectorError(ctx, err)
 	}
+
 	return view(conn, forges), nil
 }
 
 func view(conn broker.Connection, forges []broker.Forge) Connection {
 	out := Connection{
-		ID: string(conn.ID), Name: conn.Name, Login: conn.Identity.Login,
-		Status: conn.Status, CheckedAt: conn.CheckedAt,
+		ID:        string(conn.ID),
+		Name:      conn.Name,
+		Login:     conn.Identity.Login,
+		Status:    conn.Status,
+		CheckedAt: conn.CheckedAt,
 	}
 	if i := slices.IndexFunc(forges, func(f broker.Forge) bool { return f.ID == conn.ForgeID }); i >= 0 {
 		out.Kind, out.BaseURL = forges[i].Kind, forges[i].BaseURL
 	}
+
 	return out
 }
 
@@ -263,5 +316,6 @@ func connectorError(ctx context.Context, err error) error {
 	case errors.Is(err, broker.ErrNotFound):
 		return ErrNotFound
 	}
+
 	return ErrUnavailable
 }

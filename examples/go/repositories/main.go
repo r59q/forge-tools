@@ -54,15 +54,18 @@ func run(ctx context.Context, opts options, creds forgeauth.Credentials, out io.
 	if err != nil {
 		return err
 	}
+
 	conns, err := conn.Connections(ctx)
 	if err != nil {
 		return err
 	}
+
 	// Each connection is a source; the library picks the API from its kind.
 	sources := make([]repositories.Source, len(conns))
 	for i, c := range conns {
 		sources[i] = repositories.Source{ID: string(c.ID), Session: c.Session}
 	}
+
 	c, err := repositories.New(sources...)
 	if err != nil {
 		return err
@@ -73,13 +76,16 @@ func run(ctx context.Context, opts options, creds forgeauth.Credentials, out io.
 	if opts.Refs != "" {
 		return printRefs(ctx, c, repositories.Ref{Source: opts.Source, Path: opts.Refs}, w)
 	}
+
 	repos, err := c.List(ctx, repositories.ListOptions{Owner: opts.Owner, Source: opts.Source})
 	if err != nil {
 		return err
 	}
+
 	for _, r := range repos {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", r.Source.Kind, r.Path, r.Visibility, r.WebURL)
 	}
+
 	return nil
 }
 
@@ -90,24 +96,30 @@ func printRefs(ctx context.Context, c *repositories.Client, ref repositories.Ref
 	if err != nil {
 		return err
 	}
+
 	fmt.Fprintf(w, "%s\t%s\t%s\n", repo.Source.Kind, repo.Path, repo.WebURL)
 	branches, err := c.Branches(ctx, repo.Ref())
 	if err != nil {
 		return err
 	}
+
 	for _, b := range branches {
 		mark := ""
 		if b.Default {
 			mark = "default"
 		}
+
 		fmt.Fprintf(w, "branch\t%s\t%s\t%s\n", b.Name, b.SHA, mark)
 	}
+
 	tags, err := c.Tags(ctx, repo.Ref())
 	if err != nil {
 		return err
 	}
+
 	for _, t := range tags {
 		fmt.Fprintf(w, "tag\t%s\t%s\t\n", t.Name, t.SHA)
 	}
+
 	return nil
 }

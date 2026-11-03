@@ -4,9 +4,12 @@ go 1.27
 
 require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.3
+	github.com/r59q/forge-tools/forge-actions/library v0.0.0
+	github.com/r59q/forge-tools/forge-actions/service v0.0.0
 	github.com/r59q/forge-tools/forge-connector/broker v0.0.0
 	github.com/r59q/forge-tools/forge-connector/library v0.0.0
 	github.com/r59q/forge-tools/forge-core/forgeapi v0.0.0
+	github.com/r59q/forge-tools/forge-core/servicekit v0.0.0
 	github.com/r59q/forge-tools/forge-issues/library v0.0.0
 	github.com/r59q/forge-tools/forge-issues/service v0.0.0
 	github.com/r59q/forge-tools/forge-repositories/library v0.0.0
@@ -39,3 +42,9 @@ replace github.com/r59q/forge-tools/forge-connector/broker => ../../forge-connec
 replace github.com/r59q/forge-tools/forge-issues/library => ../../forge-issues/library
 
 replace github.com/r59q/forge-tools/forge-issues/service => ../../forge-issues/service
+
+replace github.com/r59q/forge-tools/forge-actions/library => ../../forge-actions/library
+
+replace github.com/r59q/forge-tools/forge-actions/service => ../../forge-actions/service
+
+replace github.com/r59q/forge-tools/forge-core/servicekit => ../../forge-core/servicekit

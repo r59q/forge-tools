@@ -2,6 +2,7 @@ package gitwire
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -20,7 +21,7 @@ const (
 )
 
 // Command is one ref update in a push. Old is the value the ref must have,
-// ZeroID if it must not exist. New ZeroID deletes the ref.
+// the zero ID if it must not exist. A zero New deletes the ref.
 type Command struct {
 	Name string
 	Old  gitobj.ID
@@ -61,10 +62,12 @@ func Push(ctx context.Context, hc *http.Client, repoURL string, cmds []Command, 
 	if err != nil {
 		return nil, err
 	}
+
 	u, err := endpoint(repoURL, "git-receive-pack")
 	if err != nil {
 		return nil, err
 	}
+
 	var head bytes.Buffer
 	if err := writeCommands(&head, cmds, caps); err != nil {
 		return nil, err
@@ -74,8 +77,10 @@ func Push(ctx context.Context, hc *http.Client, repoURL string, cmds []Command, 
 		if err := WritePack(&empty, nil); err != nil {
 			return nil, err
 		}
+
 		pack = &empty
 	}
+
 	body, size := io.Reader(&head), int64(head.Len())
 	if pack != nil {
 		body = io.MultiReader(&head, pack)
@@ -85,10 +90,12 @@ func Push(ctx context.Context, hc *http.Client, repoURL string, cmds []Command, 
 			size = int64(head.Len() + l.Len())
 		}
 	}
+
 	req, err := newRequest(ctx, http.MethodPost, u, body)
 	if err != nil {
 		return nil, err
 	}
+
 	req.ContentLength = size
 	req.Header.Set("Content-Type", receivePackRequest)
 	req.Header.Set("Accept", receivePackResult)
@@ -96,7 +103,9 @@ func Push(ctx context.Context, hc *http.Client, repoURL string, cmds []Command, 
 	if err != nil {
 		return nil, err
 	}
+
 	defer resp.Body.Close()
+
 	return readReport(resp.Body, sideband)
 }
 
@@ -106,6 +115,7 @@ func checkPush(cmds []Command, caps []string) (bool, error) {
 	if len(cmds) == 0 {
 		return false, errors.New("gitwire: push without commands")
 	}
+
 	seen := map[string]bool{}
 	for _, c := range cmds {
 		if !validRefName(c.Name) {
@@ -114,16 +124,19 @@ func checkPush(cmds []Command, caps []string) (bool, error) {
 		if seen[c.Name] {
 			return false, fmt.Errorf("gitwire: duplicate command for %q", c.Name)
 		}
+
 		seen[c.Name] = true
 		if c.Old.IsZero() && c.New.IsZero() {
 			return false, fmt.Errorf("gitwire: command for %q has zero old and new", c.Name)
 		}
 	}
+
 	report, sideband := false, false
 	for _, c := range caps {
 		if c == "" || strings.ContainsFunc(c, func(r rune) bool { return r <= ' ' || r == 0x7f }) {
 			return false, fmt.Errorf("gitwire: bad capability %q", c)
 		}
+
 		switch c {
 		case "report-status":
 			report = true
@@ -133,9 +146,11 @@ func checkPush(cmds []Command, caps []string) (bool, error) {
 			return false, fmt.Errorf("gitwire: capability %q is not supported", c)
 		}
 	}
+
 	if !report {
 		return false, errors.New("gitwire: push needs the report-status capability")
 	}
+
 	return sideband, nil
 }
 
@@ -145,11 +160,13 @@ func validRefName(name string) bool {
 	if !strings.HasPrefix(name, "refs/") || len(name) > 1024 {
 		return false
 	}
+
 	for i := 0; i < len(name); i++ {
 		if c := name[i]; c <= ' ' || c == 0x7f {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -159,6 +176,7 @@ func allDeletes(cmds []Command) bool {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -171,8 +189,12 @@ func writeCommands(w io.Writer, cmds []Command, caps []string) error {
 		if i == 0 {
 			line += "\x00" + strings.Join(caps, " ")
 		}
-		pw.Line(line)
+
+		if err := pw.Line(line); err != nil {
+			return err
+		}
 	}
+
 	return pw.Flush()
 }
 
@@ -182,46 +204,85 @@ func readReport(r io.Reader, sideband bool) (*Report, error) {
 	if !sideband {
 		return parseReport(io.LimitReader(r, maxReport))
 	}
+
 	var buf bytes.Buffer
 	if err := demux(NewPktReader(r), &buf, maxReport); err != nil {
 		return nil, err
 	}
+
 	return parseReport(&buf)
 }
 
 // parseReport parses report-status lines up to the flush-pkt.
 func parseReport(r io.Reader) (*Report, error) {
 	pr := NewPktReader(r)
-	next := func() ([]byte, bool, error) {
-		kind, data, err := pr.Next()
-		if err == io.EOF {
-			return nil, false, protoErr("report-status ended without flush")
-		}
-		if err != nil {
-			return nil, false, err
-		}
-		switch kind {
-		case PktFlush:
-			return nil, true, nil
-		case PktData:
-			return trimLF(data), false, nil
-		}
-		return nil, false, protoErr("unexpected special pkt-line in report-status")
-	}
-	line, end, err := next()
+	line, end, err := nextReportLine(pr)
 	if err != nil {
 		return nil, err
 	}
 	if end {
 		return nil, protoErr("empty report-status")
 	}
+
+	rep, err := parseUnpack(line)
+	if err != nil {
+		return nil, err
+	}
+
+	for {
+		line, end, err := nextReportLine(pr)
+		if err != nil {
+			return nil, err
+		}
+		if end {
+			return rep, nil
+		}
+
+		name, st, err := parseRefStatus(line)
+		if err != nil {
+			return nil, err
+		}
+		if _, dup := rep.Refs[name]; dup {
+			return nil, protoErr("duplicate report for %q", clean([]byte(name)))
+		}
+
+		rep.Refs[name] = st
+	}
+}
+
+// nextReportLine reads one report-status line. end is set at the
+// flush-pkt.
+func nextReportLine(pr *PktReader) (line []byte, end bool, err error) {
+	kind, data, err := pr.Next()
+	if errors.Is(err, io.EOF) {
+		return nil, false, protoErr("report-status ended without flush")
+	}
+	if err != nil {
+		return nil, false, err
+	}
+
+	switch kind {
+	case PktFlush:
+		return nil, true, nil
+	case PktData:
+		return trimLF(data), false, nil
+	}
+
+	return nil, false, protoErr("unexpected special pkt-line in report-status")
+}
+
+// parseUnpack parses the first report-status line, "unpack <status>",
+// into an empty Report.
+func parseUnpack(line []byte) (*Report, error) {
 	if bytes.HasPrefix(line, []byte("ERR ")) {
 		return nil, remoteError(line[4:])
 	}
+
 	status, ok := bytes.CutPrefix(line, []byte("unpack "))
 	if !ok {
 		return nil, protoErr("report-status has no unpack line")
 	}
+
 	rep := &Report{UnpackOK: string(status) == "ok", Refs: map[string]RefStatus{}}
 	if !rep.UnpackOK {
 		rep.Unpack = clean(status)
@@ -229,36 +290,29 @@ func parseReport(r io.Reader) (*Report, error) {
 			rep.Unpack = "malformed unpack status"
 		}
 	}
-	for {
-		line, end, err := next()
-		if err != nil {
-			return nil, err
-		}
-		if end {
-			return rep, nil
-		}
-		var st RefStatus
-		var name []byte
-		switch {
-		case bytes.HasPrefix(line, []byte("ok ")):
-			st.OK = true
-			name = line[3:]
-		case bytes.HasPrefix(line, []byte("ng ")):
-			var reason []byte
-			name, reason, _ = bytes.Cut(line[3:], []byte{' '})
-			st.Reason = clean(reason)
-			if st.Reason == "" {
-				st.Reason = "rejected"
-			}
-		default:
-			return nil, protoErr("bad report-status line %q", clean(line))
-		}
-		if len(name) == 0 || bytes.ContainsAny(name, " \x00") {
-			return nil, protoErr("bad report-status line %q", clean(line))
-		}
-		if _, dup := rep.Refs[string(name)]; dup {
-			return nil, protoErr("duplicate report for %q", clean(name))
-		}
-		rep.Refs[string(name)] = st
+
+	return rep, nil
+}
+
+// parseRefStatus parses an "ok <ref>" or "ng <ref> <reason>" line.
+func parseRefStatus(line []byte) (string, RefStatus, error) {
+	var st RefStatus
+	var name []byte
+	switch {
+	case bytes.HasPrefix(line, []byte("ok ")):
+		st.OK = true
+		name = line[3:]
+	case bytes.HasPrefix(line, []byte("ng ")):
+		var reason []byte
+		name, reason, _ = bytes.Cut(line[3:], []byte{' '})
+		st.Reason = cmp.Or(clean(reason), "rejected")
+	default:
+		return "", st, protoErr("bad report-status line %q", clean(line))
 	}
+
+	if len(name) == 0 || bytes.ContainsAny(name, " \x00") {
+		return "", st, protoErr("bad report-status line %q", clean(line))
+	}
+
+	return string(name), st, nil
 }

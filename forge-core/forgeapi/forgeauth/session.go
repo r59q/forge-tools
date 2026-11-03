@@ -31,6 +31,7 @@ func (s *Session) URL(path string) string {
 	if isAbsolute(path) {
 		return path
 	}
+
 	return strings.TrimRight(s.BaseURL, "/") + "/" + strings.TrimLeft(path, "/")
 }
 
@@ -46,11 +47,13 @@ func (s *Session) GetJSON(ctx context.Context, path string, v any) error {
 	if err != nil {
 		return err
 	}
+
 	req.Header.Set("Accept", "application/json")
 	resp, err := s.Client.Do(req)
 	if err != nil {
 		return err
 	}
+
 	defer resp.Body.Close()
 	if err := forgehttp.CheckResponse(resp); err != nil {
 		return err
@@ -58,6 +61,7 @@ func (s *Session) GetJSON(ctx context.Context, path string, v any) error {
 	if err := json.NewDecoder(resp.Body).Decode(v); err != nil {
 		return fmt.Errorf("forgeauth: decode %s: %w", forgehttp.RedactURL(req.URL), err)
 	}
+
 	return nil
 }
 
@@ -73,13 +77,20 @@ func isAbsolute(path string) bool {
 // conn.Kind must be empty or equal kind. An empty conn.BaseURL is replaced
 // by DefaultBaseURL(kind, ""). OpenSession reads a token once to check that
 // the credentials work, but does not contact the forge.
-func OpenSession(ctx context.Context, kind Kind, conn Connection, creds Credentials, setToken func(h http.Header, token string)) (*Session, error) {
+func OpenSession(
+	ctx context.Context,
+	kind Kind,
+	conn Connection,
+	creds Credentials,
+	setToken func(h http.Header, token string),
+) (*Session, error) {
 	if conn.Kind != "" && conn.Kind != kind {
 		return nil, fmt.Errorf("forgeauth: connection kind %q does not match provider %q", conn.Kind, kind)
 	}
 	if creds == nil {
 		return nil, fmt.Errorf("forgeauth: nil credentials")
 	}
+
 	base := strings.TrimSpace(conn.BaseURL)
 	if base == "" {
 		var err error
@@ -87,10 +98,12 @@ func OpenSession(ctx context.Context, kind Kind, conn Connection, creds Credenti
 			return nil, err
 		}
 	}
+
 	u, err := parseBaseURL(base)
 	if err != nil {
 		return nil, err
 	}
+
 	tok, err := creds.Token(ctx)
 	if err != nil {
 		return nil, err
@@ -98,10 +111,12 @@ func OpenSession(ctx context.Context, kind Kind, conn Connection, creds Credenti
 	if err := checkToken(tok); err != nil {
 		return nil, err
 	}
+
 	rt := conn.Transport
 	if rt == nil {
 		rt = http.DefaultTransport
 	}
+
 	return &Session{
 		Kind:    kind,
 		BaseURL: strings.TrimRight(u.String(), "/"),
@@ -128,19 +143,23 @@ func (t *transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if req.URL == nil || originOf(req.URL) != t.origin {
 		return t.base.RoundTrip(req)
 	}
+
 	tok, err := t.creds.Token(req.Context())
 	if err == nil {
 		err = checkToken(tok)
 	}
 	if err != nil {
 		if req.Body != nil {
-			req.Body.Close()
+			_ = req.Body.Close()
 		}
+
 		return nil, err
 	}
+
 	// RoundTrippers must not change the caller's request.
 	r := req.Clone(req.Context())
 	t.setToken(r.Header, tok)
+
 	return t.base.RoundTrip(r)
 }
 
@@ -166,6 +185,7 @@ func originOf(u *url.URL) string {
 	if host == "" {
 		return ""
 	}
+
 	port := u.Port()
 	switch scheme {
 	case "https":
@@ -179,5 +199,6 @@ func originOf(u *url.URL) string {
 	default:
 		return ""
 	}
+
 	return scheme + "://" + net.JoinHostPort(host, port)
 }

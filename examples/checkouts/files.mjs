@@ -12,13 +12,18 @@ function invalid(message) {
 // checkedPath confines reads to a checkout, excluding Git metadata and symlinks.
 export async function checkedPath(root, relative = '') {
   const parts = relative === '' ? [] : relative.split('/');
-  if (path.isAbsolute(relative) || parts.some(p => !p || p === '.' || p === '..' || p === '.git' || p.includes('\\'))) {
+  if (
+    path.isAbsolute(relative) ||
+    parts.some(p => !p || p === '.' || p === '..' || p === '.git' || p.includes('\\'))
+  ) {
     throw invalid('Choose a file inside the checkout.');
   }
   let target = root;
   for (const part of ['', ...parts]) {
     target = path.join(target, part);
-    if ((await lstat(target)).isSymbolicLink()) throw invalid('Symlinks are skipped in this example.');
+    if ((await lstat(target)).isSymbolicLink()) {
+      throw invalid('Symlinks are skipped in this example.');
+    }
   }
   return target;
 }
@@ -30,12 +35,18 @@ export async function listFiles(root) {
   let visited = 0;
   let truncated = false;
   async function walk(relative, depth) {
-    if (depth > 20) { truncated = true; return; }
+    if (depth > 20) {
+      truncated = true;
+      return;
+    }
     const directory = await checkedPath(root, relative);
     const entries = await readdir(directory, { withFileTypes: true });
     entries.sort((a, b) => a.name.localeCompare(b.name));
     for (const entry of entries) {
-      if (++visited > maxEntries) { truncated = true; return; }
+      if (++visited > maxEntries) {
+        truncated = true;
+        return;
+      }
       if (entry.name === '.git' || entry.isSymbolicLink()) continue;
       const name = relative ? `${relative}/${entry.name}` : entry.name;
       if (entry.isDirectory()) await walk(name, depth + 1);
@@ -53,18 +64,41 @@ export async function readText(root, relative) {
   const file = await open(target, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     const info = await file.stat();
-    if (!info.isFile() || info.size > maxBytes) throw invalid('Only text files up to 256 KiB are shown.');
-    const bytes = Buffer.alloc(maxBytes + 1);
-    let size = 0;
-    while (size < bytes.length) {
-      const { bytesRead } = await file.read(bytes, size, bytes.length - size, size);
-      if (!bytesRead) break;
-      size += bytesRead;
+    if (!info.isFile() || info.size > maxBytes)
+      throw invalid('Only text files up to 256 KiB are shown.');
+    const bytes = await readBoundedFile(file);
+    return decodeText(bytes);
+  } finally {
+    await file.close();
+  }
+}
+
+async function readBoundedFile(file) {
+  const bytes = Buffer.alloc(maxBytes + 1);
+  let size = 0;
+
+  while (size < bytes.length) {
+    const { bytesRead } = await file.read(bytes, size, bytes.length - size, size);
+    if (!bytesRead) {
+      break;
     }
-    if (size > maxBytes || bytes.subarray(0, size).includes(0)) throw invalid('Only text files up to 256 KiB are shown.');
-    try { return new TextDecoder('utf-8', { fatal: true }).decode(bytes.subarray(0, size)); }
-    catch { throw invalid('This file is not UTF-8 text.'); }
-  } finally { await file.close(); }
+    size += bytesRead;
+  }
+
+  const content = bytes.subarray(0, size);
+  if (size > maxBytes || content.includes(0)) {
+    throw invalid('Only text files up to 256 KiB are shown.');
+  }
+
+  return content;
+}
+
+function decodeText(bytes) {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    throw invalid('This file is not UTF-8 text.');
+  }
 }
 
 // searchText finds literal, case-insensitive matches in a bounded file listing.
@@ -76,9 +110,13 @@ export async function searchText(root, query) {
   let scannedBytes = 0;
   for (const name of listing.files) {
     let text;
-    try { text = await readText(root, name); }
-    catch (err) {
-      if (err.status === 400 || err.code === 'ENOENT') { skipped++; continue; }
+    try {
+      text = await readText(root, name);
+    } catch (err) {
+      if (err.status === 400 || err.code === 'ENOENT') {
+        skipped++;
+        continue;
+      }
       throw err;
     }
     scannedBytes += Buffer.byteLength(text);

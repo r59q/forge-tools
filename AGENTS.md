@@ -35,6 +35,9 @@ public.
   connections are made.
 - Code needed by several tools goes in `forge-core/`. `forge-core/` must not
   depend on any tool.
+- Duplicate first. Move code to `forge-core/` when it is domain-free, used by
+  three or more tools, and would need the same fix everywhere. Code that only
+  looks alike but changes for different reasons stays duplicated.
 
 ## Projects
 
@@ -58,6 +61,8 @@ public.
 - Services may use WebSockets for real-time updates and subscriptions.
 - A service provides at least what the library does. It may provide more, but
   put as much as possible in the library.
+- Services use `forge-core/servicekit` for flags, tokens, auth, REST and
+  serving, rather than copying that code.
 - Each service has a `Dockerfile` in its folder that builds its image. Build
   from the repository root so `forge-core/` and the library are in context.
 
@@ -72,8 +77,21 @@ public.
 ## Quality
 
 - Commit only high quality code. Add or update tests with every code change.
-- Go code is `gofmt`-formatted and passes `go vet ./...` and `go test ./...`,
-  run from the project folder.
+- Keep code sparse and easy to scan. Dense code is strongly discouraged; use
+  whitespace and small helper functions to make intent clear and code
+  aesthetically pleasing.
+- Go code is `gofmt`-formatted, has a tidy `go.mod` (`go mod tidy -diff`),
+  and passes `go vet ./...` and `go test ./...`, run from the project folder.
+- Protobuf passes `buf lint`, `buf format` and `buf breaking` with the root
+  `buf.yaml`. Regenerate code with `buf generate` and commit it.
+- Code passes `golangci-lint run ./...` with the shared `.golangci.yml`. Fix
+  findings instead of silencing them, and keep its `depguard` rules in sync
+  with the boundaries above.
+- Code passes `jscpd` with the shared `.jscpd.json`. Resolve clones with the
+  duplication rule in Tools, and mark intended duplication with a reason.
+- The `fix-lint` skill in `.agents/skills/` explains how to run and fix these checks.
+- Keep files small. When a file grows too large, split it into smaller,
+  coherent packages rather than just more files.
 - Keep dependencies few and well maintained.
 - Never commit secrets, tokens or private data.
 

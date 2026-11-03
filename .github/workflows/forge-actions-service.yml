@@ -1,0 +1,64 @@
+name: forge-actions-service
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - forge-actions/service/**
+      - forge-actions/library/**
+      - forge-connector/library/**
+      - forge-core/forgeapi/**
+      - forge-core/servicekit/**
+      - .dockerignore
+      - .github/workflows/forge-actions-service.yml
+      - buf.yaml
+      - buf.lock
+      - .github/workflows/reusable-*.yml
+  pull_request:
+    paths:
+      - forge-actions/service/**
+      - forge-actions/library/**
+      - forge-connector/library/**
+      - forge-core/forgeapi/**
+      - forge-core/servicekit/**
+      - .dockerignore
+      - .github/workflows/forge-actions-service.yml
+      - buf.yaml
+      - buf.lock
+      - .github/workflows/reusable-*.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: ./.github/workflows/reusable-go.yml
+    with:
+      dir: forge-actions/service
+
+  proto:
+    uses: ./.github/workflows/reusable-proto.yml
+    with:
+      dir: forge-actions/service
+
+  # Pull requests build the image without pushing or registry access.
+  image:
+    if: github.event_name == 'pull_request'
+    needs: test
+    uses: ./.github/workflows/reusable-docker.yml
+    with:
+      image: forge-actions-service
+      dockerfile: forge-actions/service/Dockerfile
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+    needs: test
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/reusable-docker.yml
+    with:
+      image: forge-actions-service
+      dockerfile: forge-actions/service/Dockerfile
+      push: true

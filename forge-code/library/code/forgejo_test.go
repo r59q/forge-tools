@@ -42,7 +42,13 @@ func newForgejoEnv(t *testing.T, opts fakeforge.ForgejoOptions, l Limits) *forge
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &forgejoEnv{s: s, repo: repo, fx: fx, c: c}
+
+	return &forgejoEnv{
+		s:    s,
+		repo: repo,
+		fx:   fx,
+		c:    c,
+	}
 }
 
 func forgejoOID(id gitobj.ID) OID { return OID(id.String()) }
@@ -54,6 +60,7 @@ func forgejoMissing(t *testing.T, err, kind error) {
 	if !errors.Is(err, kind) || !errors.Is(err, forgehttp.ErrNotFound) {
 		t.Fatalf("err = %v, want %v and forgehttp.ErrNotFound", err, kind)
 	}
+
 	var fe *forgehttp.Error
 	if errors.As(err, &fe) && fe.StatusCode != http.StatusNotFound {
 		t.Fatalf("err wraps forge status %d", fe.StatusCode)
@@ -110,6 +117,7 @@ func TestForgejoResolve(t *testing.T) {
 	if _, err := e.c.Resolve(context.Background(), forgejoTestRepo, "clash"); !errors.Is(err, ErrAmbiguous) {
 		t.Fatalf("clash: err = %v, want ErrAmbiguous", err)
 	}
+
 	for _, rev := range []string{
 		"nope", "refs/heads/nope",
 		"refs/heads/mai", "refs/tags/v1", // the forge matches these by prefix
@@ -121,6 +129,7 @@ func TestForgejoResolve(t *testing.T) {
 		_, err := e.c.Resolve(context.Background(), forgejoTestRepo, rev)
 		forgejoMissing(t, err, ErrRevisionNotFound)
 	}
+
 	if _, err := e.c.Resolve(context.Background(), forgejoTestRepo, string(head[:12])); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("short SHA: err = %v, want ErrInvalid", err)
 	}
@@ -160,10 +169,12 @@ func TestForgejoSingleRefObject(t *testing.T) {
 	if !bytes.HasPrefix(bytes.TrimSpace(raw), []byte("{")) {
 		t.Fatalf("front sent %s, want an object", raw)
 	}
+
 	got, err := e.c.Resolve(context.Background(), forgejoTestRepo, "refs/heads/main")
 	if err != nil || got.Commit != forgejoOID(e.fx.Head) {
 		t.Fatalf("got %+v, %v", got, err)
 	}
+
 	got, err = e.c.Resolve(context.Background(), forgejoTestRepo, "refs/tags/v1.0")
 	if err != nil || got.Commit != forgejoOID(e.fx.Main[3]) {
 		t.Fatalf("got %+v, %v", got, err)
@@ -221,7 +232,7 @@ func TestForgejoListRefs(t *testing.T) {
 
 	t.Run("listed inner tag", func(t *testing.T) {
 		e.repo.SetRef("refs/tags/chain-inner", fx.TagInner)
-		defer e.repo.SetRef("refs/tags/chain-inner", gitobj.ZeroID)
+		defer e.repo.SetRef("refs/tags/chain-inner", gitobj.ID{})
 		list, err := e.c.ListRefs(ctx, forgejoTestRepo, RefsOptions{Prefix: "refs/tags/"})
 		if err != nil {
 			t.Fatal(err)
@@ -229,6 +240,7 @@ func TestForgejoListRefs(t *testing.T) {
 		if got := list.Refs[0]; got != ref("refs/tags/chain", fx.TagOuter, fx.Main[1]) {
 			t.Fatalf("chain = %+v", got)
 		}
+
 		// The same with Limit 1, where the /tags walk stops before the
 		// inner tag's entry.
 		list, err = e.c.ListRefs(ctx, forgejoTestRepo, RefsOptions{Prefix: "refs/tags/", Limit: 1})
@@ -248,20 +260,23 @@ func TestForgejoListRefs(t *testing.T) {
 			id = e.repo.WriteTag(gitobj.Tag{Object: id, Name: fmt.Sprintf("deep%d", i), Message: "x\n"})
 			e.repo.SetRef(fmt.Sprintf("refs/tags/deep%d", i), id)
 		}
+
 		defer func() {
 			for i := range 5 {
-				e.repo.SetRef(fmt.Sprintf("refs/tags/deep%d", i), gitobj.ZeroID)
+				e.repo.SetRef(fmt.Sprintf("refs/tags/deep%d", i), gitobj.ID{})
 			}
 		}()
 		list, err := e.c.ListRefs(ctx, forgejoTestRepo, RefsOptions{Prefix: "refs/tags/"})
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		for _, r := range list.Refs {
 			if strings.HasPrefix(r.Name, "refs/tags/deep") && r.Commit != forgejoOID(fx.Main[0]) {
 				t.Errorf("%s = %+v, want commit %s", r.Name, r, fx.Main[0])
 			}
 		}
+
 		got, err := e.c.Resolve(ctx, forgejoTestRepo, "refs/tags/deep4")
 		if err != nil || got.Commit != forgejoOID(fx.Main[0]) {
 			t.Fatalf("Resolve deep4 = %+v, %v", got, err)
@@ -274,10 +289,13 @@ func TestForgejoListRefs(t *testing.T) {
 		var once atomic.Bool
 		e.s.SetHook(func(r *http.Request) {
 			if strings.HasSuffix(r.URL.Path, "/repos/o/r/tags") && once.CompareAndSwap(false, true) {
-				e.repo.SetRef("refs/tags/v1.0", gitobj.ZeroID)
+				e.repo.SetRef("refs/tags/v1.0", gitobj.ID{})
 			}
 		})
-		defer func() { e.s.SetHook(nil); e.repo.SetRef("refs/tags/v1.0", fx.Tag) }()
+		defer func() {
+			e.s.SetHook(nil)
+			e.repo.SetRef("refs/tags/v1.0", fx.Tag)
+		}()
 		e.s.ResetCalls()
 		list, err := e.c.ListRefs(ctx, forgejoTestRepo, RefsOptions{Prefix: "refs/tags/"})
 		if err != nil {
@@ -296,6 +314,7 @@ func TestForgejoListRefs(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		// repo and git/refs fit; /tags does not, so only complete refs
 		// before the first annotated tag are returned.
 		list, err := c.ListRefs(ctx, forgejoTestRepo, RefsOptions{Prefix: "refs/tags/"})
@@ -310,6 +329,7 @@ func TestForgejoListRefs(t *testing.T) {
 		if err != nil || len(list.Refs) != 0 || list.Default != "" {
 			t.Fatalf("list = %+v, %v", list, err)
 		}
+
 		_, err = e.c.Resolve(ctx, RepositoryRef{Source: "fj", Repository: "o/empty"}, "HEAD")
 		forgejoMissing(t, err, ErrRevisionNotFound)
 	})
@@ -322,6 +342,7 @@ func forgejoCommitOf(t *testing.T, repo *fakeforge.Repo, id gitobj.ID) Commit {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	out := Commit{
 		ID:        forgejoOID(id),
 		Tree:      forgejoOID(c.Tree),
@@ -332,6 +353,7 @@ func forgejoCommitOf(t *testing.T, repo *fakeforge.Repo, id gitobj.ID) Commit {
 	for _, p := range c.Parents {
 		out.Parents = append(out.Parents, forgejoOID(p))
 	}
+
 	return out
 }
 
@@ -354,6 +376,7 @@ func TestForgejoCommit(t *testing.T) {
 			t.Fatalf("got %+v, want %+v", got, want)
 		}
 	}
+
 	e.s.ResetCalls()
 	got, err := e.c.Commit(ctx, forgejoTestRepo, "main~1")
 	if err != nil || got.ID != forgejoOID(e.fx.Merge) || len(got.Parents) != 2 {
@@ -380,18 +403,22 @@ func forgejoAllHistory(t *testing.T, c *Client, r RepositoryRef, opts HistoryOpt
 		} else if page.Tip != tip {
 			t.Fatalf("tip moved from %s to %s", tip, page.Tip)
 		}
+
 		if opts.PageSize > 0 && len(page.Commits) > opts.PageSize {
 			t.Fatalf("page of %d, size %d", len(page.Commits), opts.PageSize)
 		}
+
 		for _, cm := range page.Commits {
 			ids = append(ids, cm.ID)
 		}
+
 		if page.Next == "" {
 			return ids, tip
 		}
 		if i > 1000 {
 			t.Fatal("history does not end")
 		}
+
 		opts = HistoryOptions{Cursor: page.Next}
 		if between != nil {
 			between()
@@ -406,10 +433,12 @@ func forgejoWantLog(t *testing.T, repo *fakeforge.Repo, tip gitobj.ID, path stri
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	var out []OID
 	for _, id := range ids {
 		out = append(out, forgejoOID(id))
 	}
+
 	return out
 }
 
@@ -474,14 +503,18 @@ func forgejoLongRepo(s *fakeforge.Server, n int) (*fakeforge.Repo, gitobj.ID) {
 		if i%3 == 0 {
 			f = "x.txt"
 		}
+
 		files[f] = fakeforge.File{Data: fmt.Appendf(nil, "%d\n", i)}
 		var parents []gitobj.ID
 		if i > 0 {
 			parents = []gitobj.ID{tip}
 		}
-		tip = repo.CommitTree(repo.BuildTree(files), fakeforge.Epoch.Add(time.Duration(i)*time.Minute), fmt.Sprintf("c%d\n", i), parents...)
+
+		tip = repo.CommitTree(repo.BuildTree(files), fakeforge.Epoch().Add(time.Duration(i)*time.Minute), fmt.Sprintf("c%d\n", i), parents...)
 	}
+
 	repo.SetRef("refs/heads/main", tip)
+
 	return repo, tip
 }
 
@@ -500,6 +533,7 @@ func TestForgejoHistoryPaging(t *testing.T) {
 			t.Fatalf("%q by %d: got %d commits, want %d", tc.path, tc.size, len(got), len(want))
 		}
 	}
+
 	// The forge page is always 50, because of its path-skip bug.
 	for _, req := range e.s.Requests() {
 		if strings.Contains(req, "/commits?") && !strings.Contains(req, "limit=50") {
@@ -523,11 +557,14 @@ func TestForgejoHistoryServerSettings(t *testing.T) {
 			if page, err = e.c.History(context.Background(), r, opts); err != nil || page.Next == "" {
 				break
 			}
+
 			opts = HistoryOptions{Cursor: page.Next}
 		}
+
 		if !errors.Is(err, ErrUnsupported) {
 			t.Errorf("range %d, items %d: path history err = %v, want ErrUnsupported", tc.rangeSize, tc.maxItems, err)
 		}
+
 		// Without a path the forge pages consistently.
 		got, _ := forgejoAllHistory(t, e.c, r, HistoryOptions{PageSize: 100}, nil)
 		if want := forgejoWantLog(t, repo, tip, ""); !slices.Equal(got, want) {
@@ -540,11 +577,11 @@ func TestForgejoHistoryLiteralPath(t *testing.T) {
 	e := newForgejoEnv(t, fakeforge.ForgejoOptions{}, Limits{})
 	repo := e.s.NewRepo("o/glob")
 	files := map[string]fakeforge.File{"a[1].txt": {Data: []byte("0\n")}, "a1.txt": {Data: []byte("0\n")}}
-	c0 := repo.CommitTree(repo.BuildTree(files), fakeforge.Epoch, "add\n")
+	c0 := repo.CommitTree(repo.BuildTree(files), fakeforge.Epoch(), "add\n")
 	files["a1.txt"] = fakeforge.File{Data: []byte("1\n")}
-	c1 := repo.CommitTree(repo.BuildTree(files), fakeforge.Epoch.Add(time.Minute), "a1\n", c0)
+	c1 := repo.CommitTree(repo.BuildTree(files), fakeforge.Epoch().Add(time.Minute), "a1\n", c0)
 	files["a[1].txt"] = fakeforge.File{Data: []byte("2\n")}
-	c2 := repo.CommitTree(repo.BuildTree(files), fakeforge.Epoch.Add(2*time.Minute), "a[1]\n", c1)
+	c2 := repo.CommitTree(repo.BuildTree(files), fakeforge.Epoch().Add(2*time.Minute), "a[1]\n", c1)
 	repo.SetRef("refs/heads/main", c2)
 	r := RepositoryRef{Source: "fj", Repository: "o/glob"}
 
@@ -567,26 +604,40 @@ func forgejoEntries(t *testing.T, repo *fakeforge.Repo, root gitobj.ID, dir stri
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		root = e.ID
 	}
+
 	list, err := repo.ListTree(root, recursive)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	var out []Entry
 	for _, pe := range list {
 		p := pe.Path
 		if dir != "" {
 			p = dir + "/" + p
 		}
+
 		mode := FileMode(pe.Mode)
-		e := Entry{Name: pe.Name, Path: p, Mode: mode, Type: typeOf(mode), ID: forgejoOID(pe.ID), Size: -1}
+		e := Entry{
+			Name: pe.Name,
+			Path: p,
+			Mode: mode,
+			Type: typeOf(mode),
+			ID:   forgejoOID(pe.ID),
+			Size: -1,
+		}
 		if e.Type == ObjectBlob {
 			e.Size = pe.Size
 		}
+
 		out = append(out, e)
 	}
+
 	slices.SortFunc(out, func(a, b Entry) int { return strings.Compare(a.Path, b.Path) })
+
 	return out
 }
 
@@ -607,6 +658,7 @@ func TestForgejoTree(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
+
 				want := forgejoEntries(t, e.repo, e.fx.Head, tc.path, tc.recursive)
 				if !slices.Equal(got.Entries, want) || got.Truncated || got.Commit != OID(head) || got.Path != tc.path {
 					t.Fatalf("%+v: got %+v\nwant %+v", tc, got, want)
@@ -620,6 +672,7 @@ func TestForgejoTree(t *testing.T) {
 			if err != nil || len(got.Entries) != 3 || !got.Truncated {
 				t.Fatalf("max: %+v, %v", got, err)
 			}
+
 			all := forgejoEntries(t, e.repo, e.fx.Head, "", true)
 			got, err = e.c.Tree(ctx, forgejoTestRepo, head, TreeOptions{Recursive: true, MaxEntries: len(all)})
 			if err != nil || len(got.Entries) != len(all) || got.Truncated {
@@ -654,6 +707,7 @@ func TestForgejoTreeCalls(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	got, err := c.Tree(ctx, forgejoTestRepo, head, TreeOptions{Recursive: true})
 	if err != nil || !got.Truncated || len(got.Entries) != 8 {
 		t.Fatalf("budget: %d entries, truncated %v, %v", len(got.Entries), got.Truncated, err)
@@ -680,6 +734,7 @@ func TestForgejoStat(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		le, _ := e.repo.Lookup(e.fx.Head, tc.path)
 		name := tc.path[strings.LastIndexByte(tc.path, '/')+1:]
 		if got.Commit != head || got.Path != tc.path || got.Name != name || got.Mode != tc.mode ||
@@ -687,10 +742,12 @@ func TestForgejoStat(t *testing.T) {
 			t.Fatalf("%s: %+v", tc.path, got)
 		}
 	}
+
 	got, _ := e.c.Stat(ctx, forgejoTestRepo, string(head), fakeforge.PathSubmodule)
-	if got.ID != forgejoOID(fakeforge.SubmoduleCommit) || got.Type != ObjectCommit {
+	if got.ID != forgejoOID(fakeforge.SubmoduleCommit()) || got.Type != ObjectCommit {
 		t.Fatalf("submodule = %+v", got)
 	}
+
 	for _, p := range []string{"nope", "docs/nope", fakeforge.PathReadme + "/x", "nope/x"} {
 		_, err := e.c.Stat(ctx, forgejoTestRepo, string(head), p)
 		forgejoMissing(t, err, ErrPathNotFound)
@@ -703,11 +760,13 @@ func forgejoRead(t *testing.T, r *Reader, err error) []byte {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer r.Close()
 	data, err := io.ReadAll(r)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return data
 }
 
@@ -731,19 +790,29 @@ func TestForgejoReadFile(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		r, err := e.c.ReadFile(ctx, forgejoTestRepo, string(head), p)
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		blob := r.Blob
 		if got := forgejoRead(t, r, nil); !bytes.Equal(got, want) {
 			t.Fatalf("%s: %d bytes, want %d", p, len(got), len(want))
 		}
-		wantBlob := Blob{ID: forgejoOID(e.fx.Blobs[p]), Commit: head, Path: p, Size: int64(len(want)), LFSPointer: p == fakeforge.PathLFS}
+
+		wantBlob := Blob{
+			ID:         forgejoOID(e.fx.Blobs[p]),
+			Commit:     head,
+			Path:       p,
+			Size:       int64(len(want)),
+			LFSPointer: p == fakeforge.PathLFS,
+		}
 		if blob != wantBlob {
 			t.Fatalf("%s: blob %+v, want %+v", p, blob, wantBlob)
 		}
 	}
+
 	if got := forgejoBytes(t)(e.c.ReadFile(ctx, forgejoTestRepo, string(head), fakeforge.PathSymlink)); string(got) != fakeforge.PathReadme {
 		t.Fatalf("symlink = %q", got)
 	}
@@ -753,6 +822,7 @@ func TestForgejoReadFile(t *testing.T) {
 			t.Fatalf("%s: err = %v, want ErrNotFile", p, err)
 		}
 	}
+
 	for _, p := range []string{"nope", "docs/nope", fakeforge.PathReadme + "/x"} {
 		_, err := e.c.ReadFile(ctx, forgejoTestRepo, string(head), p)
 		forgejoMissing(t, err, ErrPathNotFound)
@@ -772,7 +842,10 @@ func TestForgejoReadFile(t *testing.T) {
 				e.repo.SetRef("refs/heads/main", e.fx.Main[0])
 			}
 		})
-		defer func() { e.s.SetHook(nil); e.repo.SetRef("refs/heads/main", e.fx.Head) }()
+		defer func() {
+			e.s.SetHook(nil)
+			e.repo.SetRef("refs/heads/main", e.fx.Head)
+		}()
 		r, err := e.c.ReadFile(ctx, forgejoTestRepo, "main", fakeforge.PathFeature)
 		if got := forgejoRead(t, r, err); string(got) != "feature v2\n" || r.Commit != head {
 			t.Fatalf("got %q at %s", got, r.Commit)
@@ -807,20 +880,26 @@ func forgejoReadNoETag(t *testing.T, e *forgejoEnv, head OID) (OID, error) {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { h.ServeHTTP(noETagWriter{w}, r) })
 	})
 	s, err := forgejo.Provider{}.Open(context.Background(), forgeauth.Connection{
-		Kind: forgeauth.Forgejo, BaseURL: e.s.HTTP.URL + "/noetag", Transport: e.s.HTTP.Client().Transport,
+		Kind:      forgeauth.Forgejo,
+		BaseURL:   e.s.HTTP.URL + "/noetag",
+		Transport: e.s.HTTP.Client().Transport,
 	}, forgeauth.StaticToken(fakeforge.Token))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	c, err := New(Source{ID: "fj", Session: s})
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	r, err := c.ReadFile(context.Background(), forgejoTestRepo, string(head), fakeforge.PathReadme)
 	if err != nil {
 		return "", err
 	}
+
 	defer r.Close()
+
 	return r.ID, nil
 }
 
@@ -847,6 +926,7 @@ func TestForgejoReadBlob(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		blob := r.Blob
 		if got := forgejoRead(t, r, nil); !bytes.Equal(got, want) {
 			t.Fatalf("%s: got %q", p, got)
@@ -861,6 +941,7 @@ func TestForgejoReadBlob(t *testing.T) {
 	if _, err := e.c.ReadBlob(ctx, forgejoTestRepo, large); !errors.Is(err, ErrTooLarge) {
 		t.Fatalf("err = %v, want ErrTooLarge", err)
 	}
+
 	_, err := e.c.ReadBlob(ctx, forgejoTestRepo, OID(strings.Repeat("cd", 20)))
 	forgejoMissing(t, err, ErrRevisionNotFound)
 
@@ -870,6 +951,7 @@ func TestForgejoReadBlob(t *testing.T) {
 		if got := forgejoBytes(t)(e.c.ReadBlob(ctx, forgejoTestRepo, large)); !bytes.Equal(got, want) {
 			t.Fatalf("got %d bytes, want %d", len(got), len(want))
 		}
+
 		c, err := NewWithLimits(Limits{MaxBlobBytes: 1000}, Source{ID: "fj", Session: e.s.Session})
 		if err != nil {
 			t.Fatal(err)
@@ -887,6 +969,7 @@ func TestForgejoReadBlob(t *testing.T) {
 		if got := forgejoBytes(t)(e.c.ReadBlob(ctx, forgejoTestRepo, id)); !bytes.Equal(got, want) {
 			t.Fatalf("got %d bytes, want %d", len(got), len(want))
 		}
+
 		// Past MaxBlobBytes the body is cut short: ErrTooLarge, not a
 		// decode error.
 		c, err := NewWithLimits(Limits{MaxBlobBytes: 1 << 20}, Source{ID: "fj", Session: e.s.Session})
@@ -922,7 +1005,7 @@ func TestForgejoMergeBase(t *testing.T) {
 	}
 
 	// Unrelated history.
-	orphan := e.repo.CommitTree(e.repo.BuildTree(map[string]fakeforge.File{"o": {Data: []byte("o\n")}}), fakeforge.Epoch, "orphan\n")
+	orphan := e.repo.CommitTree(e.repo.BuildTree(map[string]fakeforge.File{"o": {Data: []byte("o\n")}}), fakeforge.Epoch(), "orphan\n")
 	e.repo.SetRef("refs/heads/orphan", orphan)
 	if _, err := e.c.MergeBase(ctx, forgejoTestRepo, "main", "orphan"); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("orphan: err = %v, want ErrInvalid", err)
@@ -931,7 +1014,7 @@ func TestForgejoMergeBase(t *testing.T) {
 	// Merges from the base: feature merges main twice.
 	r := e.s.NewRepo("o/merges")
 	tree := r.BuildTree(map[string]fakeforge.File{"a": {Data: []byte("a\n")}})
-	at := func(h int) time.Time { return fakeforge.Epoch.Add(time.Duration(h) * time.Hour) }
+	at := func(h int) time.Time { return fakeforge.Epoch().Add(time.Duration(h) * time.Hour) }
 	m0 := r.CommitTree(tree, at(0), "m0\n")
 	m1 := r.CommitTree(tree, at(1), "m1\n", m0)
 	f0 := r.CommitTree(tree, at(2), "f0\n", m0)
@@ -984,6 +1067,7 @@ func TestForgejoErrors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	c, err := New(Source{ID: "fj", Session: bad})
 	if err != nil {
 		t.Fatal(err)
@@ -1008,6 +1092,7 @@ func TestForgejoErrors(t *testing.T) {
 		if _, err := e.c.ReadFile(ctx, forgejoTestRepo, head, fakeforge.PathReadme); !errors.Is(err, tc.want) {
 			t.Fatalf("%d: read: err = %v, want %v", tc.fault.Status, err, tc.want)
 		}
+
 		e.s.ClearFaults()
 	}
 
@@ -1015,10 +1100,22 @@ func TestForgejoErrors(t *testing.T) {
 	e.repo.SetPrivate(true)
 	e.s.SetAccess("o/r", fakeforge.AccessNone)
 	for _, call := range []func() error{
-		func() error { _, err := e.c.Resolve(ctx, forgejoTestRepo, "HEAD"); return err },
-		func() error { _, err := e.c.Commit(ctx, forgejoTestRepo, head); return err },
-		func() error { _, err := e.c.ListRefs(ctx, forgejoTestRepo, RefsOptions{}); return err },
-		func() error { _, err := e.c.ReadBlob(ctx, forgejoTestRepo, OID(head)); return err },
+		func() error {
+			_, err := e.c.Resolve(ctx, forgejoTestRepo, "HEAD")
+			return err
+		},
+		func() error {
+			_, err := e.c.Commit(ctx, forgejoTestRepo, head)
+			return err
+		},
+		func() error {
+			_, err := e.c.ListRefs(ctx, forgejoTestRepo, RefsOptions{})
+			return err
+		},
+		func() error {
+			_, err := e.c.ReadBlob(ctx, forgejoTestRepo, OID(head))
+			return err
+		},
 	} {
 		if err := call(); !errors.Is(err, forgehttp.ErrNotFound) || errors.Is(err, forgehttp.ErrUnauthorized) {
 			t.Fatalf("private: err = %v", err)

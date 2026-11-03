@@ -53,6 +53,7 @@ func (r *Registry) Register(p Provider) error {
 	if p == nil {
 		return errors.New("forgeauth: nil provider")
 	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, ok := r.providers[p.Kind()]; ok {
@@ -61,19 +62,22 @@ func (r *Registry) Register(p Provider) error {
 	if r.providers == nil {
 		r.providers = map[Kind]Provider{}
 	}
+
 	r.providers[p.Kind()] = p
+
 	return nil
 }
 
 // Provider returns the provider for kind, or an error wrapping
 // ErrUnknownKind.
-func (r *Registry) Provider(kind Kind) (Provider, error) {
+func (r *Registry) Provider(kind Kind) (Provider, error) { //nolint:ireturn // a registry of interface values
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	p, ok := r.providers[kind]
 	if !ok {
 		return nil, fmt.Errorf("%w: %q", ErrUnknownKind, kind)
 	}
+
 	return p, nil
 }
 
@@ -85,7 +89,9 @@ func (r *Registry) Kinds() []Kind {
 	for k := range r.providers {
 		kinds = append(kinds, k)
 	}
+
 	slices.Sort(kinds)
+
 	return kinds
 }
 
@@ -95,6 +101,7 @@ func (r *Registry) Open(ctx context.Context, conn Connection, creds Credentials)
 	if err != nil {
 		return nil, err
 	}
+
 	return p.Open(ctx, conn, creds)
 }
 
@@ -104,6 +111,7 @@ func (r *Registry) Whoami(ctx context.Context, s *Session) (Identity, error) {
 	if err != nil {
 		return Identity{}, err
 	}
+
 	return p.Whoami(ctx, s)
 }
 
@@ -116,6 +124,7 @@ func CheckSession(s *Session, kind Kind) error {
 	case s.Kind != kind:
 		return fmt.Errorf("forgeauth: session kind %q does not match provider %q", s.Kind, kind)
 	}
+
 	return nil
 }
 
@@ -127,19 +136,23 @@ func AuthorizationToken(h http.Header, schemes ...string) (string, bool) {
 	if len(vals) != 1 {
 		return "", false
 	}
+
 	scheme, tok, ok := strings.Cut(strings.TrimSpace(vals[0]), " ")
 	if !ok {
 		return "", false
 	}
+
 	tok = strings.TrimSpace(tok)
 	if checkToken(tok) != nil {
 		return "", false
 	}
+
 	for _, s := range schemes {
 		if strings.EqualFold(scheme, s) {
 			return tok, true
 		}
 	}
+
 	return "", false
 }
 
@@ -151,9 +164,11 @@ func HeaderToken(h http.Header, name string) (string, bool) {
 	if len(vals) != 1 {
 		return "", false
 	}
+
 	tok := strings.TrimSpace(vals[0])
 	if checkToken(tok) != nil {
 		return "", false
 	}
+
 	return tok, true
 }

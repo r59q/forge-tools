@@ -19,6 +19,7 @@ import (
 
 	"github.com/r59q/forge-tools/forge-core/forgeapi/forgeauth"
 	"github.com/r59q/forge-tools/forge-core/forgeapi/forgeauth/github"
+	"github.com/r59q/forge-tools/forge-core/servicekit"
 	"github.com/r59q/forge-tools/forge-issues/library/issues"
 	"github.com/r59q/forge-tools/forge-repositories/library/repositories"
 	repoapi "github.com/r59q/forge-tools/forge-repositories/service/api"
@@ -28,26 +29,29 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 func TestSettings(t *testing.T) {
 	values := map[string]string{"FORGE_MANAGEMENT_HTTP_LISTEN": "127.0.0.1:9000", "FORGE_MANAGEMENT_REQUEST_TIMEOUT": "2s"}
 	getenv := func(name string) string { return values[name] }
 	s, err := parse([]string{"--request-timeout=3s"}, getenv, io.Discard)
-	if err != nil || s.httpAddress != values["FORGE_MANAGEMENT_HTTP_LISTEN"] || s.timeout != 3*time.Second || s.tokenEnv != "FORGE_MANAGEMENT_TOKEN" || s.repositoriesAddress != "" {
+	if err != nil ||
+		s.httpAddress != values["FORGE_MANAGEMENT_HTTP_LISTEN"] || s.timeout != 3*time.Second || s.tokenEnv != "FORGE_MANAGEMENT_TOKEN" || s.repositoriesAddress != "" {
 		t.Fatalf("settings: %+v %v", s, err)
 	}
+
 	s, err = parse([]string{"--repositories-address=localhost:9092"}, getenv, io.Discard)
 	if err != nil || s.repositoriesTokenEnv != "FORGE_MANAGEMENT_REPOSITORIES_TOKEN" || s.repositoriesInsecure || s.issuesAddress != "" {
 		t.Fatalf("backend settings: %+v %v", s, err)
 	}
+
 	values["FORGE_MANAGEMENT_ISSUES_ADDRESS"] = "localhost:9094"
 	s, err = parse([]string{"--issues-insecure=true"}, getenv, io.Discard)
 	delete(values, "FORGE_MANAGEMENT_ISSUES_ADDRESS")
 	if err != nil || s.issuesAddress != "localhost:9094" || s.issuesTokenEnv != "FORGE_MANAGEMENT_ISSUES_TOKEN" || !s.issuesInsecure {
 		t.Fatalf("issue backend settings: %+v %v", s, err)
 	}
+
 	for _, args := range [][]string{
 		{"--token-file=t", "--token-env=T"}, {"--request-timeout=0"}, {"--request-timeout=invalid-secret"}, {"extra"}, {"--unknown=secret"},
 		{"--http-listen="}, {"--grpc-listen="}, {"--repositories-insecure=invalid"}, {"--repositories-insecure=true"}, {"--repositories-token-env=T"},
@@ -59,25 +63,31 @@ func TestSettings(t *testing.T) {
 			t.Fatalf("accepted or echoed invalid flags: %v %v", args, err)
 		}
 	}
+
 	s, err = parse([]string{"--connector-address=broker:9090", "--connector-insecure=true", "--proxy-token-file=/p"}, getenv, io.Discard)
-	if err != nil || s.connectorTokenEnv != "FORGE_MANAGEMENT_CONNECTOR_ADMIN_TOKEN" || !s.connectorInsecure || len(s.clients) != 4 {
+	if err != nil || s.connectorTokenEnv != "FORGE_MANAGEMENT_CONNECTOR_ADMIN_TOKEN" || !s.connectorInsecure || len(s.clients) != 5 {
 		t.Fatalf("connector settings: %+v %v", s, err)
 	}
-	if p, r, i := s.clients[0], s.clients[1], s.clients[2]; p.file != "/p" || p.optional || !p.canIssueTokens || r.env != "FORGE_MANAGEMENT_REPOSITORIES_CONNECTOR_TOKEN" || !r.optional || r.canIssueTokens ||
+	if p, r, i := s.clients[0], s.clients[1], s.clients[2]; p.file != "/p" ||
+		p.optional || !p.canIssueTokens || r.env != "FORGE_MANAGEMENT_REPOSITORIES_CONNECTOR_TOKEN" || !r.optional || r.canIssueTokens ||
 		i.name != "forge-issues" || i.env != "FORGE_MANAGEMENT_ISSUES_CONNECTOR_TOKEN" || !i.optional || i.canIssueTokens {
 		t.Fatalf("client settings: %+v", s.clients)
 	}
-	if w := s.clients[3]; w.name != "forge-checkouts" || w.env != "FORGE_MANAGEMENT_CHECKOUTS_CONNECTOR_TOKEN" || !w.optional || w.canIssueTokens {
+	if w := s.clients[3]; w.name != "forge-checkouts" ||
+		w.env != "FORGE_MANAGEMENT_CHECKOUTS_CONNECTOR_TOKEN" || !w.optional || w.canIssueTokens {
 		t.Fatalf("checkout client: %+v", w)
 	}
+
 	s, err = parse([]string{"--connector-address=broker:9090", "--checkouts-connector-token-file=/w"}, getenv, io.Discard)
 	if err != nil || s.clients[3].file != "/w" || s.clients[3].optional {
 		t.Fatalf("checkout client: %+v %v", s.clients, err)
 	}
+
 	s, err = parse([]string{"--connector-address=broker:9090", "--issues-connector-token-file=/i"}, getenv, io.Discard)
 	if err != nil || s.clients[2].file != "/i" || s.clients[2].optional {
 		t.Fatalf("issues client settings: %+v %v", s.clients, err)
 	}
+
 	for _, args := range [][]string{
 		{"--connector-insecure=true"}, {"--connector-admin-token-env=T"}, {"--proxy-token-env=T"}, {"--connector-insecure=yes"},
 		{"--connector-address=x", "--connector-admin-token-file=t", "--connector-admin-token-env=T"},
@@ -90,8 +100,14 @@ func TestSettings(t *testing.T) {
 			t.Fatalf("accepted invalid connector flags: %v", args)
 		}
 	}
+
 	var help bytes.Buffer
-	if _, err := parse([]string{"--help"}, getenv, &help); !errors.Is(err, flag.ErrHelp) || !strings.Contains(help.String(), "repositories-address") || !strings.Contains(help.String(), "issues-address") {
+	if _, err := parse(
+		[]string{"--help"},
+		getenv,
+		&help,
+	); !errors.Is(err, flag.ErrHelp) ||
+		!strings.Contains(help.String(), "repositories-address") || !strings.Contains(help.String(), "issues-address") {
 		t.Fatal("missing help")
 	}
 }
@@ -102,6 +118,7 @@ func writeToken(t *testing.T, value string) string {
 	if err := os.WriteFile(path, []byte(value), 0o600); err != nil {
 		t.Fatal(err)
 	}
+
 	return path
 }
 
@@ -111,10 +128,11 @@ func TestCredentialConfiguration(t *testing.T) {
 	t.Setenv("MANAGEMENT_TEST_EMPTY", "")
 	t.Setenv("MANAGEMENT_TEST_INVALID", "invalid secret\nvalue")
 	for _, env := range []string{"MANAGEMENT_TEST_EMPTY", "MANAGEMENT_TEST_INVALID"} {
-		if _, err := (settings{tokenEnv: env}).serviceToken(context.Background()); err == nil || strings.Contains(err.Error(), "secret") {
+		if _, err := servicekit.BearerToken(context.Background(), "service", "", env); err == nil || strings.Contains(err.Error(), "secret") {
 			t.Fatal("accepted or leaked invalid token", err)
 		}
 	}
+
 	op := forgeauth.EnvToken("MANAGEMENT_TEST_TOKEN")
 	for _, env := range []string{"MANAGEMENT_TEST_EMPTY", "MANAGEMENT_TEST_INVALID", "MANAGEMENT_TEST_TOKEN"} {
 		_, _, err := (settings{repositoriesAddress: "localhost:1", repositoriesTokenEnv: env}).repositoryReader(context.Background(), op)
@@ -122,17 +140,20 @@ func TestCredentialConfiguration(t *testing.T) {
 			t.Fatal("accepted or leaked invalid backend token", err)
 		}
 	}
+
 	for _, env := range []string{"MANAGEMENT_TEST_EMPTY", "MANAGEMENT_TEST_INVALID", "MANAGEMENT_TEST_TOKEN"} {
 		_, _, err := (settings{issuesAddress: "localhost:1", issuesTokenEnv: env}).issueReader(context.Background(), op)
 		if err == nil || strings.Contains(err.Error(), "synthetic") || strings.Contains(err.Error(), "secret") {
 			t.Fatal("accepted or leaked invalid issue backend token", err)
 		}
 	}
+
 	issueFile := writeToken(t, "issues-synthetic")
 	issueReader, closeIssues, err := (settings{issuesAddress: "localhost:1", issuesTokenFile: issueFile}).issueReader(context.Background(), op)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer closeIssues()
 	if err := os.WriteFile(issueFile, []byte("operator-synthetic"), 0o600); err != nil {
 		t.Fatal(err)
@@ -140,11 +161,13 @@ func TestCredentialConfiguration(t *testing.T) {
 	if _, err := issueReader.List(context.Background(), issues.ListOptions{}); err == nil {
 		t.Fatal("rotation allowed a shared operator/issue backend credential")
 	}
+
 	file := writeToken(t, "backend-synthetic\n")
 	reader, closeBackend, err := (settings{repositoriesAddress: "localhost:1", repositoriesTokenFile: file}).repositoryReader(context.Background(), op)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer closeBackend()
 	// No live backend is necessary at startup. Rotating credentials to match
 	// the operator must still fail before making a request.
@@ -182,6 +205,7 @@ func startManagement(t *testing.T, s settings) [2]net.Addr {
 	case <-time.After(5 * time.Second):
 		t.Fatal("startup timed out")
 	}
+
 	return [2]net.Addr{}
 }
 
@@ -196,37 +220,47 @@ func httpGet(t *testing.T, address net.Addr, path string, basic bool) (int, stri
 	} else {
 		r.Header.Set("Authorization", "Bearer operator-synthetic")
 	}
+
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Do(r)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return resp.StatusCode, string(body)
 }
 
 func TestRunWithoutTools(t *testing.T) {
-	s, err := parse([]string{"--token-file=" + writeToken(t, "operator-synthetic"), "--http-listen=127.0.0.1:0", "--grpc-listen=127.0.0.1:0"}, func(string) string { return "" }, io.Discard)
+	s, err := parse(
+		[]string{"--token-file=" + writeToken(t, "operator-synthetic"), "--http-listen=127.0.0.1:0", "--grpc-listen=127.0.0.1:0"},
+		func(string) string { return "" },
+		io.Discard,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	a := startManagement(t, s)
 	if code, body := httpGet(t, a[1], "/", true); code != 200 || !strings.Contains(body, "No repository capability configured") {
 		t.Fatalf("web: %d %s", code, body)
 	}
+
 	conn, err := grpc.NewClient(a[0].String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer conn.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs("authorization", "Bearer operator-synthetic"))
-	listing, err := pb.NewManagementClient(conn).ListRepositories(ctx, &emptypb.Empty{})
+	listing, err := pb.NewManagementServiceClient(conn).ListRepositories(ctx, &pb.ListRepositoriesRequest{})
 	if err != nil || listing.GetConfigured() || len(listing.GetRepositories()) != 0 {
 		t.Fatalf("gRPC: %v %v", listing, err)
 	}
@@ -239,27 +273,34 @@ func TestRunWithNativeRepositories(t *testing.T) {
 		calls.Add(1)
 		if r.Header.Get("Authorization") != "Bearer forge-synthetic" || r.URL.Path != "/user/repos" {
 			t.Error("wrong forge request")
-			http.Error(w, "denied", 401)
+			http.Error(w, "denied", http.StatusUnauthorized)
+
 			return
 		}
+
 		switch mode.Load() {
 		case 1:
 			fmt.Fprint(w, `[]`)
 		case 2:
 			http.Error(w, "forge-synthetic backend-synthetic", 500)
 		case 3:
-			http.Error(w, "forge-synthetic backend-synthetic", 401)
+			http.Error(w, "forge-synthetic backend-synthetic", http.StatusUnauthorized)
 		case 4:
-			http.Error(w, "forge-synthetic backend-synthetic", 403)
+			http.Error(w, "forge-synthetic backend-synthetic", http.StatusForbidden)
 		default:
 			fmt.Fprint(w, `[{"id":1,"full_name":"group/sub/private","visibility":"private","description":"<script>alert(1)</script>","html_url":"https://github.example/group/sub/private","clone_url":"https://forge-synthetic@github.example/group/sub/private"}]`)
 		}
 	}))
 	defer forge.Close()
-	session, err := github.Provider{}.Open(context.Background(), forgeauth.Connection{BaseURL: forge.URL}, forgeauth.StaticToken("forge-synthetic"))
+	session, err := github.Provider{}.Open(
+		context.Background(),
+		forgeauth.Connection{BaseURL: forge.URL},
+		forgeauth.StaticToken("forge-synthetic"),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	// A second source always succeeds. A failure in the first source must
 	// never make the second source look like a complete listing.
 	otherForge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -267,34 +308,48 @@ func TestRunWithNativeRepositories(t *testing.T) {
 			fmt.Fprint(w, `[]`)
 			return
 		}
+
 		fmt.Fprint(w, `[{"id":2,"full_name":"group/sub/private","visibility":"public","html_url":"https://other.example/group/sub/private"}]`)
 	}))
 	defer otherForge.Close()
-	otherSession, err := github.Provider{}.Open(context.Background(), forgeauth.Connection{BaseURL: otherForge.URL}, forgeauth.StaticToken("other-forge-synthetic"))
+	otherSession, err := github.Provider{}.Open(
+		context.Background(),
+		forgeauth.Connection{BaseURL: otherForge.URL},
+		forgeauth.StaticToken("other-forge-synthetic"),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	client, err := repositories.New(repositories.Source{ID: "personal", Session: session}, repositories.Source{ID: "work", Session: otherSession})
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	backend, err := repoapi.New(repoapi.Fixed(client), forgeauth.StaticToken("backend-synthetic"), time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	g := grpc.NewServer()
-	repopb.RegisterRepositoriesServer(g, backend)
+	repopb.RegisterRepositoriesServiceServer(g, backend)
 	go func() { _ = g.Serve(l) }()
 	defer g.Stop()
 	t.Setenv("MANAGEMENT_TEST_BACKEND", "backend-synthetic")
-	s, err := parse([]string{"--token-file=" + writeToken(t, "operator-synthetic"), "--http-listen=127.0.0.1:0", "--grpc-listen=127.0.0.1:0", "--repositories-address=" + l.Addr().String(), "--repositories-token-env=MANAGEMENT_TEST_BACKEND", "--repositories-insecure=true"}, func(string) string { return "" }, io.Discard)
+	s, err := parse(
+		[]string{"--token-file=" + writeToken(t, "operator-synthetic"), "--http-listen=127.0.0.1:0", "--grpc-listen=127.0.0.1:0", "--repositories-address=" + l.Addr().String(), "--repositories-token-env=MANAGEMENT_TEST_BACKEND", "--repositories-insecure=true"},
+		func(string) string { return "" },
+		io.Discard,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	a := startManagement(t, s)
 	for _, tc := range []struct {
 		name    string
@@ -311,11 +366,13 @@ func TestRunWithNativeRepositories(t *testing.T) {
 			if code != tc.code {
 				t.Fatalf("REST: %d %s", code, body)
 			}
+
 			for _, secret := range []string{"forge-synthetic", "backend-synthetic", "operator-synthetic"} {
 				if strings.Contains(body, secret) {
 					t.Fatal("credential leaked in REST")
 				}
 			}
+
 			if code == 200 {
 				var result pb.ListRepositoriesResponse
 				if err := protojson.Unmarshal([]byte(body), &result); err != nil {
@@ -324,7 +381,8 @@ func TestRunWithNativeRepositories(t *testing.T) {
 				if !result.Configured {
 					t.Fatal("configured backend reported absent")
 				}
-				if tc.mode == 0 && (len(result.Repositories) != 2 || result.Repositories[0].SourceId != "personal" || result.Repositories[1].SourceId != "work" || result.Repositories[0].Path != result.Repositories[1].Path || result.Repositories[0].Visibility != "private") {
+				if tc.mode == 0 && (len(result.Repositories) != 2 ||
+					result.Repositories[0].SourceId != "personal" || result.Repositories[1].SourceId != "work" || result.Repositories[0].Path != result.Repositories[1].Path || result.Repositories[0].Visibility != "private") {
 					t.Fatal(&result)
 				}
 				if tc.mode == 1 && len(result.Repositories) != 0 {
@@ -333,10 +391,12 @@ func TestRunWithNativeRepositories(t *testing.T) {
 			} else if strings.Contains(body, "group/sub/private") {
 				t.Fatal("partial listing leaked")
 			}
+
 			code, body = httpGet(t, a[1], "/", true)
 			if code != tc.code || !strings.Contains(body, tc.message) || strings.Contains(body, "<script>") {
 				t.Fatalf("web: %d %s", code, body)
 			}
+
 			for _, secret := range []string{"forge-synthetic", "backend-synthetic", "operator-synthetic"} {
 				if strings.Contains(body, secret) {
 					t.Fatal("credential leaked in HTML")
@@ -344,6 +404,7 @@ func TestRunWithNativeRepositories(t *testing.T) {
 			}
 		})
 	}
+
 	before := calls.Load()
 	t.Setenv("MANAGEMENT_TEST_BACKEND", "rejected-backend-synthetic")
 	if code, _ := httpGet(t, a[1], "/v1/repositories", false); code != 503 {
@@ -352,6 +413,7 @@ func TestRunWithNativeRepositories(t *testing.T) {
 	if calls.Load() != before {
 		t.Fatal("invalid backend credential reached forge")
 	}
+
 	g.Stop()
 	t.Setenv("MANAGEMENT_TEST_BACKEND", "backend-synthetic")
 	if code, body := httpGet(t, a[1], "/", true); code != 503 || !strings.Contains(body, "Repository listing failed") {

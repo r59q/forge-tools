@@ -17,28 +17,33 @@ import (
 	"time"
 
 	pb "github.com/r59q/forge-tools/forge-code/service/codepb"
+	"github.com/r59q/forge-tools/forge-core/servicekit"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 const commitID = "1111111111111111111111111111111111111111"
 
 func TestSettings(t *testing.T) {
 	values := map[string]string{
-		"FORGE_CODE_CONNECTOR_URL": "http://env", "FORGE_CODE_GRPC_LISTEN": "127.0.0.1:9001", "FORGE_CODE_HTTP_LISTEN": "127.0.0.1:9002",
-		"FORGE_CODE_REQUEST_TIMEOUT": "2s", "FORGE_CODE_STREAM_TIMEOUT": "1m", "FORGE_CODE_MAX_INFLIGHT_PER_SOURCE": "3",
+		"FORGE_CODE_CONNECTOR_URL":           "http://env",
+		"FORGE_CODE_GRPC_LISTEN":             "127.0.0.1:9001",
+		"FORGE_CODE_HTTP_LISTEN":             "127.0.0.1:9002",
+		"FORGE_CODE_REQUEST_TIMEOUT":         "2s",
+		"FORGE_CODE_STREAM_TIMEOUT":          "1m",
+		"FORGE_CODE_MAX_INFLIGHT_PER_SOURCE": "3",
 	}
 	getenv := func(name string) string { return values[name] }
 	s, err := parse([]string{"--connector-url=http://flag", "--request-timeout=3s", "--max-inflight-per-source=4"}, getenv, io.Discard)
-	if err != nil || s.connectorURL != "http://flag" || s.timeout != 3*time.Second || s.streamTimeout != time.Minute || s.maxInFlight != 4 ||
-		s.grpcAddress != "127.0.0.1:9001" || s.httpAddress != "127.0.0.1:9002" ||
-		s.tokenEnv != "FORGE_CODE_TOKEN" || s.connectorTokenEnv != "FORGE_CODE_CONNECTOR_TOKEN" {
+	if err != nil || s.ConnectorURL != "http://flag" || s.Timeout != 3*time.Second || s.streamTimeout != time.Minute || s.maxInFlight != 4 ||
+		s.GRPCAddress != "127.0.0.1:9001" || s.HTTPAddress != "127.0.0.1:9002" ||
+		s.TokenEnv != "FORGE_CODE_TOKEN" || s.ConnectorTokenEnv != "FORGE_CODE_CONNECTOR_TOKEN" {
 		t.Fatalf("settings: %+v %v", s, err)
 	}
+
 	for _, args := range [][]string{
 		{"--token-file=t", "--token-env=T"}, {"--connector-token-file=t", "--connector-token-env=T"}, {"--request-timeout=0"},
 		{"--stream-timeout=-1s"}, {"--stream-timeout=x-secret-sentinel"}, {"--max-inflight-per-source=0"},
@@ -48,23 +53,39 @@ func TestSettings(t *testing.T) {
 			t.Fatalf("parse(%q) accepted or echoed input: %v", args, err)
 		}
 	}
+
 	values["FORGE_CODE_REQUEST_TIMEOUT"] = "invalid-secret-sentinel"
 	if _, err := parse(nil, getenv, io.Discard); err == nil || strings.Contains(err.Error(), "sentinel") {
 		t.Fatal("invalid environment timeout accepted or echoed")
 	}
+
 	var help bytes.Buffer
-	if _, err := parse([]string{"--help"}, getenv, &help); !errors.Is(err, flag.ErrHelp) || !strings.Contains(help.String(), "-stream-timeout") {
+	if _, err := parse(
+		[]string{"--help"},
+		getenv,
+		&help,
+	); !errors.Is(err, flag.ErrHelp) ||
+		!strings.Contains(help.String(), "-stream-timeout") {
 		t.Fatal("missing flag help")
 	}
 }
 
 func TestDefaults(t *testing.T) {
-	s, err := parse([]string{"--connector-url=http://p", "--token-file=t", "--connector-token-env=C"}, func(string) string { return "" }, io.Discard)
-	if err != nil || s.grpcAddress != "127.0.0.1:9095" || s.httpAddress != "127.0.0.1:8085" || s.timeout != 30*time.Second ||
-		s.streamTimeout != 10*time.Minute || s.maxInFlight != 8 || s.tokenFile != "t" || s.tokenEnv != "" || s.connectorTokenEnv != "C" {
+	s, err := parse(
+		[]string{"--connector-url=http://p", "--token-file=t", "--connector-token-env=C"},
+		func(string) string { return "" },
+		io.Discard,
+	)
+	if err != nil || s.GRPCAddress != "127.0.0.1:9095" || s.HTTPAddress != "127.0.0.1:8085" || s.Timeout != 30*time.Second ||
+		s.streamTimeout != 10*time.Minute || s.maxInFlight != 8 || s.TokenFile != "t" || s.TokenEnv != "" || s.ConnectorTokenEnv != "C" {
 		t.Fatalf("defaults: %+v %v", s, err)
 	}
-	if _, err := parse(nil, func(string) string { return "" }, io.Discard); err == nil || !strings.Contains(err.Error(), "FORGE_CODE_CONNECTOR_URL") {
+	if _, err := parse(
+		nil,
+		func(string) string { return "" },
+		io.Discard,
+	); err == nil ||
+		!strings.Contains(err.Error(), "FORGE_CODE_CONNECTOR_URL") {
 		t.Fatalf("missing connector URL: %v", err)
 	}
 }
@@ -78,6 +99,7 @@ func fakeProxy(t *testing.T) *httptest.Server {
 			http.Error(w, "proxy: Unauthorized", http.StatusUnauthorized)
 			return
 		}
+
 		switch r.URL.Path {
 		case "/connections":
 			fmt.Fprint(w, `{"connections":[
@@ -92,6 +114,7 @@ func fakeProxy(t *testing.T) *httptest.Server {
 		}
 	}))
 	t.Cleanup(s.Close)
+
 	return s
 }
 
@@ -101,6 +124,7 @@ func writeFile(t *testing.T, name, content string) string {
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
+
 	return path
 }
 
@@ -108,7 +132,11 @@ func TestRun(t *testing.T) {
 	p := fakeProxy(t)
 	t.Setenv("TEST_CONNECTOR_TOKEN", "client")
 	tokenFile := writeFile(t, "token", "service\n")
-	s, err := parse([]string{"--connector-url=" + p.URL, "--connector-token-env=TEST_CONNECTOR_TOKEN", "--token-file=" + tokenFile, "--grpc-listen=127.0.0.1:0", "--http-listen=127.0.0.1:0"}, func(string) string { return "" }, io.Discard)
+	s, err := parse(
+		[]string{"--connector-url=" + p.URL, "--connector-token-env=TEST_CONNECTOR_TOKEN", "--token-file=" + tokenFile, "--grpc-listen=127.0.0.1:0", "--http-listen=127.0.0.1:0"},
+		func(string) string { return "" },
+		io.Discard,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,11 +159,14 @@ func TestRun(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		defer resp.Body.Close()
 		body, _ := io.ReadAll(resp.Body)
+
 		return resp.StatusCode, string(body)
 	}
-	if code, body := rest("/v1/resolve?source=conn&repository=mrbean/teddy&revision=main", "service"); code != 200 || !strings.Contains(body, commitID) {
+	if code, body := rest("/v1/resolve?source=conn&repository=mrbean/teddy&revision=main", "service"); code != 200 ||
+		!strings.Contains(body, commitID) {
 		t.Fatalf("REST: %d %s", code, body)
 	}
 	if code, _ := rest("/v1/sources", "wrong"); code != http.StatusUnauthorized {
@@ -157,21 +188,28 @@ func TestRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer conn.Close()
 	rpcCtx := metadata.AppendToOutgoingContext(context.Background(), "authorization", "Bearer rotated")
-	c := pb.NewCodeClient(conn)
-	sources, err := c.ListSources(rpcCtx, &emptypb.Empty{})
+	c := pb.NewCodeServiceClient(conn)
+	sources, err := c.ListSources(rpcCtx, &pb.ListSourcesRequest{})
 	if err != nil || len(sources.GetSources()) != 2 || sources.GetSources()[0].GetId() != "conn" {
 		t.Fatalf("gRPC: %v %v", sources, err)
 	}
-	caps, err := c.GetCapabilities(rpcCtx, &pb.CapabilitiesRequest{Source: "conn"})
-	if err != nil || !caps.GetWrites() {
+
+	caps, err := c.GetCapabilities(rpcCtx, &pb.GetCapabilitiesRequest{Source: "conn"})
+	if err != nil || !caps.GetCapabilities().GetWrites() {
 		t.Fatalf("connections must carry their Git remote: %v %v", caps, err)
 	}
+
 	// The gRPC server accepts commit requests above the 4 MiB default; this
 	// one is rejected by the library for its invalid ref, not for its size.
-	_, err = c.CreateCommit(rpcCtx, &pb.CreateCommitRequest{Source: "conn", Repository: "mrbean/teddy", Ref: "main",
-		Changes: []*pb.FileChange{{Path: "f", Content: make([]byte, 16<<20)}}})
+	_, err = c.CreateCommit(rpcCtx, &pb.CreateCommitRequest{
+		Source:     "conn",
+		Repository: "mrbean/teddy",
+		Ref:        "main",
+		Changes:    []*pb.FileChange{{Path: "f", Content: make([]byte, 16<<20)}},
+	})
 	if status.Code(err) != codes.InvalidArgument {
 		t.Fatalf("16 MiB commit: %v", err)
 	}
@@ -184,15 +222,25 @@ func TestRun(t *testing.T) {
 
 func TestRunRequiresTokens(t *testing.T) {
 	t.Setenv("TEST_CONNECTOR_TOKEN", "client")
-	base := settings{connectorURL: "http://p", grpcAddress: "127.0.0.1:0", httpAddress: "127.0.0.1:0", timeout: time.Second, streamTimeout: time.Second, maxInFlight: 1}
+	base := settings{
+		Settings: servicekit.Settings{
+			ConnectorURL: "http://p",
+			GRPCAddress:  "127.0.0.1:0",
+			HTTPAddress:  "127.0.0.1:0",
+			Timeout:      time.Second,
+		},
+		streamTimeout: time.Second,
+		maxInFlight:   1,
+	}
 	for _, token := range []string{"", "two words"} {
 		s := base
-		s.tokenFile, s.connectorTokenEnv = writeFile(t, "token", token), "TEST_CONNECTOR_TOKEN"
+		s.TokenFile, s.ConnectorTokenEnv = writeFile(t, "token", token), "TEST_CONNECTOR_TOKEN"
 		if err := run(context.Background(), s, nil); err == nil || !strings.Contains(err.Error(), "service token") {
 			t.Errorf("service token %q: %v", token, err)
 		}
+
 		s = base
-		s.tokenFile, s.connectorTokenFile = writeFile(t, "token", "service"), writeFile(t, "connector", token)
+		s.TokenFile, s.ConnectorTokenFile = writeFile(t, "token", "service"), writeFile(t, "connector", token)
 		if err := run(context.Background(), s, nil); err == nil || !strings.Contains(err.Error(), "connector token") {
 			t.Errorf("connector token %q: %v", token, err)
 		}
@@ -201,24 +249,38 @@ func TestRunRequiresTokens(t *testing.T) {
 
 func TestRunStartupFailures(t *testing.T) {
 	t.Setenv("TEST_TOKEN", "service")
-	base := settings{connectorURL: "http://p", tokenEnv: "TEST_TOKEN", connectorTokenEnv: "TEST_TOKEN", grpcAddress: "127.0.0.1:0", httpAddress: "127.0.0.1:0", timeout: time.Second, streamTimeout: time.Second, maxInFlight: 1}
+	base := settings{
+		Settings: servicekit.Settings{
+			ConnectorURL:      "http://p",
+			TokenEnv:          "TEST_TOKEN",
+			ConnectorTokenEnv: "TEST_TOKEN",
+			GRPCAddress:       "127.0.0.1:0",
+			HTTPAddress:       "127.0.0.1:0",
+			Timeout:           time.Second,
+		},
+		streamTimeout: time.Second,
+		maxInFlight:   1,
+	}
 	s := base
-	s.connectorURL = "ftp://p"
+	s.ConnectorURL = "ftp://p"
 	if err := run(context.Background(), s, nil); err == nil || !strings.Contains(err.Error(), "connector URL") {
 		t.Errorf("ftp connector URL: %v", err)
 	}
+
 	busy, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer busy.Close()
 	s = base
-	s.grpcAddress = busy.Addr().String()
+	s.GRPCAddress = busy.Addr().String()
 	if err := run(context.Background(), s, nil); err == nil || !strings.Contains(err.Error(), "gRPC") {
 		t.Errorf("busy gRPC address: %v", err)
 	}
+
 	s = base
-	s.httpAddress = busy.Addr().String()
+	s.HTTPAddress = busy.Addr().String()
 	if err := run(context.Background(), s, nil); err == nil || !strings.Contains(err.Error(), "REST") {
 		t.Errorf("busy REST address: %v", err)
 	}

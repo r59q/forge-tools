@@ -20,15 +20,63 @@ import (
 )
 
 type remoteRepositories struct {
-	client   pb.RepositoriesClient
+	client   pb.RepositoriesServiceClient
 	token    forgeauth.Credentials
 	operator forgeauth.Credentials
 }
 
-func (s settings) repositoryReader(ctx context.Context, operator forgeauth.Credentials) (management.RepositoryReader, func(), error) {
+// backends connects to the configured backend services and leaves the others
+// unset in the config. The returned func closes every connection.
+func (s settings) backends(ctx context.Context, operator forgeauth.Credentials) (management.Config, func(), error) {
+	var closers []func()
+	closeAll := func() {
+		for _, c := range closers {
+			c()
+		}
+	}
+
+	repositoryReader, closeRepositories, err := s.repositoryReader(ctx, operator)
+	if err != nil {
+		return management.Config{}, nil, err
+	}
+
+	closers = append(closers, closeRepositories)
+	issueReader, closeIssues, err := s.issueReader(ctx, operator)
+	if err != nil {
+		closeAll()
+		return management.Config{}, nil, err
+	}
+
+	closers = append(closers, closeIssues)
+	pipelineReader, closePipelines, err := s.pipelineReader(ctx, operator)
+	if err != nil {
+		closeAll()
+		return management.Config{}, nil, err
+	}
+
+	closers = append(closers, closePipelines)
+
+	// Leave unset backends nil, not typed nil pointers.
+	var config management.Config
+	if repositoryReader != nil {
+		config.Repositories = repositoryReader
+	}
+	if issueReader != nil {
+		config.Issues = issueReader
+	}
+	if pipelineReader != nil {
+		config.Pipelines = pipelineReader
+	}
+
+	return config, closeAll, nil
+}
+
+// repositoryReader connects to forge-repositories, or returns nil if unset.
+func (s settings) repositoryReader(ctx context.Context, operator forgeauth.Credentials) (*remoteRepositories, func(), error) {
 	if s.repositoriesAddress == "" {
 		return nil, func() {}, nil
 	}
+
 	var token forgeauth.Credentials = forgeauth.EnvToken(s.repositoriesTokenEnv)
 	if s.repositoriesTokenFile != "" {
 		token = forgeauth.FileToken(s.repositoriesTokenFile)
@@ -36,23 +84,29 @@ func (s settings) repositoryReader(ctx context.Context, operator forgeauth.Crede
 	if _, err := secondToken(ctx, "repository service", token, operator); err != nil {
 		return nil, nil, err
 	}
+
 	conn, err := dial(s.repositoriesAddress, s.repositoriesInsecure)
 	if err != nil {
 		return nil, nil, errors.New("cannot initialize repository connection")
 	}
-	return &remoteRepositories{client: pb.NewRepositoriesClient(conn), token: token, operator: operator}, func() { _ = conn.Close() }, nil
+
+	reader := &remoteRepositories{client: pb.NewRepositoriesServiceClient(conn), token: token, operator: operator}
+
+	return reader, func() { _ = conn.Close() }, nil
 }
 
 type remoteIssues struct {
-	client   issuespb.IssuesClient
+	client   issuespb.IssuesServiceClient
 	token    forgeauth.Credentials
 	operator forgeauth.Credentials
 }
 
-func (s settings) issueReader(ctx context.Context, operator forgeauth.Credentials) (management.IssueReader, func(), error) {
+// issueReader connects to forge-issues, or returns nil if unset.
+func (s settings) issueReader(ctx context.Context, operator forgeauth.Credentials) (*remoteIssues, func(), error) {
 	if s.issuesAddress == "" {
 		return nil, func() {}, nil
 	}
+
 	var token forgeauth.Credentials = forgeauth.EnvToken(s.issuesTokenEnv)
 	if s.issuesTokenFile != "" {
 		token = forgeauth.FileToken(s.issuesTokenFile)
@@ -60,11 +114,15 @@ func (s settings) issueReader(ctx context.Context, operator forgeauth.Credential
 	if _, err := secondToken(ctx, "issue service", token, operator); err != nil {
 		return nil, nil, err
 	}
+
 	conn, err := dial(s.issuesAddress, s.issuesInsecure)
 	if err != nil {
 		return nil, nil, errors.New("cannot initialize issue connection")
 	}
-	return &remoteIssues{client: issuespb.NewIssuesClient(conn), token: token, operator: operator}, func() { _ = conn.Close() }, nil
+
+	reader := &remoteIssues{client: issuespb.NewIssuesServiceClient(conn), token: token, operator: operator}
+
+	return reader, func() { _ = conn.Close() }, nil
 }
 
 // dial connects to a backend over TLS, or plaintext on a trusted network.
@@ -73,6 +131,7 @@ func dial(address string, plaintext bool) (*grpc.ClientConn, error) {
 	if plaintext {
 		transport = insecure.NewCredentials()
 	}
+
 	return grpc.NewClient(address, grpc.WithTransportCredentials(transport))
 }
 
@@ -84,6 +143,7 @@ func secondToken(ctx context.Context, name string, source, operator forgeauth.Cr
 	if err != nil {
 		return "", fmt.Errorf("%s token required", name)
 	}
+
 	h := http.Header{}
 	h.Set("Authorization", "Bearer "+token)
 	if parsed, ok := forgeauth.AuthorizationToken(h, "Bearer"); !ok || parsed != token {
@@ -95,6 +155,7 @@ func secondToken(ctx context.Context, name string, source, operator forgeauth.Cr
 	if op, err := operator.Token(ctx); err != nil || op == token {
 		return "", fmt.Errorf("operator and %s tokens must be distinct", name)
 	}
+
 	return token, nil
 }
 
@@ -105,19 +166,24 @@ func (r *remoteRepositories) List(ctx context.Context, _ repositories.ListOption
 	if err != nil {
 		return nil, err
 	}
+
 	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs("authorization", "Bearer "+token))
 	response, err := r.client.ListRepositories(ctx, &pb.ListRepositoriesRequest{})
 	if err != nil {
 		return nil, err
 	}
+
 	out := make([]repositories.Repository, 0, len(response.GetRepositories()))
 	for _, v := range response.GetRepositories() {
 		source := v.GetSource()
 		out = append(out, repositories.Repository{
-			Source: repositories.SourceInfo{ID: source.GetId(), Kind: forgeauth.Kind(source.GetKind()), Host: source.GetHost()},
-			Path:   v.GetPath(), Description: v.GetDescription(), Visibility: repositories.Visibility(v.GetVisibility()),
+			Source:      repositories.SourceInfo{ID: source.GetId(), Kind: forgeauth.Kind(source.GetKind()), Host: source.GetHost()},
+			Path:        v.GetPath(),
+			Description: v.GetDescription(),
+			Visibility:  repositories.Visibility(v.GetVisibility()),
 		})
 	}
+
 	return out, nil
 }
 
@@ -128,28 +194,42 @@ func (r *remoteIssues) List(ctx context.Context, o issues.ListOptions) ([]issues
 	if err != nil {
 		return nil, err
 	}
+
 	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs("authorization", "Bearer "+token))
 	response, err := r.client.ListIssues(ctx, &issuespb.ListIssuesRequest{
-		Source: o.Source, Repository: o.Repository, State: string(o.State), Labels: o.Labels, Scope: string(o.Scope),
+		Source:     o.Source,
+		Repository: o.Repository,
+		State:      string(o.State),
+		Labels:     o.Labels,
+		Scope:      string(o.Scope),
 	})
 	if err != nil {
 		return nil, err
 	}
+
 	out := make([]issues.Issue, 0, len(response.GetIssues()))
 	for _, v := range response.GetIssues() {
 		source := v.GetSource()
 		i := issues.Issue{
 			Source:     issues.SourceInfo{ID: source.GetId(), Kind: forgeauth.Kind(source.GetKind()), Host: source.GetHost()},
-			Repository: v.GetRepository(), Number: v.GetNumber(), Title: v.GetTitle(), State: issues.State(v.GetState()),
-			Author: issues.User{Login: v.GetAuthor().GetLogin()}, Labels: v.GetLabels(), Comments: int(v.GetComments()),
+			Repository: v.GetRepository(),
+			Number:     v.GetNumber(),
+			Title:      v.GetTitle(),
+			State:      issues.State(v.GetState()),
+			Author:     issues.User{Login: v.GetAuthor().GetLogin()},
+			Labels:     v.GetLabels(),
+			Comments:   int(v.GetComments()),
 		}
 		for _, a := range v.GetAssignees() {
 			i.Assignees = append(i.Assignees, issues.User{Login: a.GetLogin()})
 		}
+
 		if v.GetUpdatedAt() != nil {
 			i.UpdatedAt = v.GetUpdatedAt().AsTime()
 		}
+
 		out = append(out, i)
 	}
+
 	return out, nil
 }

@@ -55,6 +55,7 @@ func endpoint(repoURL, path string) (*url.URL, error) {
 		u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" {
 		return nil, errors.New("gitwire: invalid repository URL")
 	}
+
 	return u.JoinPath(path), nil
 }
 
@@ -64,19 +65,22 @@ func do(hc *http.Client, req *http.Request, mediaType string) (*http.Response, e
 	if hc == nil {
 		hc = http.DefaultClient
 	}
+
 	resp, err := hc.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	if err := forgehttp.CheckResponse(resp); err != nil {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		return nil, err
 	}
+
 	if mt, _, _ := mime.ParseMediaType(resp.Header.Get("Content-Type")); mt != mediaType {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		return nil, fmt.Errorf("%w: %s %s: content type %q, want %s",
 			ErrProtocol, req.Method, forgehttp.RedactURL(req.URL), clean([]byte(mt)), mediaType)
 	}
+
 	return resp, nil
 }
 
@@ -86,8 +90,10 @@ func newRequest(ctx context.Context, method string, u *url.URL, body io.Reader) 
 	if err != nil {
 		return nil, err
 	}
+
 	req.Header.Set("Cache-Control", "no-cache")
 	req.Header.Set("Pragma", "no-cache")
+
 	return req, nil
 }
 
@@ -99,11 +105,13 @@ func clean(b []byte) string {
 		if r < 0x20 || r == 0x7f {
 			return ' '
 		}
+
 		return r
 	}, s)
 	if len(s) > maxMessage {
 		s = strings.ToValidUTF8(s[:maxMessage], "") + "..."
 	}
+
 	return s
 }
 

@@ -30,26 +30,42 @@ func New(store Store, sources ...Source) (*Client, error) {
 	if store == nil {
 		return nil, ErrInvalid
 	}
+
 	c := &Client{store: store, sources: map[string]*forgeauth.Session{}}
 	for _, s := range sources {
 		if strings.TrimSpace(s.ID) == "" || s.Session == nil || s.Session.Client == nil || c.sources[s.ID] != nil {
 			return nil, ErrInvalid
 		}
+
 		switch s.Session.Kind {
 		case forgeauth.GitHub, forgeauth.GitLab, forgeauth.Forgejo:
 		default:
 			return nil, ErrUnsupported
 		}
+
 		c.sources[s.ID] = s.Session
 	}
+
 	return c, nil
 }
-func id() string { var b [16]byte; _, _ = rand.Read(b[:]); return hex.EncodeToString(b[:]) }
+
+func id() string {
+	var b [16]byte
+	_, _ = rand.Read(b[:])
+
+	return hex.EncodeToString(b[:])
+}
 
 // CreateSubject captures a fixed snapshot and returns the existing subject for
 // identical input. Connected snapshots never refetch their content on reads.
 func (c *Client) CreateSubject(ctx context.Context, in Input) (Subject, error) {
-	s := Subject{Kind: in.Kind, Ref: in.Ref, Patch: in.Patch, Context: append([]FileContext(nil), in.Context...), Completeness: "supplied"}
+	s := Subject{
+		Kind:         in.Kind,
+		Ref:          in.Ref,
+		Patch:        in.Patch,
+		Context:      append([]FileContext(nil), in.Context...),
+		Completeness: "supplied",
+	}
 	switch in.Kind {
 	case "patch":
 		if in.Ref != (Ref{}) || in.From != "" || in.To != "" {
@@ -65,21 +81,25 @@ func (c *Client) CreateSubject(ctx context.Context, in Input) (Subject, error) {
 	default:
 		return Subject{}, ErrInvalid
 	}
+
 	parsed, err := parsePatch(s.Patch)
 	if err != nil {
 		return Subject{}, err
 	}
+
 	s.Files = parsed.files
 	sort.Slice(s.Context, func(i, j int) bool {
 		a, b := s.Context[i], s.Context[j]
 		if a.Path == b.Path {
 			return a.Side < b.Side
 		}
+
 		return a.Path < b.Path
 	})
 	if err = checkContext(s, parsed); err != nil {
 		return Subject{}, err
 	}
+
 	data, _ := json.Marshal(s)
 	hash := sha256.Sum256(data)
 	s.ID = hex.EncodeToString(hash[:])
@@ -90,8 +110,10 @@ func (c *Client) CreateSubject(ctx context.Context, in Input) (Subject, error) {
 		} else {
 			st.Subjects[s.ID] = s
 		}
+
 		return nil
 	})
+
 	return s, err
 }
 
@@ -101,10 +123,12 @@ func (c *Client) GetSubject(ctx context.Context, subjectID string) (Subject, err
 	if err != nil {
 		return Subject{}, err
 	}
+
 	s, ok := st.Subjects[subjectID]
 	if !ok {
 		return Subject{}, ErrNotFound
 	}
+
 	return s, nil
 }
 
@@ -114,14 +138,25 @@ func (c *Client) RequestReview(ctx context.Context, subjectID, reviewer string) 
 	if strings.TrimSpace(reviewer) == "" {
 		return Review{}, ErrInvalid
 	}
-	r := Review{ID: id(), SubjectID: subjectID, Reviewer: reviewer, Storage: "local", Status: "requested", CreatedAt: time.Now().UTC()}
+
+	r := Review{
+		ID:        id(),
+		SubjectID: subjectID,
+		Reviewer:  reviewer,
+		Storage:   "local",
+		Status:    StatusRequested,
+		CreatedAt: time.Now().UTC(),
+	}
 	err := c.store.Update(ctx, func(st *State) error {
 		if _, ok := st.Subjects[subjectID]; !ok {
 			return ErrNotFound
 		}
+
 		st.Reviews[r.ID] = r
+
 		return nil
 	})
+
 	return r, err
 }
 
@@ -131,31 +166,38 @@ func (c *Client) GetReview(ctx context.Context, reviewID string) (Review, error)
 	if err != nil {
 		return Review{}, err
 	}
+
 	r, ok := st.Reviews[reviewID]
 	if !ok {
 		return Review{}, ErrNotFound
 	}
+
 	return r, nil
 }
 
 // ListReviews filters local assignments. Empty filters match every value.
 func (c *Client) ListReviews(ctx context.Context, subjectID, reviewer, status string) ([]Review, error) {
-	if status != "" && status != "requested" && !assessment(status) {
+	if status != "" && status != StatusRequested && !assessment(status) {
 		return nil, ErrInvalid
 	}
+
 	st, err := c.store.Read(ctx)
 	if err != nil {
 		return nil, err
 	}
+
 	out := []Review{}
 	for _, r := range st.Reviews {
 		if (subjectID == "" || r.SubjectID == subjectID) && (reviewer == "" || r.Reviewer == reviewer) && (status == "" || r.Status == status) {
 			out = append(out, r)
 		}
 	}
+
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+
 	return out, nil
 }
+
 func (c *Client) update(ctx context.Context, rid string, fn func(*Review, Subject) error) (Review, error) {
 	var out Review
 	err := c.store.Update(ctx, func(st *State) error {
@@ -166,10 +208,13 @@ func (c *Client) update(ctx context.Context, rid string, fn func(*Review, Subjec
 		if err := fn(&r, st.Subjects[r.SubjectID]); err != nil {
 			return err
 		}
+
 		st.Reviews[rid] = r
 		out = r
+
 		return nil
 	})
+
 	return out, err
 }
 
@@ -179,19 +224,33 @@ func (c *Client) AddComment(ctx context.Context, rid, author, body string, a *An
 	if strings.TrimSpace(author) == "" || strings.TrimSpace(body) == "" {
 		return Review{}, ErrInvalid
 	}
+
 	return c.update(ctx, rid, func(r *Review, s Subject) error {
-		if r.Status != "requested" {
+		if r.Status != StatusRequested {
 			return ErrConflict
 		}
 		if err := ValidateAnchor(s, a); err != nil {
 			return err
 		}
+
 		var anchor *Anchor
 		if a != nil {
 			v := *a
 			anchor = &v
 		}
-		r.Threads = append(r.Threads, Thread{ID: id(), SubjectID: s.ID, Anchor: anchor, Comments: []Comment{{ID: id(), Author: author, Body: body, CreatedAt: time.Now().UTC()}}})
+
+		r.Threads = append(r.Threads, Thread{
+			ID:        id(),
+			SubjectID: s.ID,
+			Anchor:    anchor,
+			Comments: []Comment{{
+				ID:        id(),
+				Author:    author,
+				Body:      body,
+				CreatedAt: time.Now().UTC(),
+			}},
+		})
+
 		return nil
 	})
 }
@@ -201,13 +260,20 @@ func (c *Client) Reply(ctx context.Context, rid, tid, author, body string) (Revi
 	if strings.TrimSpace(author) == "" || strings.TrimSpace(body) == "" {
 		return Review{}, ErrInvalid
 	}
+
 	return c.update(ctx, rid, func(r *Review, _ Subject) error {
 		for i := range r.Threads {
 			if r.Threads[i].ID == tid {
-				r.Threads[i].Comments = append(r.Threads[i].Comments, Comment{ID: id(), Author: author, Body: body, CreatedAt: time.Now().UTC()})
+				r.Threads[i].Comments = append(r.Threads[i].Comments, Comment{
+					ID:        id(),
+					Author:    author,
+					Body:      body,
+					CreatedAt: time.Now().UTC(),
+				})
 				return nil
 			}
 		}
+
 		return ErrNotFound
 	})
 }
@@ -221,11 +287,13 @@ func (c *Client) Resolve(ctx context.Context, rid, tid string, resolved bool) (R
 				return nil
 			}
 		}
+
 		return ErrNotFound
 	})
 }
+
 func assessment(s string) bool {
-	return s == "commented" || s == "approved" || s == "changes_requested"
+	return s == StatusCommented || s == StatusApproved || s == StatusChangesRequested
 }
 
 // Submit records the assigned reviewer's final assessment. Repeated identical
@@ -234,20 +302,25 @@ func (c *Client) Submit(ctx context.Context, rid, status, body string) (Review, 
 	if !assessment(status) {
 		return Review{}, ErrInvalid
 	}
+
 	return c.update(ctx, rid, func(r *Review, _ Subject) error {
-		if r.Status != "requested" {
+		if r.Status != StatusRequested {
 			if r.Status == status && r.Body == body {
 				return nil
 			}
+
 			return ErrConflict
 		}
-		if status != "approved" && strings.TrimSpace(body) == "" && len(r.Threads) == 0 {
+
+		if status != StatusApproved && strings.TrimSpace(body) == "" && len(r.Threads) == 0 {
 			return ErrInvalid
 		}
+
 		r.Status = status
 		r.Body = body
 		now := time.Now().UTC()
 		r.SubmittedAt = &now
+
 		return nil
 	})
 }

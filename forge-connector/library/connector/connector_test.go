@@ -37,6 +37,7 @@ func (b fakeBroker) Connection(_ context.Context, id broker.ID) (forgeauth.Conne
 	if c, ok := b.forges[id]; ok {
 		return c, nil
 	}
+
 	return forgeauth.Connection{}, broker.ErrNotFound
 }
 
@@ -44,18 +45,25 @@ func (b fakeBroker) VerifyClient(_ context.Context, token forgeauth.StaticToken,
 	if token != clientToken {
 		return broker.Client{}, broker.ErrUnauthorized
 	}
+
 	return broker.Client{}, nil
 }
 
 func (b fakeBroker) IssueToken(ctx context.Context, id broker.ID) (broker.IssuedToken, error) {
 	c, err := b.Connection(ctx, id)
-	return broker.IssuedToken{Kind: c.Kind, BaseURL: c.BaseURL, GitBaseURL: b.git, Token: forgeToken}, err
+	return broker.IssuedToken{
+		Kind:       c.Kind,
+		BaseURL:    c.BaseURL,
+		GitBaseURL: b.git,
+		Token:      forgeToken,
+	}, err
 }
 
 func (b fakeBroker) ClientConnections(_ context.Context, token forgeauth.StaticToken) ([]broker.ClientConnection, error) {
 	if token != clientToken {
 		return nil, broker.ErrUnauthorized
 	}
+
 	return b.connections, nil
 }
 
@@ -71,6 +79,7 @@ func setup(t *testing.T) string {
 			http.Error(w, `{"message":"no"}`, http.StatusUnauthorized)
 			return
 		}
+
 		fmt.Fprintf(w, `{"path":%q}`, r.URL.Path)
 	}))
 	t.Cleanup(forge.Close)
@@ -81,10 +90,27 @@ func setup(t *testing.T) string {
 			"gl": {Kind: forgeauth.GitLab, BaseURL: forge.URL + "/api/v4"},
 		},
 		connections: []broker.ClientConnection{
-			{ID: "gh", Name: "me", Kind: forgeauth.GitHub, Status: broker.StatusOK},
-			{ID: "gl", Kind: forgeauth.GitLab, Status: broker.StatusOK},
-			{ID: "old", Kind: forgeauth.GitHub, Status: broker.StatusRevoked},
-			{ID: "svn", Kind: "svn", Status: broker.StatusOK},
+			{
+				ID:     "gh",
+				Name:   "me",
+				Kind:   forgeauth.GitHub,
+				Status: broker.StatusOK,
+			},
+			{
+				ID:     "gl",
+				Kind:   forgeauth.GitLab,
+				Status: broker.StatusOK,
+			},
+			{
+				ID:     "old",
+				Kind:   forgeauth.GitHub,
+				Status: broker.StatusRevoked,
+			},
+			{
+				ID:     "svn",
+				Kind:   "svn",
+				Status: broker.StatusOK,
+			},
 		},
 	}
 	reg := &forgeauth.Registry{}
@@ -93,12 +119,20 @@ func setup(t *testing.T) string {
 			t.Fatal(err)
 		}
 	}
-	h, err := proxy.New(proxy.Config{Verifier: b, TokenIssuer: b, Connections: b, Registry: reg})
+
+	h, err := proxy.New(proxy.Config{
+		Verifier:    b,
+		TokenIssuer: b,
+		Connections: b,
+		Registry:    reg,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	p := httptest.NewServer(h)
 	t.Cleanup(p.Close)
+
 	return p.URL
 }
 
@@ -108,10 +142,12 @@ func TestConnections(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	conns, err := c.Connections(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	var got []string
 	for _, conn := range conns {
 		// The session reaches the forge with the forge token, not the client token.
@@ -119,8 +155,10 @@ func TestConnections(t *testing.T) {
 		if err := conn.Session.GetJSON(context.Background(), "/user", &body); err != nil {
 			t.Fatalf("%s: %v", conn.ID, err)
 		}
+
 		got = append(got, fmt.Sprintf("%s %s %q %s", conn.ID, conn.Kind, conn.Name, body.Path))
 	}
+
 	if want := `gh github "me" /user, gl gitlab "" /api/v4/user`; strings.Join(got, ", ") != want {
 		t.Fatalf("connections = %q, want %q", got, want)
 	}
@@ -129,18 +167,22 @@ func TestConnections(t *testing.T) {
 func TestConnectionsErrors(t *testing.T) {
 	proxyURL := setup(t)
 	c, _ := connector.New(connector.Config{URL: proxyURL, Credentials: forgeauth.StaticToken("wrong-secret")})
-	if _, err := c.Connections(context.Background()); !errors.Is(err, forgehttp.ErrUnauthorized) || strings.Contains(err.Error(), "wrong-secret") {
+	if _, err := c.Connections(context.Background()); !errors.Is(err, forgehttp.ErrUnauthorized) ||
+		strings.Contains(err.Error(), "wrong-secret") {
 		t.Fatalf("wrong token: %v", err)
 	}
+
 	c, _ = connector.New(connector.Config{URL: proxyURL, Credentials: forgeauth.EnvToken("CONNECTOR_TEST_UNSET")})
 	if _, err := c.Connections(context.Background()); !errors.Is(err, forgeauth.ErrNoToken) {
 		t.Fatalf("missing token: %v", err)
 	}
+
 	for _, u := range []string{"", "ftp://proxy", "http://user:pass@proxy", "http://proxy?x=1", "http://proxy#f"} {
 		if _, err := connector.New(connector.Config{URL: u, Credentials: forgeauth.StaticToken(clientToken)}); !errors.Is(err, broker.ErrInvalid) {
 			t.Errorf("URL %q: %v", u, err)
 		}
 	}
+
 	if _, err := connector.New(connector.Config{URL: proxyURL}); !errors.Is(err, broker.ErrInvalid) {
 		t.Error("missing credentials accepted")
 	}
@@ -157,22 +199,27 @@ func TestConnectionGit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	conns, err := c.Connections(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	for _, conn := range conns {
 		if want := proxyURL + "/g/" + string(conn.ID); conn.Git == nil || conn.Git.BaseURL != want {
 			t.Fatalf("%s: Git = %+v, want base %s", conn.ID, conn.Git, want)
 		}
+
 		repo, err := conn.Git.URL("group/repo")
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		resp, err := conn.Git.Client.Get(repo + "/info/refs?service=git-upload-pack")
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if resp.StatusCode != 200 || string(body) != `{"path":"/git/group/repo.git/info/refs"}` {

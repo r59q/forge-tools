@@ -17,7 +17,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 // Default cache lifetimes.
@@ -37,7 +36,7 @@ const (
 // BrokerConfig configures a Broker.
 type BrokerConfig struct {
 	// Client calls the broker.
-	Client pb.BrokerClient
+	Client pb.BrokerServiceClient
 	// Credentials is the proxy's own client token. The client needs
 	// CanIssueTokens for every connection the proxy serves. It is read on each
 	// broker call, so rotating the source takes effect without a restart.
@@ -59,7 +58,7 @@ type BrokerConfig struct {
 // proxy.ConnectionLister with a broker gRPC
 // client and in-memory caches. It is safe for concurrent use.
 type Broker struct {
-	client    pb.BrokerClient
+	client    pb.BrokerServiceClient
 	creds     forgeauth.Credentials
 	tokenTTL  time.Duration
 	verifyTTL time.Duration
@@ -87,20 +86,27 @@ func NewBroker(c BrokerConfig) (*Broker, error) {
 	if c.Client == nil || c.Credentials == nil || c.TokenTTL < 0 || c.VerifyTTL < 0 || c.Timeout < 0 {
 		return nil, broker.ErrInvalid
 	}
+
 	now := c.Now
 	if now == nil {
 		now = time.Now
 	}
+
 	logger := c.Logger
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
 	}
+
 	return &Broker{
-		client: c.Client, creds: c.Credentials,
-		tokenTTL: c.TokenTTL, verifyTTL: c.VerifyTTL, denyTTL: min(c.VerifyTTL, maxDenyTTL),
-		timeout: c.Timeout, log: logger,
-		tokens:   newCache[broker.IssuedToken](now, maxTokens),
-		verified: newCache[verdict](now, maxVerified),
+		client:    c.Client,
+		creds:     c.Credentials,
+		tokenTTL:  c.TokenTTL,
+		verifyTTL: c.VerifyTTL,
+		denyTTL:   min(c.VerifyTTL, maxDenyTTL),
+		timeout:   c.Timeout,
+		log:       logger,
+		tokens:    newCache[broker.IssuedToken](now, maxTokens),
+		verified:  newCache[verdict](now, maxVerified),
 	}, nil
 }
 
@@ -113,29 +119,36 @@ func (b *Broker) Connection(ctx context.Context, id broker.ID) (forgeauth.Connec
 	if err != nil {
 		return forgeauth.Connection{}, err
 	}
+
 	return forgeauth.Connection{Kind: issued.Kind, BaseURL: issued.BaseURL}, nil
 }
 
 // IssueToken returns the connection's forge token, from the cache when fresh.
 func (b *Broker) IssueToken(ctx context.Context, id broker.ID) (broker.IssuedToken, error) {
-	if issued, ok := b.tokens.get(string(id)); ok {
-		return issued, nil
+	if issued := b.tokens.get(string(id)); issued != nil {
+		return *issued, nil
 	}
+
 	ctx, cancel := b.withTimeout(ctx)
 	defer cancel()
 	ctx, err := b.ownContext(ctx)
 	if err != nil {
 		return broker.IssuedToken{}, err
 	}
+
 	resp, err := b.client.IssueToken(ctx, &pb.IssueTokenRequest{ConnectionId: string(id)})
 	if err != nil {
 		return broker.IssuedToken{}, b.issueError(id, err)
 	}
+
 	issued := broker.IssuedToken{
-		Kind: forgeauth.Kind(resp.GetKind()), BaseURL: resp.GetBaseUrl(), GitBaseURL: resp.GetGitBaseUrl(),
-		Token: forgeauth.StaticToken(resp.GetToken()),
+		Kind:       forgeauth.Kind(resp.GetKind()),
+		BaseURL:    resp.GetBaseUrl(),
+		GitBaseURL: resp.GetGitBaseUrl(),
+		Token:      forgeauth.StaticToken(resp.GetToken()),
 	}
 	b.tokens.set(string(id), issued, b.tokenTTL)
+
 	return issued, nil
 }
 
@@ -150,12 +163,14 @@ func (b *Broker) VerifyClient(ctx context.Context, token forgeauth.StaticToken, 
 	if !metadataSafe(string(token)) {
 		return broker.Client{}, broker.ErrUnauthorized
 	}
+
 	// Hash the caller token so the cache never holds it.
 	sum := sha256.Sum256([]byte(token))
 	key := hex.EncodeToString(sum[:]) + "/" + string(id)
-	if v, ok := b.verified.get(key); ok {
+	if v := b.verified.get(key); v != nil {
 		return v.client, v.err
 	}
+
 	ctx, cancel := b.withTimeout(ctx)
 	defer cancel()
 	ctx = bearer(ctx, string(token))
@@ -165,17 +180,24 @@ func (b *Broker) VerifyClient(ctx context.Context, token forgeauth.StaticToken, 
 		if errors.Is(err, broker.ErrUnauthorized) || errors.Is(err, broker.ErrForbidden) {
 			b.verified.set(key, verdict{err: err}, b.denyTTL)
 		}
+
 		return broker.Client{}, err
 	}
-	ids := make([]broker.ID, len(resp.GetConnectionIds()))
-	for i, cid := range resp.GetConnectionIds() {
+
+	verified := resp.GetClient()
+	ids := make([]broker.ID, len(verified.GetConnectionIds()))
+	for i, cid := range verified.GetConnectionIds() {
 		ids[i] = broker.ID(cid)
 	}
+
 	client := broker.Client{
-		ID: broker.ID(resp.GetId()), Name: resp.GetName(),
-		Connections: ids, CanIssueTokens: resp.GetCanIssueTokens(),
+		ID:             broker.ID(verified.GetId()),
+		Name:           verified.GetName(),
+		Connections:    ids,
+		CanIssueTokens: verified.GetCanIssueTokens(),
 	}
 	b.verified.set(key, verdict{client: client}, b.verifyTTL)
+
 	return client, nil
 }
 
@@ -185,19 +207,24 @@ func (b *Broker) ClientConnections(ctx context.Context, token forgeauth.StaticTo
 	if !metadataSafe(string(token)) {
 		return nil, broker.ErrUnauthorized
 	}
+
 	ctx, cancel := b.withTimeout(ctx)
 	defer cancel()
-	resp, err := b.client.ListClientConnections(bearer(ctx, string(token)), &emptypb.Empty{})
+	resp, err := b.client.ListClientConnections(bearer(ctx, string(token)), &pb.ListClientConnectionsRequest{})
 	if err != nil {
 		return nil, brokerError(err)
 	}
+
 	result := make([]broker.ClientConnection, len(resp.GetConnections()))
 	for i, c := range resp.GetConnections() {
 		result[i] = broker.ClientConnection{
-			ID: broker.ID(c.GetId()), Name: c.GetName(),
-			Kind: forgeauth.Kind(c.GetKind()), Status: broker.Status(c.GetStatus()),
+			ID:     broker.ID(c.GetId()),
+			Name:   c.GetName(),
+			Kind:   forgeauth.Kind(c.GetKind()),
+			Status: broker.Status(c.GetStatus()),
 		}
 	}
+
 	return result, nil
 }
 
@@ -205,6 +232,7 @@ func (b *Broker) withTimeout(ctx context.Context) (context.Context, context.Canc
 	if b.timeout > 0 {
 		return context.WithTimeout(ctx, b.timeout)
 	}
+
 	return ctx, func() {}
 }
 
@@ -214,6 +242,7 @@ func (b *Broker) ownContext(ctx context.Context) (context.Context, error) {
 		b.log.Error("proxy broker token unavailable")
 		return nil, broker.ErrUnavailable
 	}
+
 	return bearer(ctx, token), nil
 }
 
@@ -229,11 +258,13 @@ func metadataSafe(token string) bool {
 	if token == "" {
 		return false
 	}
+
 	for i := range token {
 		if token[i] <= ' ' || token[i] >= 0x7f {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -249,6 +280,7 @@ func (b *Broker) issueError(id broker.ID, err error) error {
 		b.log.Warn("proxy client lacks access or CanIssueTokens", "connection", string(id))
 		return broker.ErrNotFound
 	}
+
 	return brokerError(err)
 }
 
@@ -258,6 +290,7 @@ func brokerError(err error) error {
 	if errors.Is(err, context.DeadlineExceeded) {
 		return context.DeadlineExceeded
 	}
+
 	switch status.Code(err) {
 	case codes.Unauthenticated:
 		return broker.ErrUnauthorized
@@ -268,5 +301,6 @@ func brokerError(err error) error {
 	case codes.DeadlineExceeded:
 		return context.DeadlineExceeded
 	}
+
 	return broker.ErrUnavailable
 }

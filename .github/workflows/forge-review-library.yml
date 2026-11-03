@@ -9,12 +9,14 @@ on:
       - forge-core/forgeapi/**
       - .github/workflows/forge-review-library.yml
       - .github/workflows/reusable-go.yml
+      - .golangci.yml
   pull_request:
     paths:
       - forge-review/library/**
       - forge-core/forgeapi/**
       - .github/workflows/forge-review-library.yml
       - .github/workflows/reusable-go.yml
+      - .golangci.yml
   workflow_dispatch:
 
 permissions:

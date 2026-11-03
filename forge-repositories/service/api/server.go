@@ -3,22 +3,15 @@ package api
 
 import (
 	"context"
-	"crypto/sha256"
-	"crypto/subtle"
 	"errors"
 	"net/http"
 	"time"
 
-	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/r59q/forge-tools/forge-core/forgeapi/forgeauth"
-	"github.com/r59q/forge-tools/forge-core/forgeapi/forgehttp"
+	"github.com/r59q/forge-tools/forge-core/servicekit"
 	"github.com/r59q/forge-tools/forge-repositories/library/repositories"
 	pb "github.com/r59q/forge-tools/forge-repositories/service/repositoriespb"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -30,11 +23,13 @@ var ErrInvalid = errors.New("api: invalid configuration")
 // It never logs requests, responses, credentials or upstream errors, and
 // returns only a status code to callers.
 type Server struct {
-	pb.UnimplementedRepositoriesServer
+	pb.UnimplementedRepositoriesServiceServer
 	sources Sources
 	token   forgeauth.Credentials
 	timeout time.Duration
 }
+
+// jscpd:ignore-start - each service wraps its own library client.
 
 // Sources returns a client for the current sources. The server calls it once
 // per RPC, so sources may change while it runs. Errors map to Unavailable
@@ -53,105 +48,49 @@ func New(sources Sources, token forgeauth.Credentials, timeout time.Duration) (*
 	if sources == nil || token == nil || timeout <= 0 {
 		return nil, ErrInvalid
 	}
+
 	return &Server{sources: sources, token: token, timeout: timeout}, nil
 }
+
+// jscpd:ignore-end
 
 // REST registers generated routes. Authorization is the sole forwarded header;
 // Grpc-Metadata-* headers cannot inject credentials. Errors never echo input
 // or forge responses. Responses are not cached.
 func (s *Server) REST(ctx context.Context) (http.Handler, error) {
-	mux := runtime.NewServeMux(
-		runtime.WithMarshalerOption(runtime.MIMEWildcard, &runtime.JSONPb{UnmarshalOptions: protojson.UnmarshalOptions{DiscardUnknown: false}}),
-		runtime.WithIncomingHeaderMatcher(func(string) (string, bool) { return "", false }),
-		runtime.WithErrorHandler(func(ctx context.Context, mux *runtime.ServeMux, marshaler runtime.Marshaler, w http.ResponseWriter, r *http.Request, err error) {
-			code := status.Code(err)
-			if code == codes.Unknown {
-				code = codes.Internal
-			}
-			runtime.DefaultHTTPErrorHandler(ctx, mux, marshaler, w, r, status.Error(code, code.String()))
-		}),
-	)
-	if err := pb.RegisterRepositoriesHandlerServer(ctx, mux, s); err != nil {
+	mux := servicekit.NewMux(false)
+	if err := pb.RegisterRepositoriesServiceHandlerServer(ctx, mux, s); err != nil {
 		return nil, err
 	}
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "no-store")
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-		mux.ServeHTTP(w, r)
-	}), nil
+
+	return servicekit.Secure(mux), nil
 }
 
-func (s *Server) authorize(ctx context.Context) error {
-	md, _ := metadata.FromIncomingContext(ctx)
-	h := http.Header{}
-	for _, value := range md.Get("authorization") {
-		h.Add("Authorization", value)
-	}
-	token, ok := forgeauth.AuthorizationToken(h, "Bearer")
-	if !ok {
-		return status.Error(codes.Unauthenticated, "authentication required")
-	}
-	expected, err := s.token.Token(ctx)
-	if err != nil || expected == "" {
-		return status.Error(codes.Unauthenticated, "authentication required")
-	}
-	a, b := sha256.Sum256([]byte(token)), sha256.Sum256([]byte(expected))
-	if subtle.ConstantTimeCompare(a[:], b[:]) != 1 {
-		return status.Error(codes.Unauthenticated, "authentication required")
-	}
-	return nil
+// call runs one authorized unary RPC within the timeout.
+func call[T any](s *Server, ctx context.Context, fn func(context.Context, *repositories.Client) (*T, error)) (*T, error) {
+	return servicekit.Call(ctx, servicekit.RPC[*repositories.Client]{
+		Timeout: s.timeout,
+		Token:   s.token,
+		Client:  s.sources,
+		Code:    code,
+	}, fn)
 }
 
-func call[T any](s *Server, ctx context.Context, fn func(context.Context, *repositories.Client) (T, error)) (T, error) {
-	var zero T
-	ctx, cancel := context.WithTimeout(ctx, s.timeout)
-	defer cancel()
-	if err := s.authorize(ctx); err != nil {
-		return zero, err
+// code maps context errors, then library errors, then forge errors, to a
+// status code.
+func code(err error) codes.Code {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return servicekit.ForgeCode(err)
 	}
-	client, err := s.sources(ctx)
-	if err != nil {
-		if ctx.Err() != nil {
-			return zero, rpcError(ctx.Err())
-		}
-		return zero, status.Error(codes.Unavailable, codes.Unavailable.String())
-	}
-	result, err := fn(ctx, client)
-	if err != nil {
-		return zero, rpcError(err)
-	}
-	return result, nil
-}
 
-// rpcError maps library and forge errors to a bare status code. A forge
-// rejecting the service's own credentials is Unavailable, not
-// Unauthenticated, so callers do not mistake it for a bad service token.
-func rpcError(err error) error {
-	code := codes.Unavailable
-	var forgeErr *forgehttp.Error
 	switch {
-	case errors.Is(err, context.Canceled):
-		code = codes.Canceled
-	case errors.Is(err, context.DeadlineExceeded):
-		code = codes.DeadlineExceeded
 	case errors.Is(err, repositories.ErrInvalid), errors.Is(err, repositories.ErrUnknownSource):
-		code = codes.InvalidArgument
+		return codes.InvalidArgument
 	case errors.Is(err, repositories.ErrAmbiguous):
-		code = codes.FailedPrecondition
-	case errors.Is(err, forgehttp.ErrNotFound):
-		code = codes.NotFound
-	case errors.Is(err, forgehttp.ErrForbidden):
-		code = codes.PermissionDenied
-	case errors.Is(err, forgehttp.ErrRateLimited):
-		code = codes.ResourceExhausted
-	case errors.Is(err, forgehttp.ErrConflict):
-		code = codes.FailedPrecondition
-	case errors.As(err, &forgeErr) && (forgeErr.StatusCode == http.StatusBadRequest || forgeErr.StatusCode == http.StatusUnprocessableEntity):
-		// The forge rejected the update, such as an unknown default branch.
-		code = codes.InvalidArgument
+		return codes.FailedPrecondition
 	}
-	return status.Error(code, code.String())
+
+	return servicekit.ForgeCode(err)
 }
 
 func repository(r repositories.Repository) *pb.Repository {
@@ -176,6 +115,7 @@ func repository(r repositories.Repository) *pb.Repository {
 	if !r.UpdatedAt.IsZero() {
 		out.UpdatedAt = timestamppb.New(r.UpdatedAt)
 	}
+
 	return out
 }
 
@@ -187,12 +127,13 @@ func ref(r interface {
 }
 
 // ListSources lists source IDs and kinds, without URLs or credentials.
-func (s *Server) ListSources(ctx context.Context, _ *emptypb.Empty) (*pb.ListSourcesResponse, error) {
+func (s *Server) ListSources(ctx context.Context, _ *pb.ListSourcesRequest) (*pb.ListSourcesResponse, error) {
 	return call(s, ctx, func(_ context.Context, client *repositories.Client) (*pb.ListSourcesResponse, error) {
 		result := &pb.ListSourcesResponse{}
 		for _, src := range client.Sources() {
 			result.Sources = append(result.Sources, &pb.Source{Id: src.ID, Kind: string(src.Session.Kind)})
 		}
+
 		return result, nil
 	})
 }
@@ -205,46 +146,54 @@ func (s *Server) ListRepositories(ctx context.Context, r *pb.ListRepositoriesReq
 		for _, v := range values {
 			result.Repositories = append(result.Repositories, repository(v))
 		}
+
 		return result, err
 	})
 }
 
 // GetRepository reads one repository by path.
-func (s *Server) GetRepository(ctx context.Context, r *pb.RepositoryRequest) (*pb.Repository, error) {
-	return call(s, ctx, func(ctx context.Context, client *repositories.Client) (*pb.Repository, error) {
+func (s *Server) GetRepository(ctx context.Context, r *pb.GetRepositoryRequest) (*pb.GetRepositoryResponse, error) {
+	return call(s, ctx, func(ctx context.Context, client *repositories.Client) (*pb.GetRepositoryResponse, error) {
 		v, err := client.Get(ctx, ref(r))
-		return repository(v), err
+		return &pb.GetRepositoryResponse{Repository: repository(v)}, err
 	})
 }
 
 // UpdateRepository changes the description or default branch.
-func (s *Server) UpdateRepository(ctx context.Context, r *pb.UpdateRepositoryRequest) (*pb.Repository, error) {
-	return call(s, ctx, func(ctx context.Context, client *repositories.Client) (*pb.Repository, error) {
+func (s *Server) UpdateRepository(ctx context.Context, r *pb.UpdateRepositoryRequest) (*pb.UpdateRepositoryResponse, error) {
+	return call(s, ctx, func(ctx context.Context, client *repositories.Client) (*pb.UpdateRepositoryResponse, error) {
 		v, err := client.Update(ctx, ref(r), repositories.Update{Description: r.Description, DefaultBranch: r.DefaultBranch})
-		return repository(v), err
+		return &pb.UpdateRepositoryResponse{Repository: repository(v)}, err
 	})
 }
 
 // ListBranches lists branches with the default branch marked.
-func (s *Server) ListBranches(ctx context.Context, r *pb.RepositoryRequest) (*pb.ListBranchesResponse, error) {
+func (s *Server) ListBranches(ctx context.Context, r *pb.ListBranchesRequest) (*pb.ListBranchesResponse, error) {
 	return call(s, ctx, func(ctx context.Context, client *repositories.Client) (*pb.ListBranchesResponse, error) {
 		values, err := client.Branches(ctx, ref(r))
 		result := &pb.ListBranchesResponse{}
 		for _, b := range values {
-			result.Branches = append(result.Branches, &pb.Branch{Name: b.Name, Sha: b.SHA, Default: b.Default, Protected: b.Protected})
+			result.Branches = append(result.Branches, &pb.Branch{
+				Name:      b.Name,
+				Sha:       b.SHA,
+				Default:   b.Default,
+				Protected: b.Protected,
+			})
 		}
+
 		return result, err
 	})
 }
 
 // ListTags lists tags.
-func (s *Server) ListTags(ctx context.Context, r *pb.RepositoryRequest) (*pb.ListTagsResponse, error) {
+func (s *Server) ListTags(ctx context.Context, r *pb.ListTagsRequest) (*pb.ListTagsResponse, error) {
 	return call(s, ctx, func(ctx context.Context, client *repositories.Client) (*pb.ListTagsResponse, error) {
 		values, err := client.Tags(ctx, ref(r))
 		result := &pb.ListTagsResponse{}
 		for _, t := range values {
 			result.Tags = append(result.Tags, &pb.Tag{Name: t.Name, Sha: t.SHA})
 		}
+
 		return result, err
 	})
 }

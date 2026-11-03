@@ -18,7 +18,12 @@ func TestProvider(t *testing.T) {
 		APIPath:  "/api/v4",
 		Header:   "Private-Token",
 		User:     `{"id":1,"username":"john_smith","name":"John Smith","state":"active","email":"john@example.com","public_email":"pub@example.com"}`,
-		Want:     forgeauth.Identity{ID: "1", Login: "john_smith", Name: "John Smith", Email: "john@example.com"},
+		Want: forgeauth.Identity{
+			ID:    "1",
+			Login: "john_smith",
+			Name:  "John Smith",
+			Email: "john@example.com",
+		},
 	})
 }
 
@@ -47,13 +52,14 @@ func TestTokenFromHeader(t *testing.T) {
 func TestWhoamiPublicEmail(t *testing.T) {
 	// Without admin rights, GitLab may return only public_email.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		io.WriteString(w, `{"id":7,"username":"u","name":"U","public_email":"pub@example.com"}`)
+		_, _ = io.WriteString(w, `{"id":7,"username":"u","name":"U","public_email":"pub@example.com"}`)
 	}))
 	defer srv.Close()
 	s, err := Provider{}.Open(t.Context(), forgeauth.Connection{BaseURL: srv.URL + "/api/v4"}, forgeauth.StaticToken("t"))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	id, err := Provider{}.Whoami(t.Context(), s)
 	if err != nil || id.Email != "pub@example.com" {
 		t.Errorf("Whoami() = %+v, %v", id, err)
@@ -73,6 +79,7 @@ func TestSetGitToken(t *testing.T) {
 	if got := h.Get("Authorization"); got != "Basic "+base64.StdEncoding.EncodeToString([]byte("oauth2:tok-123")) {
 		t.Fatalf("Authorization = %q", got)
 	}
+
 	r := &http.Request{Header: h}
 	if user, pass, ok := r.BasicAuth(); !ok || user != "oauth2" || pass != "tok-123" {
 		t.Errorf("BasicAuth() = %q, %q, %v", user, pass, ok)

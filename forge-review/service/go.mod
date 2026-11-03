@@ -6,6 +6,7 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.3
 	github.com/r59q/forge-tools/forge-connector/library v0.0.0
 	github.com/r59q/forge-tools/forge-core/forgeapi v0.0.0
+	github.com/r59q/forge-tools/forge-core/servicekit v0.0.0
 	github.com/r59q/forge-tools/forge-review/library v0.0.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20250929231259-57b25ae835d4
 	google.golang.org/grpc v1.75.1
@@ -24,3 +25,5 @@ replace github.com/r59q/forge-tools/forge-core/forgeapi => ../../forge-core/forg
 replace github.com/r59q/forge-tools/forge-review/library => ../library
 
 replace github.com/r59q/forge-tools/forge-connector/library => ../../forge-connector/library
+
+replace github.com/r59q/forge-tools/forge-core/servicekit => ../../forge-core/servicekit

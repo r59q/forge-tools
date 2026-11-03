@@ -34,6 +34,7 @@ func (Provider) Whoami(ctx context.Context, s *forgeauth.Session) (forgeauth.Ide
 	if err := forgeauth.CheckSession(s, forgeauth.Forgejo); err != nil {
 		return forgeauth.Identity{}, err
 	}
+
 	var u struct {
 		ID       json.Number `json:"id"`
 		Login    string      `json:"login"`
@@ -46,7 +47,13 @@ func (Provider) Whoami(ctx context.Context, s *forgeauth.Session) (forgeauth.Ide
 	if u.ID == "" || u.Login == "" {
 		return forgeauth.Identity{}, errors.New("forgejo: /user response has no id or login")
 	}
-	return forgeauth.Identity{ID: u.ID.String(), Login: u.Login, Name: u.FullName, Email: u.Email}, nil
+
+	return forgeauth.Identity{
+		ID:    u.ID.String(),
+		Login: u.Login,
+		Name:  u.FullName,
+		Email: u.Email,
+	}, nil
 }
 
 // SetToken calls SetToken.

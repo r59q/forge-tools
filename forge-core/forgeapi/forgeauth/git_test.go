@@ -15,6 +15,7 @@ func newTestRemote(t *testing.T, base string) *GitRemote {
 	if err != nil {
 		t.Fatalf("NewGitRemote() error = %v", err)
 	}
+
 	return g
 }
 
@@ -23,20 +24,23 @@ func TestGitRemoteURL(t *testing.T) {
 	if g.BaseURL != "https://proxy.example/g/conn-1" {
 		t.Errorf("BaseURL = %q", g.BaseURL)
 	}
-	good := map[string]string{
-		"mrbean/teddy":         "https://proxy.example/g/conn-1/mrbean/teddy.git",
-		" /group/sub/project/": "https://proxy.example/g/conn-1/group/sub/project.git",
+
+	good := []struct{ in, want string }{
+		{"mrbean/teddy", "https://proxy.example/g/conn-1/mrbean/teddy.git"},
+		{" /group/sub/project/", "https://proxy.example/g/conn-1/group/sub/project.git"},
 	}
-	for in, want := range good {
-		if got, err := g.URL(in); err != nil || got != want {
-			t.Errorf("URL(%q) = %q, %v, want %q", in, got, err, want)
+	for _, tt := range good {
+		if got, err := g.URL(tt.in); err != nil || got != tt.want {
+			t.Errorf("URL(%q) = %q, %v, want %q", tt.in, got, err, tt.want)
 		}
 	}
+
 	for _, p := range []string{"", "solo", "a//b", "a/../b", "a/./b", "a/b%2Fc", "a/b?x", "a/b#x", `a\b/c`, "a/b c", "a/b\x00"} {
 		if got, err := g.URL(p); err == nil {
 			t.Errorf("URL(%q) = %q, want an error", p, got)
 		}
 	}
+
 	var none *GitRemote
 	if _, err := none.URL("a/b"); err == nil {
 		t.Error("nil remote URL err = nil")
@@ -63,18 +67,23 @@ func TestNewGitRemoteErrors(t *testing.T) {
 	}
 }
 
-func gitGet(t *testing.T, g *GitRemote, url string) (*http.Response, error) {
+// gitGet sends a GET request for url on g, reads and closes the response,
+// and returns the error.
+func gitGet(t *testing.T, g *GitRemote, url string) error {
 	t.Helper()
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	resp, err := g.Client.Do(req)
-	if err == nil {
-		io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
+	if err != nil {
+		return err
 	}
-	return resp, err
+
+	_, _ = io.Copy(io.Discard, resp.Body)
+
+	return resp.Body.Close()
 }
 
 func TestGitRemoteTokenAndRedirects(t *testing.T) {
@@ -100,9 +109,10 @@ func TestGitRemoteTokenAndRedirects(t *testing.T) {
 	}
 
 	// A rename redirect within the remote is followed, with the token.
-	if _, err := gitGet(t, g, repo+"/info/refs?service=git-receive-pack"); err != nil {
+	if err := gitGet(t, g, repo+"/info/refs?service=git-receive-pack"); err != nil {
 		t.Fatal(err)
 	}
+
 	for _, p := range []string{"/g/1/o/r.git/info/refs", "/g/1/n/r.git/info/refs"} {
 		if got := srv.seen(p); len(got) != 1 || got[0] != secret {
 			t.Errorf("%s tokens = %q", p, got)
@@ -110,23 +120,22 @@ func TestGitRemoteTokenAndRedirects(t *testing.T) {
 	}
 
 	for _, name := range []string{"away", "sibling", "dots"} {
-		if _, err := gitGet(t, g, repo+"/"+name); err == nil || !strings.Contains(err.Error(), "leaves the Git remote") {
+		if err := gitGet(t, g, repo+"/"+name); err == nil || !strings.Contains(err.Error(), "leaves the Git remote") {
 			t.Errorf("%s: err = %v, want a redirect error", name, err)
 		}
 	}
+
 	req, _ := http.NewRequest(http.MethodPost, repo+"/post", strings.NewReader("x"))
-	if resp, err := g.Client.Do(req); err == nil || !strings.Contains(err.Error(), "redirected") {
-		if resp != nil {
-			resp.Body.Close()
-		}
+	if err := doErr(g.Client, req); err == nil || !strings.Contains(err.Error(), "redirected") {
 		t.Errorf("POST 302: err = %v, want a method change error", err)
 	}
+
 	if got := srv.seen("/g/2/o/r.git/info/refs"); len(got) != 0 {
 		t.Errorf("followed a redirect to another connection: %q", got)
 	}
 
 	// An absolute URL to another origin is sent without the token.
-	if _, err := gitGet(t, g, other.URL+"/direct"); err != nil {
+	if err := gitGet(t, g, other.URL+"/direct"); err != nil {
 		t.Fatal(err)
 	}
 	if got := other.seen("/direct"); len(got) != 1 || got[0] != "" {
@@ -143,7 +152,7 @@ func TestGitRemoteTokenError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := gitGet(t, g, srv.URL+"/o/r.git/info/refs"); !errors.Is(err, ErrNoToken) {
+	if err := gitGet(t, g, srv.URL+"/o/r.git/info/refs"); !errors.Is(err, ErrNoToken) {
 		t.Errorf("err = %v, want ErrNoToken", err)
 	}
 	if got := srv.seen("/o/r.git/info/refs"); len(got) != 0 {
@@ -173,6 +182,7 @@ func TestDefaultGitURL(t *testing.T) {
 			t.Errorf("DefaultGitURL(%s, %q) = %q, %v, want %q", tt.kind, tt.api, got, err, tt.want)
 		}
 	}
+
 	bad := []struct {
 		kind Kind
 		api  string
@@ -194,6 +204,7 @@ func TestDefaultGitURL(t *testing.T) {
 			t.Errorf("DefaultGitURL(%s, %q) = %q, want an error", tt.kind, tt.api, got)
 		}
 	}
+
 	if _, err := DefaultGitURL(GitLab, "https://gitlab.com"); !errors.Is(err, ErrNoGitURL) {
 		t.Errorf("err = %v, want ErrNoGitURL", err)
 	}

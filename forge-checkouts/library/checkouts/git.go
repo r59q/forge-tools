@@ -24,6 +24,7 @@ func (b *boundedOutput) Write(p []byte) (int, error) {
 		b.exceeded = true
 		return 0, ErrTooLarge
 	}
+
 	return b.buffer.Write(p)
 }
 
@@ -31,7 +32,7 @@ func (b *boundedOutput) Write(p []byte) (int, error) {
 // Existing local repositories and their repository configuration must be trusted.
 func git(ctx context.Context, directory string, args ...string) (string, error) {
 	base := []string{"-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "maintenance.auto=false", "-c", "gc.auto=0"}
-	cmd := exec.CommandContext(ctx, "git", append(base, args...)...)
+	cmd := exec.CommandContext(ctx, "git", append(base, args...)...) //nolint:gosec // fixed binary; callers validate user input.
 	cmd.WaitDelay = 2 * time.Second
 	cmd.Dir = directory
 	for _, e := range os.Environ() {
@@ -39,6 +40,7 @@ func git(ctx context.Context, directory string, args ...string) (string, error) 
 			cmd.Env = append(cmd.Env, e)
 		}
 	}
+
 	cmd.Env = append(cmd.Env, "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_TERMINAL_PROMPT=0", "GIT_OPTIONAL_LOCKS=0")
 	var out boundedOutput
 	cmd.Stdout = &out
@@ -52,6 +54,7 @@ func git(ctx context.Context, directory string, args ...string) (string, error) 
 	if err != nil {
 		return "", errGit
 	}
+
 	return out.buffer.String(), nil
 }
 
@@ -61,30 +64,37 @@ func status(ctx context.Context, path string) (Status, error) {
 	if err != nil {
 		return s, err
 	}
+
 	s.Revision = strings.TrimSpace(rev)
 	branch, err := git(ctx, path, "symbolic-ref", "--quiet", "--short", "HEAD")
 	if err == nil {
 		s.Branch = strings.TrimSpace(branch)
 	}
+
 	out, err := git(ctx, path, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignored=matching", "--ignore-submodules=none")
 	if err != nil {
 		return s, err
 	}
+
 	parts := strings.Split(out, "\x00")
 	for i := 0; i < len(parts)-1; i++ {
 		p := parts[i]
 		if len(p) < 4 {
 			return s, ErrConflict
 		}
+
 		f := File{Path: p[3:], Index: p[:1], Worktree: p[1:2]}
 		if strings.ContainsAny(p[:2], "RC") {
 			i++
 			if i >= len(parts)-1 {
 				return s, ErrConflict
 			}
+
 			f.OldPath = parts[i]
 		}
+
 		s.Files = append(s.Files, f)
 	}
+
 	return s, nil
 }

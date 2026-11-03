@@ -13,6 +13,7 @@ import (
 func seeded(t *testing.T) (*Repo, Fixture) {
 	t.Helper()
 	r := NewRepo()
+
 	return r, Seed(r)
 }
 
@@ -40,9 +41,11 @@ func TestSeedContent(t *testing.T) {
 			t.Errorf("Lookup(%q) = %v, %v; want mode %v", p, e, err, mode)
 		}
 	}
-	if e, _ := r.Lookup(fx.Head, PathSubmodule); e.ID != SubmoduleCommit {
+
+	if e, _ := r.Lookup(fx.Head, PathSubmodule); e.ID != SubmoduleCommit() {
 		t.Errorf("submodule = %s", e.ID)
 	}
+
 	data, err := r.ReadBlob(fx.Blobs[PathLarge])
 	if err != nil || len(data) != LargeSize || data[len(data)-1] != '\n' {
 		t.Errorf("large file: %d bytes, %v", len(data), err)
@@ -56,15 +59,18 @@ func TestSeedContent(t *testing.T) {
 	if _, err := r.Lookup(fx.Rename, PathOldName); !errors.Is(err, ErrNotFound) {
 		t.Errorf("old name after rename: %v", err)
 	}
+
 	old, _ := r.Lookup(fx.Main[2], PathOldName)
 	moved, _ := r.Lookup(fx.Rename, PathNewName)
 	if old.ID != moved.ID {
 		t.Error("rename changed the blob")
 	}
+
 	c, _ := r.ReadCommit(fx.Merge)
 	if !slices.Equal(c.Parents, []gitobj.ID{fx.Main[4], fx.Feature[1]}) {
 		t.Errorf("merge parents = %v", c.Parents)
 	}
+
 	for _, tc := range []struct {
 		ref  string
 		want gitobj.ID
@@ -83,6 +89,7 @@ func TestSeedContent(t *testing.T) {
 			t.Errorf("%s peels to %s, %v", tc.ref, got, err)
 		}
 	}
+
 	tag, _ := r.ReadTag(fx.TagOuter)
 	if tag.Object != fx.TagInner || tag.Type != gitobj.TypeTag {
 		t.Errorf("outer tag = %+v", tag)
@@ -107,11 +114,13 @@ func TestReadErrors(t *testing.T) {
 	if _, err := r.PeelCommit(fx.Blobs[PathReadme]); !errors.Is(err, ErrWrongType) {
 		t.Errorf("PeelCommit(blob) = %v", err)
 	}
+
 	for _, p := range []string{"nope", "README.md/x", "docs//guide", "docs/", "/docs"} {
 		if _, err := r.Lookup(fx.Head, p); !errors.Is(err, ErrNotFound) {
 			t.Errorf("Lookup(%q) = %v", p, err)
 		}
 	}
+
 	if _, err := r.Lookup(fx.Blobs[PathReadme], ""); !errors.Is(err, ErrWrongType) {
 		t.Errorf("Lookup(blob) = %v", err)
 	}
@@ -129,6 +138,7 @@ func TestLookupRoots(t *testing.T) {
 			t.Errorf("Lookup(%s, \"\") = %v, %v", root, e, err)
 		}
 	}
+
 	e, err := r.Lookup(fx.Head, PathNested)
 	if err != nil || e.Name != "intro.md" {
 		t.Errorf("nested = %v, %v", e, err)
@@ -141,22 +151,27 @@ func TestListTree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	var names []string
 	for _, e := range flat {
 		names = append(names, e.Path)
 	}
+
 	want := []string{"README.md", "assets", "bin", "dir with space", "docs", "feature.txt", "large.txt", "link", "new-name.txt", "src", "vendor"}
 	if !slices.Equal(names, want) {
 		t.Errorf("flat = %q", names)
 	}
+
 	all, err := r.ListTree(fx.Head, true)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	byPath := map[string]PathEntry{}
 	for _, e := range all {
 		byPath[e.Path] = e
 	}
+
 	if e := byPath[PathLarge]; e.Size != LargeSize {
 		t.Errorf("large size = %d", e.Size)
 	}
@@ -198,6 +213,7 @@ func TestLog(t *testing.T) {
 			t.Errorf("%s: Log = %v, %v; want %v", tc.name, got, err, tc.want)
 		}
 	}
+
 	if _, err := r.Log(fx.Blobs[PathReadme], LogOptions{}); !errors.Is(err, ErrWrongType) {
 		t.Errorf("Log(blob) = %v", err)
 	}
@@ -206,7 +222,7 @@ func TestLog(t *testing.T) {
 func TestLogTiesKeepInsertionOrder(t *testing.T) {
 	r := NewRepo()
 	tree := r.BuildTree(nil)
-	when := Epoch
+	when := Epoch()
 	root := r.CommitTree(tree, when, "root")
 	a := r.CommitTree(tree, when, "a", root)
 	b := r.CommitTree(tree, when, "b", root)
@@ -220,7 +236,9 @@ func TestLogTiesKeepInsertionOrder(t *testing.T) {
 func TestMergeBase(t *testing.T) {
 	r, fx := seeded(t)
 	for _, tc := range []struct {
-		a, b, want gitobj.ID
+		a    gitobj.ID
+		b    gitobj.ID
+		want gitobj.ID
 	}{
 		{fx.Head, fx.Feature[2], fx.MergeBase},
 		{fx.Main[4], fx.Feature[0], fx.Main[2]},
@@ -233,6 +251,7 @@ func TestMergeBase(t *testing.T) {
 			t.Errorf("MergeBase(%s, %s) = %s, %v, %v; want %s", tc.a, tc.b, got, ok, err, tc.want)
 		}
 	}
+
 	for _, tc := range []struct {
 		a, b gitobj.ID
 		want bool
@@ -252,7 +271,7 @@ func TestMergeBase(t *testing.T) {
 // crissCross builds two roots-joined histories whose tips have two merge
 // bases, plus an unrelated root.
 func crissCross(r *Repo) (x, y, b1, b2, lone gitobj.ID) {
-	at := func(h int) time.Time { return Epoch.Add(time.Duration(h) * time.Hour) }
+	at := func(h int) time.Time { return Epoch().Add(time.Duration(h) * time.Hour) }
 	tree := func(s string) gitobj.ID { return r.BuildTree(map[string]File{"f": {Data: []byte(s)}}) }
 	root := r.CommitTree(tree("0"), at(0), "root")
 	b1 = r.CommitTree(tree("1"), at(1), "b1", root)
@@ -260,6 +279,7 @@ func crissCross(r *Repo) (x, y, b1, b2, lone gitobj.ID) {
 	x = r.CommitTree(tree("x"), at(3), "x", b1, b2)
 	y = r.CommitTree(tree("y"), at(4), "y", b2, b1)
 	lone = r.CommitTree(tree("lone"), at(5), "lone")
+
 	return
 }
 
@@ -285,7 +305,7 @@ func TestUpdateRefs(t *testing.T) {
 		err  error
 	}{
 		{"stale", []RefUpdate{{main, fx.Main[0], fx.Main[1]}}, ErrStale},
-		{"exists", []RefUpdate{{main, gitobj.ZeroID, fx.Main[1]}}, ErrStale},
+		{"exists", []RefUpdate{{main, gitobj.ID{}, fx.Main[1]}}, ErrStale},
 		{"missing object", []RefUpdate{{main, fx.Head, missing}}, ErrNotFound},
 		{"repeated", []RefUpdate{{main, fx.Head, fx.Main[1]}, {main, fx.Head, fx.Main[1]}}, gitobj.ErrInvalid},
 		{"bad name", []RefUpdate{{"main", fx.Head, fx.Main[1]}}, gitobj.ErrInvalid},
@@ -295,13 +315,15 @@ func TestUpdateRefs(t *testing.T) {
 			t.Errorf("%s: %v, want %v", tc.name, err, tc.err)
 		}
 	}
+
 	if id, _ := r.Ref(main); id != fx.Head {
 		t.Fatalf("failed update moved main to %s", id)
 	}
+
 	err := r.UpdateRefs(
 		RefUpdate{main, fx.Head, fx.Main[4]},
-		RefUpdate{"refs/heads/new", gitobj.ZeroID, fx.Head},
-		RefUpdate{"refs/heads/clash", fx.ClashBranch, gitobj.ZeroID},
+		RefUpdate{"refs/heads/new", gitobj.ID{}, fx.Head},
+		RefUpdate{"refs/heads/clash", fx.ClashBranch, gitobj.ID{}},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -328,6 +350,7 @@ func TestUpdateRefsRace(t *testing.T) {
 			_, _ = r.Log(fx.Head, LogOptions{Path: PathReadme})
 		})
 	}
+
 	wg.Wait()
 	ok := 0
 	for _, err := range errs {
@@ -338,6 +361,7 @@ func TestUpdateRefsRace(t *testing.T) {
 			t.Error(err)
 		}
 	}
+
 	if ok != 1 {
 		t.Errorf("%d updates won, want 1", ok)
 	}
@@ -352,7 +376,7 @@ func TestBuilderPanics(t *testing.T) {
 		"tree wrong type":   func() { r.WriteTree(gitobj.TreeEntry{Name: "a", Mode: gitobj.ModeTree, ID: blob}) },
 		"tree bad name":     func() { r.WriteTree(gitobj.TreeEntry{Name: ".git", Mode: gitobj.ModeFile, ID: blob}) },
 		"file and dir":      func() { r.BuildTree(map[string]File{"a": {}, "a/b": {}}) },
-		"commit no tree":    func() { r.CommitTree(missing, Epoch, "m") },
+		"commit no tree":    func() { r.CommitTree(missing, Epoch(), "m") },
 		"tag no target":     func() { r.WriteTag(gitobj.Tag{Object: missing, Name: "t"}) },
 		"tag wrong type":    func() { r.WriteTag(gitobj.Tag{Object: blob, Type: gitobj.TypeCommit, Name: "t"}) },
 		"bad ref":           func() { r.SetRef("main", blob) },
@@ -378,12 +402,14 @@ func TestRepoSettings(t *testing.T) {
 	if _, ok := r.Head(); ok {
 		t.Error("empty repo has a head")
 	}
+
 	blob := r.WriteBlob([]byte("x"))
 	r.SetRef("refs/heads/trunk", blob)
-	r.SetRef("refs/heads/trunk", gitobj.ZeroID)
+	r.SetRef("refs/heads/trunk", gitobj.ID{})
 	if _, ok := r.Ref("refs/heads/trunk"); ok {
 		t.Error("zero SetRef did not delete")
 	}
+
 	o, ok := r.Object(blob)
 	o.Data[0] = 'y'
 	if again, _ := r.Object(blob); !ok || string(again.Data) != "x" {
@@ -411,6 +437,7 @@ func TestPeel(t *testing.T) {
 			t.Errorf("Peel(%s) = %s, %s, %v", tc.in, got, typ, err)
 		}
 	}
+
 	if _, err := r.PeelCommit(tagTree); !errors.Is(err, ErrWrongType) {
 		t.Errorf("PeelCommit(tree tag) = %v", err)
 	}

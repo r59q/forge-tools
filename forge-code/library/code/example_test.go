@@ -27,17 +27,20 @@ func Example() {
 		fmt.Println(err)
 		return
 	}
+
 	git, err := forgeauth.NewGitRemote("http://localhost:8081/g/my-connection", token,
 		func(h http.Header, t string) { h.Set("Authorization", "Bearer "+t) }, nil)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
+
 	c, err := code.New(code.Source{ID: "my-connection", Session: session, Git: git})
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
+
 	repo := code.RepositoryRef{Source: "my-connection", Repository: "mrbean/teddy"}
 
 	f, err := c.ReadFile(ctx, repo, "main", "README.md")
@@ -45,6 +48,7 @@ func Example() {
 		fmt.Println(err)
 		return
 	}
+
 	defer f.Close()
 	fmt.Println("README.md is", f.ID, "at", f.Commit)
 
@@ -53,6 +57,7 @@ func Example() {
 		fmt.Println(err)
 		return
 	}
+
 	for _, ch := range d.Changes {
 		fmt.Println(ch.Status, ch.Path)
 	}
@@ -62,6 +67,7 @@ func Example() {
 		fmt.Println(err)
 		return
 	}
+
 	commit, err := c.CreateCommit(ctx, repo, code.NewCommit{
 		Parents: []code.OID{main.Commit},
 		Changes: []code.FileChange{{Path: "README.md", Content: []byte("hello\n")}},
@@ -74,9 +80,11 @@ func Example() {
 		fmt.Println("main moved; read it again and retry")
 		return
 	}
+
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
+
 	fmt.Println("pushed", commit.ID)
 }

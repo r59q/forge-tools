@@ -21,13 +21,17 @@ const forgeToken = "forge-secret-sentinel"
 
 // item is one tree entry of the fake forge.
 type item struct {
-	name, mode, sha string
+	name string
+	mode string
+	sha  string
 }
 
 // fakeCommit is one commit of the fake forge.
 type fakeCommit struct {
-	sha, tree, message string
-	parents            []string
+	sha     string
+	tree    string
+	message string
+	parents []string
 }
 
 // fakeRepo is one repository of the fake forge.
@@ -41,8 +45,13 @@ type fakeRepo struct {
 }
 
 func newRepo() *fakeRepo {
-	return &fakeRepo{refs: map[string]map[string]string{}, tags: map[string]string{}, commits: map[string]fakeCommit{},
-		trees: map[string][]item{}, blobs: map[string][]byte{}}
+	return &fakeRepo{
+		refs:    map[string]map[string]string{},
+		tags:    map[string]string{},
+		commits: map[string]fakeCommit{},
+		trees:   map[string][]item{},
+		blobs:   map[string][]byte{},
+	}
 }
 
 func id(kind string, data []byte) string {
@@ -53,6 +62,7 @@ func id(kind string, data []byte) string {
 func (r *fakeRepo) blob(content string) string {
 	sha := id("blob", []byte(content))
 	r.blobs[sha] = []byte(content)
+
 	return sha
 }
 
@@ -61,12 +71,19 @@ func (r *fakeRepo) tree(items ...item) string {
 	data, _ := json.Marshal(fmt.Sprint(items))
 	sha := id("tree", data)
 	r.trees[sha] = items
+
 	return sha
 }
 
 func (r *fakeRepo) commit(tree, message string, parents ...string) string {
 	sha := id("commit", []byte(tree+message+strings.Join(parents, ",")))
-	r.commits[sha] = fakeCommit{sha: sha, tree: tree, message: message, parents: parents}
+	r.commits[sha] = fakeCommit{
+		sha:     sha,
+		tree:    tree,
+		message: message,
+		parents: parents,
+	}
+
 	return sha
 }
 
@@ -134,12 +151,14 @@ func newForge(t *testing.T) *forge {
 	f := &forge{waiting: make(chan struct{}, 16), release: make(chan struct{})}
 	f.srv = httptest.NewServer(http.HandlerFunc(f.serve))
 	t.Cleanup(f.srv.Close)
+
 	return f
 }
 
 func (f *forge) count() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
 	return f.requests
 }
 
@@ -161,6 +180,7 @@ func (f *forge) serve(w http.ResponseWriter, r *http.Request) {
 		notFound(w)
 		return
 	}
+
 	switch parts[0] {
 	case "denied":
 		http.Error(w, `{"message":"Must have admin rights"}`, http.StatusForbidden)
@@ -185,14 +205,17 @@ func (f *forge) serve(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]string{"default_branch": "main"})
 		return
 	}
+
 	if parts[0]+"/"+parts[1] != "mrbean/teddy" {
 		notFound(w)
 		return
 	}
+
 	rest := ""
 	if len(parts) == 3 {
 		rest = parts[2]
 	}
+
 	q := r.URL.Query()
 	switch {
 	case rest == "":
@@ -229,6 +252,7 @@ func (f *forge) serve(w http.ResponseWriter, r *http.Request) {
 				if c, ok := fx.tags[sha]; ok {
 					sha = c
 				}
+
 				out = append(out, map[string]any{"name": tag, "commit": map[string]string{"sha": sha}})
 			}
 		}
@@ -270,8 +294,15 @@ func gitCommit(c fakeCommit) map[string]any {
 	for _, p := range c.parents {
 		parents = append(parents, map[string]string{"sha": p})
 	}
-	return map[string]any{"sha": c.sha, "tree": map[string]string{"sha": c.tree}, "parents": parents,
-		"author": person, "committer": person, "message": c.message}
+
+	return map[string]any{
+		"sha":       c.sha,
+		"tree":      map[string]string{"sha": c.tree},
+		"parents":   parents,
+		"author":    person,
+		"committer": person,
+		"message":   c.message,
+	}
 }
 
 // history lists first-parent history from sha, one page at a time.
@@ -284,16 +315,19 @@ func (f *forge) history(w http.ResponseWriter, r *http.Request, q url.Values) {
 		if !ok {
 			break
 		}
+
 		all = append(all, c)
 		sha = ""
 		if len(c.parents) > 0 {
 			sha = c.parents[0]
 		}
 	}
+
 	if len(all) == 0 {
 		http.Error(w, `{"message":"No commit found"}`, http.StatusUnprocessableEntity)
 		return
 	}
+
 	start := min((page-1)*n, len(all))
 	end := min(start+n, len(all))
 	out := []any{}
@@ -301,6 +335,7 @@ func (f *forge) history(w http.ResponseWriter, r *http.Request, q url.Values) {
 		gc := gitCommit(c)
 		out = append(out, map[string]any{"sha": c.sha, "commit": gc, "parents": gc["parents"]})
 	}
+
 	if end < len(all) {
 		next := *r.URL
 		nq := next.Query()
@@ -308,13 +343,19 @@ func (f *forge) history(w http.ResponseWriter, r *http.Request, q url.Values) {
 		next.RawQuery = nq.Encode()
 		w.Header().Set("Link", fmt.Sprintf(`<%s%s>; rel="next"`, f.srv.URL, next.RequestURI()))
 	}
+
 	writeJSON(w, out)
 }
 
 func listTree(sha, prefix string, recursive bool) []any {
 	out := []any{}
 	for _, it := range fx.trees[sha] {
-		e := map[string]any{"path": prefix + it.name, "mode": it.mode, "sha": it.sha, "type": "blob"}
+		e := map[string]any{
+			"path": prefix + it.name,
+			"mode": it.mode,
+			"sha":  it.sha,
+			"type": "blob",
+		}
 		switch it.mode {
 		case "040000":
 			e["type"] = "tree"
@@ -323,11 +364,13 @@ func listTree(sha, prefix string, recursive bool) []any {
 		default:
 			e["size"] = len(fx.blobs[it.sha])
 		}
+
 		out = append(out, e)
 		if recursive && it.mode == "040000" {
 			out = append(out, listTree(it.sha, prefix+it.name+"/", true)...)
 		}
 	}
+
 	return out
 }
 
@@ -339,27 +382,32 @@ func (f *forge) blob(w http.ResponseWriter, r *http.Request, sha string) {
 		notFound(w)
 		return
 	}
+
 	if r.Header.Get("Accept") != "application/vnd.github.raw+json" {
 		http.Error(w, "want raw", http.StatusNotAcceptable)
 		return
 	}
+
 	w.Header().Set("Content-Type", "application/octet-stream")
 	if sha == broken {
 		w.Header().Set("Content-Length", strconv.Itoa(len(data)))
-		w.Write(data[:len(data)/3])
+		_, _ = w.Write(data[:len(data)/3])
 		w.(http.Flusher).Flush()
 		panic(http.ErrAbortHandler)
 	}
+
 	// Content of 4 MiB or more is sent without a length, so its size is
 	// unknown until read.
 	if len(data) >= MaxFileBytes {
-		w.Write(data[:1])
+		_, _ = w.Write(data[:1])
 		w.(http.Flusher).Flush()
-		w.Write(data[1:])
+		_, _ = w.Write(data[1:])
+
 		return
 	}
+
 	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
-	w.Write(data)
+	_, _ = w.Write(data)
 }
 
 // mergeBase returns the first-parent ancestor of b that is also an
@@ -374,16 +422,19 @@ func mergeBase(a, b string) string {
 			sha = c.parents[0]
 		}
 	}
+
 	for sha := b; sha != ""; {
 		if seen[sha] {
 			return sha
 		}
+
 		c := fx.commits[sha]
 		sha = ""
 		if len(c.parents) > 0 {
 			sha = c.parents[0]
 		}
 	}
+
 	return ""
 }
 
@@ -395,5 +446,6 @@ func compact(t *testing.T, data []byte) string {
 	if err := json.Compact(&out, data); err != nil {
 		t.Fatalf("%v: %s", err, data)
 	}
+
 	return out.String()
 }

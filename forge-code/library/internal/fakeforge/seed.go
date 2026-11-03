@@ -34,16 +34,22 @@ const LFSPointer = "version https://git-lfs.github.com/spec/v1\n" +
 // LargeSize is the size of the file at PathLarge. It ends in a newline.
 const LargeSize = 300 << 10
 
-// Binary is the content at PathBinary.
-var Binary = []byte{0x89, 'P', 'N', 'G', 0x00, 0xff, 0xfe, 0x00, 0xc3, 0x28, 0x80, '\n', 0x00, 0xed, 0xa0, 0x80}
+// Binary returns the content at PathBinary.
+func Binary() []byte {
+	return []byte{0x89, 'P', 'N', 'G', 0x00, 0xff, 0xfe, 0x00, 0xc3, 0x28, 0x80, '\n', 0x00, 0xed, 0xa0, 0x80}
+}
 
-// SubmoduleCommit is the commit the submodule at PathSubmodule points to.
-// It is not stored in the repository.
-var SubmoduleCommit = gitobj.Hash(gitobj.TypeCommit, []byte("fakeforge submodule"))
+// SubmoduleCommit returns the commit the submodule at PathSubmodule
+// points to. It is not stored in the repository.
+func SubmoduleCommit() gitobj.ID {
+	return gitobj.Hash(gitobj.TypeCommit, []byte("fakeforge submodule"))
+}
 
-// Epoch is the time of the fixture's first commit. Later commits are
-// whole hours after it.
-var Epoch = time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+// Epoch returns the time of the fixture's first commit. Later commits
+// are whole hours after it.
+func Epoch() time.Time {
+	return time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+}
 
 // Fixture names the objects Seed writes. Every ID is real and stable.
 //
@@ -93,7 +99,7 @@ type Fixture struct {
 // Seed writes the standard fixture to r, sets its refs and makes main the
 // default branch.
 func Seed(r *Repo) Fixture {
-	at := func(h int) time.Time { return Epoch.Add(time.Duration(h) * time.Hour) }
+	at := func(h int) time.Time { return Epoch().Add(time.Duration(h) * time.Hour) }
 	files := map[string]File{
 		PathReadme:  {Data: []byte("# Fixture\n\nA test repository.\n")},
 		PathMain:    {Data: []byte("package main\n\nfunc main() {}\n")},
@@ -110,8 +116,8 @@ func Seed(r *Repo) Fixture {
 	files[PathSymlink] = File{Mode: gitobj.ModeSymlink, Data: []byte(PathReadme)}
 	files[PathMain] = File{Data: []byte("package main\n\nimport \"fmt\"\n\nfunc main() { fmt.Println(\"hi\") }\n")}
 	c1 := commit(1, "Add run script and link", c0)
-	files[PathSubmodule] = File{Mode: gitobj.ModeSubmodule, Submodule: SubmoduleCommit}
-	files[PathBinary] = File{Data: Binary}
+	files[PathSubmodule] = File{Mode: gitobj.ModeSubmodule, Submodule: SubmoduleCommit()}
+	files[PathBinary] = File{Data: Binary()}
 	files[PathLFS] = File{Data: []byte(LFSPointer)}
 	c2 := commit(2, "Add submodule and assets", c1)
 
@@ -144,31 +150,51 @@ func Seed(r *Repo) Fixture {
 	fx.Feature = []gitobj.ID{f0, f1, f2}
 	fx.Merge, fx.Head, fx.MergeBase, fx.Rename = merge, head, f1, c3
 
-	tagger := Signature(at(10))
-	fx.Tag = r.WriteTag(gitobj.Tag{Object: c3, Name: "v1.0", Tagger: &tagger, Message: "Release 1.0\n"})
-	fx.TagInner = r.WriteTag(gitobj.Tag{Object: c1, Name: "chain-inner", Tagger: &tagger, Message: "Inner\n"})
-	fx.TagOuter = r.WriteTag(gitobj.Tag{Object: fx.TagInner, Name: "chain", Tagger: &tagger, Message: "Outer\n"})
 	fx.Light = c0
 	fx.ClashBranch, fx.ClashTag = c2, c3
+	seedTags(r, &fx, Signature(at(10)))
+	seedRefs(r, &fx)
+	fx.Blobs = seedBlobs(r, head, files)
 
-	r.SetRef("refs/heads/main", head)
-	r.SetRef("refs/heads/feature", f2)
-	r.SetRef("refs/heads/clash", c2)
-	r.SetRef("refs/tags/clash", c3)
+	return fx
+}
+
+// seedTags writes the fixture's annotated tags.
+func seedTags(r *Repo, fx *Fixture, tagger gitobj.Signature) {
+	tag := func(object gitobj.ID, name, msg string) gitobj.ID {
+		return r.WriteTag(gitobj.Tag{Object: object, Name: name, Tagger: &tagger, Message: msg})
+	}
+
+	fx.Tag = tag(fx.Main[3], "v1.0", "Release 1.0\n")
+	fx.TagInner = tag(fx.Main[1], "chain-inner", "Inner\n")
+	fx.TagOuter = tag(fx.TagInner, "chain", "Outer\n")
+}
+
+// seedRefs sets the fixture's refs and default branch.
+func seedRefs(r *Repo, fx *Fixture) {
+	r.SetRef("refs/heads/main", fx.Head)
+	r.SetRef("refs/heads/feature", fx.Feature[2])
+	r.SetRef("refs/heads/clash", fx.ClashBranch)
+	r.SetRef("refs/tags/clash", fx.ClashTag)
 	r.SetRef("refs/tags/v1.0", fx.Tag)
 	r.SetRef("refs/tags/chain", fx.TagOuter)
-	r.SetRef("refs/tags/light", c0)
+	r.SetRef("refs/tags/light", fx.Light)
 	r.SetDefaultBranch("main")
+}
 
-	fx.Blobs = map[string]gitobj.ID{}
+// seedBlobs maps every path in files to its entry ID at head.
+func seedBlobs(r *Repo, head gitobj.ID, files map[string]File) map[string]gitobj.ID {
+	blobs := map[string]gitobj.ID{}
 	for p := range files {
 		e, err := r.Lookup(head, p)
 		if err != nil {
 			panic("fakeforge: seed: " + err.Error())
 		}
-		fx.Blobs[p] = e.ID
+
+		blobs[p] = e.ID
 	}
-	return fx
+
+	return blobs
 }
 
 // largeText returns LargeSize bytes of numbered lines.
@@ -177,7 +203,9 @@ func largeText() []byte {
 	for i := 0; b.Len() < LargeSize; i++ {
 		fmt.Fprintf(&b, "line %06d: the quick brown fox jumps over the lazy dog\n", i)
 	}
+
 	out := []byte(b.String()[:LargeSize])
 	out[len(out)-1] = '\n'
+
 	return out
 }

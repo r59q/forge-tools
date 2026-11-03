@@ -25,7 +25,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 const (
@@ -69,6 +68,7 @@ func newForge(t *testing.T, prefix string, routes map[string]string) *forge {
 		}
 	}))
 	t.Cleanup(f.srv.Close)
+
 	return f
 }
 
@@ -95,22 +95,27 @@ func setup(t *testing.T) (*Server, http.Handler, *forge, *forge) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	gls, err := gitlab.Provider{}.Open(ctx, forgeauth.Connection{BaseURL: gl.srv.URL + "/api/v4"}, forgeauth.StaticToken(forgeToken))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	client, err := repositories.New(repositories.Source{ID: "gh", Session: ghs}, repositories.Source{ID: "gl", Session: gls})
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	s, err := New(Fixed(client), forgeauth.StaticToken(serviceToken), 5*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	h, err := s.REST(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return s, h, gh, gl
 }
 
@@ -120,6 +125,7 @@ func rest(t *testing.T, h http.Handler, method, target, body, token string) (int
 	if token != "" {
 		r.Header.Set("Authorization", "Bearer "+token)
 	}
+
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
 	if got := w.Header().Get("Cache-Control"); got != "no-store" {
@@ -128,11 +134,13 @@ func rest(t *testing.T, h http.Handler, method, target, body, token string) (int
 	if strings.Contains(w.Body.String(), forgeToken) {
 		t.Fatalf("%s %s leaked forge data: %s", method, target, w.Body)
 	}
+
 	// protojson varies its whitespace on purpose; compare compact JSON.
 	var out bytes.Buffer
 	if err := json.Compact(&out, w.Body.Bytes()); err != nil {
 		t.Fatalf("%s %s: %v: %s", method, target, err, w.Body)
 	}
+
 	return w.Code, out.String()
 }
 
@@ -143,7 +151,7 @@ func TestNew(t *testing.T) {
 		token   forgeauth.Credentials
 		timeout time.Duration
 	}{{nil, forgeauth.StaticToken("x"), time.Second}, {Fixed(client), nil, time.Second}, {Fixed(client), forgeauth.StaticToken("x"), 0}} {
-		if _, err := New(tc.sources, tc.token, tc.timeout); err != ErrInvalid {
+		if _, err := New(tc.sources, tc.token, tc.timeout); !errors.Is(err, ErrInvalid) {
 			t.Errorf("New(%v, %v) = %v, want ErrInvalid", tc.token, tc.timeout, err)
 		}
 	}
@@ -157,6 +165,7 @@ func TestSourcesUnavailable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	h, err := s.REST(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -180,15 +189,24 @@ func TestRESTReads(t *testing.T) {
 	code, body = rest(t, h, "GET", "/v1/repositories?owner=MrBean", "", serviceToken)
 	var list struct {
 		Repositories []struct {
-			Path, Visibility, WebURL, CreatedAt string
-			Source                              struct{ ID, Kind, Host string }
+			Path       string
+			Visibility string
+			WebURL     string
+			CreatedAt  string
+			Source     struct {
+				ID   string
+				Kind string
+				Host string
+			}
 		}
 	}
 	if err := json.Unmarshal([]byte(body), &list); code != 200 || err != nil || len(list.Repositories) != 3 {
 		t.Fatalf("list: %d %s %v", code, body, err)
 	}
+
 	first, last := list.Repositories[0], list.Repositories[2]
-	if first.Path != "mrbean/teddy" || first.Source.Kind != "github" || first.Source.Host != "github.com" || first.CreatedAt != "2024-01-02T03:04:05Z" {
+	if first.Path != "mrbean/teddy" ||
+		first.Source.Kind != "github" || first.Source.Host != "github.com" || first.CreatedAt != "2024-01-02T03:04:05Z" {
 		t.Errorf("first = %+v", first)
 	}
 	if last.Path != "mrbean/tools/cli" || last.Source.ID != "gl" || last.Visibility != "internal" {
@@ -202,9 +220,11 @@ func TestRESTReads(t *testing.T) {
 
 	// A nested GitLab path in the URL reaches GitLab as one encoded segment.
 	code, body = rest(t, h, "GET", "/v1/repositories/mrbean/tools/cli", "", serviceToken)
-	if code != 200 || !strings.Contains(body, `"path":"mrbean/tools/cli"`) || !strings.Contains(body, `"webUrl":"https://gitlab.com/mrbean/tools/cli"`) {
+	if code != 200 ||
+		!strings.Contains(body, `"path":"mrbean/tools/cli"`) || !strings.Contains(body, `"webUrl":"https://gitlab.com/mrbean/tools/cli"`) {
 		t.Errorf("get nested: %d %s", code, body)
 	}
+
 	code, body = rest(t, h, "GET", "/v1/branches/mrbean/tools/cli?source=gl", "", serviceToken)
 	if code != 200 || body != `{"branches":[{"name":"main","sha":"m41n","default":true}]}` {
 		t.Errorf("gitlab branches: %d %s", code, body)
@@ -214,6 +234,7 @@ func TestRESTReads(t *testing.T) {
 	if code != 200 || body != `{"branches":[{"name":"main","sha":"m41n","default":true,"protected":true},{"name":"dev","sha":"d3v"}]}` {
 		t.Errorf("github branches: %d %s", code, body)
 	}
+
 	code, body = rest(t, h, "GET", "/v1/tags/mrbean/teddy", "", serviceToken)
 	if code != 200 || body != `{"tags":[{"name":"v1","sha":"abc"}]}` {
 		t.Errorf("tags: %d %s", code, body)
@@ -222,12 +243,21 @@ func TestRESTReads(t *testing.T) {
 
 func TestRESTUpdate(t *testing.T) {
 	_, h, gh, _ := setup(t)
-	code, body := rest(t, h, "PATCH", "/v1/repositories/mrbean/teddy", `{"source":"gh","description":"bear","defaultBranch":"dev"}`, serviceToken)
+	code, body := rest(
+		t,
+		h,
+		"PATCH",
+		"/v1/repositories/mrbean/teddy",
+		`{"source":"gh","description":"bear","defaultBranch":"dev"}`,
+		serviceToken,
+	)
 	if code != 200 || !strings.Contains(body, `"defaultBranch":"dev"`) {
 		t.Fatalf("update: %d %s", code, body)
 	}
+
 	var sent map[string]string
-	if err := json.Unmarshal([]byte(gh.bodies[len(gh.bodies)-1]), &sent); err != nil || sent["description"] != "bear" || sent["default_branch"] != "dev" {
+	if err := json.Unmarshal([]byte(gh.bodies[len(gh.bodies)-1]), &sent); err != nil ||
+		sent["description"] != "bear" || sent["default_branch"] != "dev" {
 		t.Errorf("GitHub got %q", gh.bodies)
 	}
 	// Unknown body fields are rejected rather than silently ignored.
@@ -239,8 +269,11 @@ func TestRESTUpdate(t *testing.T) {
 func TestRESTErrors(t *testing.T) {
 	_, h, _, _ := setup(t)
 	for _, tc := range []struct {
-		method, target, body, token string
-		code                        int
+		method string
+		target string
+		body   string
+		token  string
+		code   int
 	}{
 		{"GET", "/v1/sources", "", "", http.StatusUnauthorized},
 		{"GET", "/v1/repositories", "", "wrong", http.StatusUnauthorized},
@@ -281,30 +314,36 @@ func TestGRPC(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	srv := grpc.NewServer()
-	pb.RegisterRepositoriesServer(srv, s)
-	go srv.Serve(lis)
+	pb.RegisterRepositoriesServiceServer(srv, s)
+	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(srv.Stop)
 	conn, err := grpc.NewClient(lis.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { conn.Close() })
-	c := pb.NewRepositoriesClient(conn)
 
-	if _, err := c.ListSources(context.Background(), &emptypb.Empty{}); status.Code(err) != codes.Unauthenticated {
+	t.Cleanup(func() { conn.Close() })
+	c := pb.NewRepositoriesServiceClient(conn)
+
+	if _, err := c.ListSources(context.Background(), &pb.ListSourcesRequest{}); status.Code(err) != codes.Unauthenticated {
 		t.Fatalf("no token: %v", err)
 	}
+
 	ctx := metadata.AppendToOutgoingContext(context.Background(), "authorization", "Bearer "+serviceToken)
-	repo, err := c.GetRepository(ctx, &pb.RepositoryRequest{Path: "mrbean/tools/cli"})
+	got, err := c.GetRepository(ctx, &pb.GetRepositoryRequest{Path: "mrbean/tools/cli"})
+	repo := got.GetRepository()
 	if err != nil || repo.GetSource().GetId() != "gl" || repo.GetDefaultBranch() != "main" {
 		t.Fatalf("get: %v %v", repo, err)
 	}
-	tags, err := c.ListTags(ctx, &pb.RepositoryRequest{Path: "mrbean/teddy", Source: "gh"})
+
+	tags, err := c.ListTags(ctx, &pb.ListTagsRequest{Path: "mrbean/teddy", Source: "gh"})
 	if err != nil || len(tags.GetTags()) != 1 || tags.GetTags()[0].GetSha() != "abc" {
 		t.Fatalf("tags: %v %v", tags, err)
 	}
-	_, err = c.GetRepository(ctx, &pb.RepositoryRequest{Path: "mrbean/shared"})
+
+	_, err = c.GetRepository(ctx, &pb.GetRepositoryRequest{Path: "mrbean/shared"})
 	if status.Code(err) != codes.FailedPrecondition || status.Convert(err).Message() != codes.FailedPrecondition.String() {
 		t.Fatalf("ambiguous: %v", err)
 	}

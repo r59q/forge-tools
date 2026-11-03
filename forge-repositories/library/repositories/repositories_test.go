@@ -36,6 +36,7 @@ func newFake(t *testing.T, prefix string) *fakeForge {
 	f := &fakeForge{prefix: prefix, routes: map[string]any{}}
 	f.srv = httptest.NewServer(http.HandlerFunc(f.serve))
 	t.Cleanup(f.srv.Close)
+
 	return f
 }
 
@@ -55,6 +56,7 @@ func (f *fakeForge) session(kind forgeauth.Kind) *forgeauth.Session {
 func (f *fakeForge) requests() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
 	return append([]string(nil), f.seen...)
 }
 
@@ -68,13 +70,16 @@ func (f *fakeForge) serve(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		f.bodies = append(f.bodies, body)
 	}
+
 	f.mu.Unlock()
 	if !ok {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
 		_, _ = w.Write([]byte(`{"message":"Not Found"}`))
+
 		return
 	}
+
 	if pages, ok := v.([][]any); ok {
 		n, _ := strconv.Atoi(r.URL.Query().Get("page"))
 		if n < 1 {
@@ -87,8 +92,10 @@ func (f *fakeForge) serve(w http.ResponseWriter, r *http.Request) {
 			next.RawQuery = q.Encode()
 			w.Header().Set("Link", fmt.Sprintf(`<%s%s>; rel="next"`, f.srv.URL, next.RequestURI()))
 		}
+
 		v = pages[n-1]
 	}
+
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(v)
 }
@@ -102,22 +109,34 @@ func newClient(t *testing.T, sources ...Source) *Client {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return c
 }
 
 func TestGitHub(t *testing.T) {
 	f := newFake(t, "")
 	repo := obj{
-		"id": 1, "full_name": "mrbean/teddy", "description": "A bear",
-		"default_branch": "main", "private": true, "visibility": "private",
-		"html_url":   "https://github.com/mrbean/teddy",
-		"clone_url":  "https://github.com/mrbean/teddy.git",
-		"ssh_url":    "git@github.com:mrbean/teddy.git",
-		"created_at": "2024-01-02T03:04:05Z", "updated_at": "2024-02-03T04:05:06Z",
+		"id":             1,
+		"full_name":      "mrbean/teddy",
+		"description":    "A bear",
+		"default_branch": "main",
+		"private":        true,
+		"visibility":     "private",
+		"html_url":       "https://github.com/mrbean/teddy",
+		"clone_url":      "https://github.com/mrbean/teddy.git",
+		"ssh_url":        "git@github.com:mrbean/teddy.git",
+		"created_at":     "2024-01-02T03:04:05Z",
+		"updated_at":     "2024-02-03T04:05:06Z",
 	}
 	f.on("GET", "/user/repos", [][]any{
 		{repo},
-		{obj{"id": 2, "full_name": "acme/mini", "default_branch": "trunk", "fork": true, "html_url": "https://github.com/acme/mini"}},
+		{obj{
+			"id":             2,
+			"full_name":      "acme/mini",
+			"default_branch": "trunk",
+			"fork":           true,
+			"html_url":       "https://github.com/acme/mini",
+		}},
 	})
 	f.on("GET", "/repos/mrbean/teddy", repo)
 	f.on("GET", "/repos/mrbean/teddy/branches", [][]any{
@@ -143,6 +162,7 @@ func TestGitHub(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	want := SourceInfo{ID: "gh", Kind: forgeauth.GitHub, Host: "github.com"}
 	if got.Source != want || got.Owner != "mrbean" || got.Name != "teddy" || got.Visibility != Private ||
 		got.WebURL != "https://github.com/mrbean/teddy" || got.SSHURL != "git@github.com:mrbean/teddy.git" ||
@@ -154,7 +174,13 @@ func TestGitHub(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantBranches := []Branch{{Name: "dev", SHA: "aaa"}, {Name: "main", SHA: "bbb", Default: true, Protected: true}}
+
+	wantBranches := []Branch{{Name: "dev", SHA: "aaa"}, {
+		Name:      "main",
+		SHA:       "bbb",
+		Default:   true,
+		Protected: true,
+	}}
 	if fmt.Sprint(branches) != fmt.Sprint(wantBranches) {
 		t.Fatalf("Branches = %+v, want %+v", branches, wantBranches)
 	}
@@ -177,14 +203,21 @@ func TestGitHub(t *testing.T) {
 func TestGitLabNestedPath(t *testing.T) {
 	f := newFake(t, "/api/v4")
 	project := obj{
-		"id": 42, "path_with_namespace": "group/sub/project", "default_branch": "main",
-		"visibility": "internal", "forked_from_project": obj{"id": 7},
-		"web_url":          "https://gitlab.example/group/sub/project",
-		"http_url_to_repo": "https://gitlab.example/group/sub/project.git",
-		"ssh_url_to_repo":  "git@gitlab.example:group/sub/project.git",
-		"last_activity_at": "2025-05-06T07:08:09Z",
+		"id":                  42,
+		"path_with_namespace": "group/sub/project",
+		"default_branch":      "main",
+		"visibility":          "internal",
+		"forked_from_project": obj{"id": 7},
+		"web_url":             "https://gitlab.example/group/sub/project",
+		"http_url_to_repo":    "https://gitlab.example/group/sub/project.git",
+		"ssh_url_to_repo":     "git@gitlab.example:group/sub/project.git",
+		"last_activity_at":    "2025-05-06T07:08:09Z",
 	}
-	f.on("GET", "/projects", [][]any{{project}, {obj{"id": 43, "path_with_namespace": "other/thing", "web_url": "https://gitlab.example/other/thing"}}})
+	f.on("GET", "/projects", [][]any{{project}, {obj{
+		"id":                  43,
+		"path_with_namespace": "other/thing",
+		"web_url":             "https://gitlab.example/other/thing",
+	}}})
 	f.on("GET", "/projects/group%2Fsub%2Fproject", project)
 	f.on("GET", "/projects/group%2Fsub%2Fproject/repository/branches", []any{
 		obj{"name": "main", "commit": obj{"id": "111"}, "protected": true},
@@ -240,10 +273,20 @@ func TestGitLabNestedPath(t *testing.T) {
 func TestForgejo(t *testing.T) {
 	f := newFake(t, "/api/v1")
 	repo := obj{
-		"id": 9, "full_name": "mrbean/garden", "default_branch": "main", "private": false, "internal": true,
-		"archived": true, "html_url": "https://codeberg.example/mrbean/garden",
+		"id":             9,
+		"full_name":      "mrbean/garden",
+		"default_branch": "main",
+		"private":        false,
+		"internal":       true,
+		"archived":       true,
+		"html_url":       "https://codeberg.example/mrbean/garden",
 	}
-	f.on("GET", "/user/repos", [][]any{{repo}, {obj{"id": 10, "full_name": "mrbean/car", "private": true, "html_url": "https://codeberg.example/mrbean/car"}}})
+	f.on("GET", "/user/repos", [][]any{{repo}, {obj{
+		"id":        10,
+		"full_name": "mrbean/car",
+		"private":   true,
+		"html_url":  "https://codeberg.example/mrbean/car",
+	}}})
 	f.on("GET", "/repos/mrbean/garden", repo)
 	f.on("GET", "/repos/mrbean/garden/branches", []any{obj{"name": "main", "commit": obj{"id": "f00"}}})
 	f.on("GET", "/repos/mrbean/garden/tags", []any{obj{"name": "v0.1", "commit": obj{"sha": "ba5"}}})
@@ -302,10 +345,12 @@ func TestListAcrossSources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	var got []string
 	for _, r := range repos {
 		got = append(got, string(r.Source.Kind)+":"+r.Path)
 	}
+
 	want := "github:mrbean/teddy gitlab:mrbean/teddy gitlab:MrBean/tools/cli"
 	if strings.Join(got, " ") != want {
 		t.Fatalf("List = %v, want %s", got, want)
@@ -329,7 +374,11 @@ func TestFindAndAmbiguity(t *testing.T) {
 	gh.on("GET", "/repos/mrbean/teddy", obj{"full_name": "mrbean/teddy", "html_url": "https://github.com/mrbean/teddy"})
 	gl := newFake(t, "/api/v4")
 	gl.on("GET", "/projects/mrbean%2Fteddy", obj{"path_with_namespace": "mrbean/teddy", "web_url": "https://gitlab.com/mrbean/teddy"})
-	gl.on("GET", "/projects/group%2Fsub%2Fproject", obj{"path_with_namespace": "group/sub/project", "web_url": "https://gitlab.com/group/sub/project"})
+	gl.on(
+		"GET",
+		"/projects/group%2Fsub%2Fproject",
+		obj{"path_with_namespace": "group/sub/project", "web_url": "https://gitlab.com/group/sub/project"},
+	)
 	c := newClient(t,
 		Source{ID: "gh", Session: gh.session(forgeauth.GitHub)},
 		Source{ID: "gl", Session: gl.session(forgeauth.GitLab)},
@@ -358,6 +407,7 @@ func TestFindAndAmbiguity(t *testing.T) {
 	if r, err := c.Get(ctx, Ref{Path: "group/sub/project"}); err != nil || r.Source.ID != "gl" {
 		t.Fatalf("Get(nested) = %+v, %v", r, err)
 	}
+
 	for _, r := range gh.requests() {
 		if strings.Contains(r, "group") {
 			t.Errorf("GitHub was asked for a nested path: %s", r)
@@ -381,9 +431,11 @@ func TestNotFound(t *testing.T) {
 			t.Errorf("Branches(%+v) err = %v, want ErrNotFound", ref, err)
 		}
 	}
+
 	if _, err := c.Tags(ctx, Ref{Source: "gh", Path: "mrbean/missing"}); !errors.Is(err, forgehttp.ErrNotFound) {
 		t.Errorf("Tags err = %v, want ErrNotFound", err)
 	}
+
 	var fe *forgehttp.Error
 	if _, err := c.Get(ctx, Ref{Source: "gh", Path: "mrbean/missing"}); !errors.As(err, &fe) || fe.StatusCode != http.StatusNotFound {
 		t.Errorf("Get err = %v, want a *forgehttp.Error", err)
@@ -413,9 +465,18 @@ func TestSourceErrorFailsCall(t *testing.T) {
 
 func TestUpdate(t *testing.T) {
 	gh := newFake(t, "")
-	gh.on("PATCH", "/repos/mrbean/teddy", obj{"full_name": "mrbean/teddy", "description": "new", "default_branch": "dev", "html_url": "https://github.com/mrbean/teddy"})
+	gh.on("PATCH", "/repos/mrbean/teddy", obj{
+		"full_name":      "mrbean/teddy",
+		"description":    "new",
+		"default_branch": "dev",
+		"html_url":       "https://github.com/mrbean/teddy",
+	})
 	gl := newFake(t, "/api/v4")
-	gl.on("PUT", "/projects/group%2Fsub%2Fproject", obj{"path_with_namespace": "group/sub/project", "description": "", "web_url": "https://gitlab.com/group/sub/project"})
+	gl.on("PUT", "/projects/group%2Fsub%2Fproject", obj{
+		"path_with_namespace": "group/sub/project",
+		"description":         "",
+		"web_url":             "https://gitlab.com/group/sub/project",
+	})
 	c := newClient(t,
 		Source{ID: "gh", Session: gh.session(forgeauth.GitHub)},
 		Source{ID: "gl", Session: gl.session(forgeauth.GitLab)},
@@ -455,6 +516,7 @@ func TestInvalidPaths(t *testing.T) {
 			t.Errorf("Get(%q) err = %v, want ErrInvalid", p, err)
 		}
 	}
+
 	if n := len(f.requests()); n != 0 {
 		t.Errorf("invalid paths sent %d requests", n)
 	}
@@ -474,12 +536,17 @@ func TestPaginationStaysOnSource(t *testing.T) {
 				_, _ = w.Write([]byte(`[]`))
 			}))
 			defer srv.Close()
-			c := newClient(t, Source{ID: "gh", Session: &forgeauth.Session{Kind: forgeauth.GitHub, BaseURL: srv.URL + "/c/mine", Client: srv.Client()}})
+			c := newClient(t, Source{ID: "gh", Session: &forgeauth.Session{
+				Kind:    forgeauth.GitHub,
+				BaseURL: srv.URL + "/c/mine",
+				Client:  srv.Client(),
+			}})
 			if _, err := c.List(context.Background(), ListOptions{}); err == nil || !strings.Contains(err.Error(), "leaves the source") {
 				t.Fatalf("List err = %v, want a pagination error", err)
 			}
 		})
 	}
+
 	if n := len(other.requests()); n != 0 {
 		t.Errorf("followed a link to another host %d times", n)
 	}
@@ -513,6 +580,7 @@ func TestNew(t *testing.T) {
 			t.Errorf("%s: err = %v, want ErrInvalid", name, err)
 		}
 	}
+
 	none := newClient(t)
 	if repos, err := none.List(context.Background(), ListOptions{}); err != nil || len(repos) != 0 {
 		t.Errorf("List without sources = %v, %v", repos, err)
@@ -520,6 +588,7 @@ func TestNew(t *testing.T) {
 	if _, err := none.Get(context.Background(), Ref{Path: "a/b"}); !errors.Is(err, forgehttp.ErrNotFound) {
 		t.Errorf("Get without sources = %v", err)
 	}
+
 	c := newClient(t, Source{ID: "a", Session: ok}, Source{ID: "b", Session: ok})
 	if s := c.Sources(); len(s) != 2 || s[0].ID != "a" || s[1].ID != "b" {
 		t.Errorf("Sources = %+v", s)

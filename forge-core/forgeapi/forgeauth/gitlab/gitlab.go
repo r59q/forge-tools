@@ -34,6 +34,7 @@ func (Provider) Whoami(ctx context.Context, s *forgeauth.Session) (forgeauth.Ide
 	if err := forgeauth.CheckSession(s, forgeauth.GitLab); err != nil {
 		return forgeauth.Identity{}, err
 	}
+
 	var u struct {
 		ID          json.Number `json:"id"`
 		Username    string      `json:"username"`
@@ -47,11 +48,18 @@ func (Provider) Whoami(ctx context.Context, s *forgeauth.Session) (forgeauth.Ide
 	if u.ID == "" || u.Username == "" {
 		return forgeauth.Identity{}, errors.New("gitlab: /user response has no id or username")
 	}
+
 	email := u.Email
 	if email == "" {
 		email = u.PublicEmail
 	}
-	return forgeauth.Identity{ID: u.ID.String(), Login: u.Username, Name: u.Name, Email: email}, nil
+
+	return forgeauth.Identity{
+		ID:    u.ID.String(),
+		Login: u.Username,
+		Name:  u.Name,
+		Email: email,
+	}, nil
 }
 
 // SetToken calls SetToken.
@@ -75,6 +83,7 @@ func TokenFromHeader(h http.Header) (string, bool) {
 	if len(h.Values("PRIVATE-TOKEN")) > 0 {
 		return forgeauth.HeaderToken(h, "PRIVATE-TOKEN")
 	}
+
 	return forgeauth.AuthorizationToken(h, "Bearer")
 }
 

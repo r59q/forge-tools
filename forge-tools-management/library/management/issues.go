@@ -63,30 +63,49 @@ func (c *Client) ListIssues(ctx context.Context, q IssueQuery) (IssueListing, er
 	if !validQuery(q) {
 		return IssueListing{}, ErrInvalid
 	}
+
 	out := IssueListing{Configured: c.issues != nil, Issues: []Issue{}}
 	if !out.Configured {
 		return out, nil
 	}
-	values, err := c.issues.List(ctx, issues.ListOptions{Source: q.Source, Repository: q.Repository, State: q.State, Scope: q.Scope})
+
+	values, err := c.issues.List(ctx, issues.ListOptions{
+		Source:     q.Source,
+		Repository: q.Repository,
+		State:      q.State,
+		Scope:      q.Scope,
+	})
 	if err != nil {
 		if ctx.Err() != nil {
 			return IssueListing{}, ctx.Err()
 		}
+
 		return IssueListing{}, ErrUnavailable
 	}
+
 	for _, i := range values {
 		if i.Source.ID == "" || i.Source.Kind == "" || i.Repository == "" || i.Number <= 0 {
 			return IssueListing{}, ErrUnavailable
 		}
+
 		entry := Issue{
-			Source: i.Source, Repository: i.Repository, Number: i.Number, Title: i.Title,
-			State: i.State, Author: i.Author.Login, Labels: i.Labels, Comments: i.Comments, UpdatedAt: i.UpdatedAt,
+			Source:     i.Source,
+			Repository: i.Repository,
+			Number:     i.Number,
+			Title:      i.Title,
+			State:      i.State,
+			Author:     i.Author.Login,
+			Labels:     i.Labels,
+			Comments:   i.Comments,
+			UpdatedAt:  i.UpdatedAt,
 		}
 		for _, a := range i.Assignees {
 			entry.Assignees = append(entry.Assignees, a.Login)
 		}
+
 		out.Issues = append(out.Issues, entry)
 	}
+
 	return out, nil
 }
 
@@ -98,10 +117,12 @@ func validQuery(q IssueQuery) bool {
 	default:
 		return false
 	}
+
 	switch q.State {
 	case "", issues.StateOpen, issues.StateClosed, issues.StateAll:
 	default:
 		return false
 	}
+
 	return q.Repository == "" || q.Scope == ""
 }

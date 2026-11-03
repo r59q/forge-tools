@@ -34,6 +34,7 @@ func APIPrefix(kind forgeauth.Kind) string {
 	case forgeauth.GitLab:
 		return "/api/v4"
 	}
+
 	return "/api/v1"
 }
 
@@ -62,7 +63,9 @@ func NewServer(t testing.TB, kind forgeauth.Kind, api Front) *Server {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	s.Session = sess
+
 	return s
 }
 
@@ -73,9 +76,10 @@ func (s *Server) Mount(prefix string, front Front) {
 	if front != nil {
 		h = front(s.Forge)
 	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.mounts[prefix] = http.StripPrefix(prefix, s.Forge.Handler(h))
+	s.mounts[prefix] = http.StripPrefix(prefix, s.Handler(h))
 }
 
 func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
@@ -87,11 +91,13 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 			best, h = p, mh
 		}
 	}
+
 	s.mu.RUnlock()
 	if h == nil {
 		http.NotFound(w, r)
 		return
 	}
+
 	h.ServeHTTP(w, r)
 }
 
@@ -101,11 +107,12 @@ func (s *Server) APIBase() string { return s.HTTP.URL + APIPrefix(s.Kind()) }
 // SessionWithToken opens an API session that sends tok, such as a wrong
 // token for 401 tests.
 func (s *Server) SessionWithToken(tok string) (*forgeauth.Session, error) {
-	p, err := provider(s.Kind())
+	reg, err := providers()
 	if err != nil {
 		return nil, err
 	}
-	return p.Open(context.Background(), forgeauth.Connection{
+
+	return reg.Open(context.Background(), forgeauth.Connection{
 		Kind:      s.Kind(),
 		BaseURL:   s.APIBase(),
 		Transport: s.HTTP.Client().Transport,
@@ -115,27 +122,34 @@ func (s *Server) SessionWithToken(tok string) (*forgeauth.Session, error) {
 // GitRemote opens a Git remote for the front mounted at GitPrefix, using
 // the provider's Git auth header and Token.
 func (s *Server) GitRemote() (*forgeauth.GitRemote, error) {
-	p, err := provider(s.Kind())
+	reg, err := providers()
 	if err != nil {
 		return nil, err
 	}
+
+	p, err := reg.Provider(s.Kind())
+	if err != nil {
+		return nil, err
+	}
+
 	ga, ok := p.(forgeauth.GitAuthenticator)
 	if !ok {
 		return nil, fmt.Errorf("fakeforge: %s has no Git auth", s.Kind())
 	}
+
 	return forgeauth.NewGitRemote(s.HTTP.URL+GitPrefix, forgeauth.StaticToken(Token), ga.SetGitToken, s.HTTP.Client().Transport)
 }
 
-func provider(kind forgeauth.Kind) (forgeauth.Provider, error) {
-	switch kind {
-	case forgeauth.GitHub:
-		return github.Provider{}, nil
-	case forgeauth.GitLab:
-		return gitlab.Provider{}, nil
-	case forgeauth.Forgejo:
-		return forgejo.Provider{}, nil
+// providers returns a registry of the real providers of all three kinds.
+func providers() (*forgeauth.Registry, error) {
+	reg := &forgeauth.Registry{}
+	for _, p := range []forgeauth.Provider{github.Provider{}, gitlab.Provider{}, forgejo.Provider{}} {
+		if err := reg.Register(p); err != nil {
+			return nil, err
+		}
 	}
-	return nil, fmt.Errorf("fakeforge: unknown kind %q", kind)
+
+	return reg, nil
 }
 
 // WriteJSON writes v as a JSON response with status.
@@ -148,8 +162,19 @@ func WriteJSON(w http.ResponseWriter, status int, v any) {
 // WriteMessage writes {"message": msg} with status, the error shape all
 // three forges use.
 func WriteMessage(w http.ResponseWriter, status int, msg string) {
-	WriteJSON(w, status, map[string]string{"message": msg})
+	WriteJSON(w, status, map[string]string{keyMessage: msg})
 }
+
+// Names that several fronts share in queries, paths and JSON.
+const (
+	paramPerPage = "per_page"
+	segCommits   = "commits"
+	keyCommit    = "commit"
+	keyMessage   = "message"
+	keyObject    = "object"
+	keyEncoding  = "encoding"
+	encBase64    = "base64"
+)
 
 // Paging names a front's page parameters.
 type Paging struct {
@@ -169,6 +194,7 @@ func Paginate(w http.ResponseWriter, r *http.Request, total int, p Paging) (star
 	if pageParam == "" {
 		pageParam = "page"
 	}
+
 	size := p.DefaultSize
 	if n, err := strconv.Atoi(r.URL.Query().Get(p.SizeParam)); err == nil && n > 0 {
 		size = n
@@ -179,10 +205,12 @@ func Paginate(w http.ResponseWriter, r *http.Request, total int, p Paging) (star
 	if size < 1 {
 		size = 1
 	}
+
 	page := 1
 	if n, err := strconv.Atoi(r.URL.Query().Get(pageParam)); err == nil && n > 0 {
 		page = n
 	}
+
 	last := max(1, (total+size-1)/size)
 	start = min(total, (page-1)*size)
 	end = min(total, start+size)
@@ -192,12 +220,15 @@ func Paginate(w http.ResponseWriter, r *http.Request, total int, p Paging) (star
 		if err != nil {
 			u = &url.URL{Path: r.URL.Path}
 		}
+
 		q := u.Query()
 		q.Set(pageParam, strconv.Itoa(n))
 		if p.SizeParam != "" {
 			q.Set(p.SizeParam, strconv.Itoa(size))
 		}
+
 		u.RawQuery = q.Encode()
+
 		return fmt.Sprintf(`<http://%s%s>; rel="%s"`, r.Host, u.RequestURI(), rel)
 	}
 	var links []string
@@ -210,5 +241,6 @@ func Paginate(w http.ResponseWriter, r *http.Request, total int, p Paging) (star
 	if len(links) > 0 {
 		w.Header().Set("Link", strings.Join(links, ", "))
 	}
+
 	return start, end
 }

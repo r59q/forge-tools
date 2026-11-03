@@ -50,6 +50,10 @@ jobs:
             echo "Base branch has no buf.yaml yet, skipping."
             exit 0
           fi
+          if ! git cat-file -e "FETCH_HEAD:$DIR/proto"; then
+            echo "New protobuf project; no published API to compare yet."
+            exit 0
+          fi
           buf breaking "$DIR/proto" --against "$REPO_URL#branch=$BASE_REF,subdir=$DIR/proto"
       - name: Check generated code
         working-directory: ${{ inputs.dir }}

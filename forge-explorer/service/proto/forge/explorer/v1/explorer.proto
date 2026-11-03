@@ -1,0 +1,161 @@
+syntax = "proto3";
+
+package forge.explorer.v1;
+
+import "google/api/annotations.proto";
+
+option go_package = "github.com/r59q/forge-tools/forge-explorer/service/explorerpb";
+
+// ExplorerService reads configured worktrees. Every RPC requires a service bearer token.
+service ExplorerService {
+  // ListSources lists public source incarnations and budgets, never host paths.
+  rpc ListSources(ListSourcesRequest) returns (ListSourcesResponse) {
+    option (google.api.http) = {get: "/v1/explorer/sources"};
+  }
+  // Browse lists bounded directory children. The root path is a single dot.
+  rpc Browse(BrowseRequest) returns (BrowseResponse) {
+    option (google.api.http) = {get: "/v1/explorer/sources/{source}/tree"};
+  }
+  // Read returns bounded UTF-8 text; expected_version rejects stale file locations.
+  rpc Read(ReadRequest) returns (ReadResponse) {
+    option (google.api.http) = {get: "/v1/explorer/sources/{source}/file"};
+  }
+  // Search finds literal text or filenames with explicit partial-result state.
+  rpc Search(SearchRequest) returns (SearchResponse) {
+    option (google.api.http) = {
+      post: "/v1/explorer/sources/{source}/search"
+      body: "*"
+    };
+  }
+}
+
+// Capabilities report optional semantic operations. All are false for live worktrees.
+message Capabilities {
+  bool symbols = 1;
+  bool definitions = 2;
+  bool references = 3;
+  bool history = 4;
+}
+
+// Limits are fixed upper bounds for a source.
+message Limits {
+  int32 file_bytes = 1;
+  int32 entries = 2;
+  int32 results = 3;
+  int32 search_bytes = 4;
+  int32 depth = 5;
+}
+
+// Source names a configured live root; version identifies its open incarnation, not a snapshot.
+message Source {
+  string id = 1;
+  string label = 2;
+  string version = 3;
+  string kind = 4;
+  Capabilities capabilities = 5;
+  Limits limits = 6;
+}
+
+// Range uses one-based lines and UTF-16 columns; end_column is exclusive. Zero means whole file.
+message Range {
+  int32 start_line = 1;
+  int32 start_column = 2;
+  int32 end_line = 3;
+  int32 end_column = 4;
+}
+
+// Location identifies exact observed file bytes, their source and an optional range.
+message Location {
+  string source = 1;
+  string version = 2;
+  string path = 3;
+  Range range = 4;
+}
+
+// File contains UTF-8 data, never executable HTML.
+message File {
+  Location location = 1;
+  string text = 2;
+}
+
+// Entry is a directory child; kind is file, directory or unsupported.
+message Entry {
+  string path = 1;
+  string kind = 2;
+}
+
+// State makes incomplete results visible; skipped includes policy exclusions and read failures.
+message State {
+  bool truncated = 1;
+  bool canceled = 2;
+  int32 skipped = 3;
+}
+
+// Directory identifies a live listing, not recursive content.
+message Directory {
+  string source = 1;
+  string version = 2;
+  repeated Entry entries = 3;
+  State state = 4;
+}
+
+// Match keeps source identity and the first matching range on one line.
+message Match {
+  Location location = 1;
+  string preview = 2;
+}
+
+// Results are bounded matches and explicit incompleteness metadata.
+message Results {
+  repeated Match matches = 1;
+  State state = 2;
+}
+
+// ListSourcesRequest has no filters.
+message ListSourcesRequest {}
+
+// ListSourcesResponse enumerates configured roots in ID order.
+message ListSourcesResponse {
+  repeated Source sources = 1;
+}
+
+// BrowseRequest requires a source incarnation to reject remapped roots.
+message BrowseRequest {
+  string source = 1;
+  string source_version = 2;
+  string path = 3;
+}
+
+// BrowseResponse wraps a directory observation.
+message BrowseResponse {
+  Directory directory = 1;
+}
+
+// ReadRequest requires a source incarnation; expected_version is an optional file hash.
+message ReadRequest {
+  string source = 1;
+  string source_version = 2;
+  string path = 3;
+  string expected_version = 4;
+}
+
+// ReadResponse wraps a file observation.
+message ReadResponse {
+  File file = 1;
+}
+
+// SearchRequest uses literal case-sensitive text, path.Match globs and a 0–200 result limit.
+// files selects filename substring lookup among readable text files.
+message SearchRequest {
+  string source = 1;
+  string source_version = 2;
+  string text = 3;
+  string path_glob = 4;
+  bool files = 5;
+  int32 limit = 6;
+}
+
+// SearchResponse retains partial results when the library budget or context ends.
+message SearchResponse {
+  Results results = 1;
+}

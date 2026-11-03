@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "target": "ES2023", "module": "ESNext", "moduleResolution": "Bundler",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"], "strict": true,
+    "noUncheckedIndexedAccess": true, "noUnusedLocals": true, "noUnusedParameters": true,
+    "verbatimModuleSyntax": true, "declaration": true, "outDir": "dist/types"
+  },
+  "include": ["src", "app", "examples"]
+}

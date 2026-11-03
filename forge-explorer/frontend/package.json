@@ -1,0 +1,49 @@
+{
+  "name": "@r59q/explorer",
+  "version": "0.1.0",
+  "description": "Framework-agnostic, source-aware worktree explorer",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=24"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/explorer.js"
+    },
+    "./styles.css": "./dist/styles.css"
+  },
+  "files": [
+    "dist",
+    "nudaui/LICENSE",
+    "nudaui/manifest.json",
+    "README.md",
+    "examples/embedding.ts",
+    "LICENSE"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --test test/*.test.mjs",
+    "test:browser": "playwright test",
+    "test:package": "node tools/test-package.mjs",
+    "build": "node tools/build.mjs",
+    "nuda": "node tools/nuda.mjs",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1",
+    "@typescript-eslint/parser": "8.72.1",
+    "esbuild": "0.25.11",
+    "eslint": "10.14.0",
+    "typescript": "5.9.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/r59q/forge-tools.git",
+    "directory": "forge-explorer/frontend"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  }
+}

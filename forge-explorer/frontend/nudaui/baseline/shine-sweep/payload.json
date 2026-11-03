@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "1.0",
+  "library": "NudaUI",
+  "id": "shine-sweep",
+  "license": "MIT",
+  "code": [
+    {
+      "label": "HTML",
+      "language": "html",
+      "code": "<!-- Shine Sweep — light sweep across button on hover -->\n<button class=\"nuda-shine-sweep\">\n  <span class=\"nuda-shine-sweep__label\">Shine Sweep</span>\n</button>"
+    },
+    {
+      "label": "CSS",
+      "language": "css",
+      "code": "/* ── Shine Sweep ─────────────────────────────────────────────\n   Customize:\n     --nuda-ss-bg      : button background color\n     --nuda-ss-clr     : text color\n     --nuda-ss-radius  : border radius\n     --nuda-ss-speed   : sweep duration\n   ──────────────────────────────────────────────────────────── */\n.nuda-shine-sweep {\n  --nuda-ss-bg: #6366f1;\n  --nuda-ss-clr: #fff;\n  --nuda-ss-radius: 8px;\n  --nuda-ss-speed: 0.6s;\n\n  position: relative;\n  overflow: hidden;\n  padding: 12px 32px;\n  font-size: 1rem;\n  font-weight: 600;\n  color: var(--nuda-ss-clr);\n  background: var(--nuda-ss-bg);\n  border: none;\n  border-radius: var(--nuda-ss-radius);\n  cursor: pointer;\n}\n\n.nuda-shine-sweep__label {\n  position: relative;\n  z-index: 1;\n}\n\n/* Shine pseudo-element */\n.nuda-shine-sweep::after {\n  content: \"\";\n  position: absolute;\n  top: 0;\n  left: -100%;\n  width: 50%;\n  height: 100%;\n  background: linear-gradient(\n    90deg,\n    transparent,\n    rgba(255, 255, 255, 0.35),\n    transparent\n  );\n  transition: none;\n  transform: translateX(0);\n}\n\n.nuda-shine-sweep:hover::after {\n  animation: nuda-shine-sweep-anim var(--nuda-ss-speed) ease-in-out;\n}\n\n@keyframes nuda-shine-sweep-anim {\n  to { transform: translateX(400%); }\n}\n\n/* ── Accessibility ──────────────────────────────────────── */\n@media (prefers-reduced-motion: reduce) {\n  .nuda-shine-sweep::after {\n    animation: none !important;\n  }\n}"
+    }
+  ]
+}

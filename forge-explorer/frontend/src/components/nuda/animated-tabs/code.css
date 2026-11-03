@@ -1,0 +1,74 @@
+/* Animated Tabs
+   Tabs with a sliding indicator pill.
+   Customize: --tab-accent, --tab-bg */
+
+.nuda-tabs {
+  --tab-accent: #e4ff54;
+  --tab-bg: rgba(255, 255, 255, 0.03);
+  max-width: 500px;
+}
+
+.nuda-tabs__bar {
+  display: flex;
+  position: relative;
+  background: var(--tab-bg);
+  border-radius: 10px;
+  padding: 4px;
+  gap: 2px;
+}
+
+.nuda-tabs__tab {
+  flex: 1;
+  text-align: center;
+  font-size: 0.85rem;
+  padding: 0.5rem 0.75rem;
+  color: #888;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  position: relative;
+  z-index: 1;
+  transition: color 0.2s;
+}
+
+.nuda-tabs__tab.is-active {
+  color: #0a0a0a;
+  font-weight: 600;
+}
+
+.nuda-tabs__indicator {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc(33.33% - 4px);
+  background: var(--tab-accent);
+  border-radius: 8px;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 0;
+}
+
+.nuda-tabs__panel {
+  display: none;
+  padding: 1rem;
+  margin-top: 0.5rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  color: #ccc;
+  font-size: 0.85rem;
+  animation: nuda-tab-fade 0.3s ease-out;
+}
+
+.nuda-tabs__panel.is-active { display: block; }
+
+@keyframes nuda-tab-fade {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nuda-tabs__indicator { transition: none; }
+  .nuda-tabs__panel { animation: none; }
+}

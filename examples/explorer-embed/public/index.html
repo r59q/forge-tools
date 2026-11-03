@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sample project</title>
+    <link rel="stylesheet" href="/style.css" />
+    <!-- Lets app.js import the package by name, without a bundler. -->
+    <script type="importmap">
+      { "imports": { "@r59q/explorer": "/vendor/explorer.js" } }
+    </script>
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <header>
+      <h1>Sample project</h1>
+      <nav aria-label="Shortcuts">
+        <a href="#README.md">README</a>
+        <a href="#src/main.go">main.go</a>
+        <a href="#src/greet.go">greet.go</a>
+      </nav>
+    </header>
+    <main>
+      <div id="files"></div>
+      <p id="status" role="status">Connecting…</p>
+    </main>
+  </body>
+</html>

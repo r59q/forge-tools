@@ -5,7 +5,8 @@ Runs the whole stack with Docker Compose: the
 [repositories service](../../forge-repositories/service/), the
 [issues service](../../forge-issues/service/), the
 [checkouts service](../../forge-checkouts/service/), the
-[actions service](../../forge-actions/service/) and the
+[actions service](../../forge-actions/service/), the
+[explorer service](../../forge-explorer/service/) and the
 [management interface](../../forge-tools-management/). You connect forges in
 the browser.
 
@@ -41,6 +42,7 @@ updating this example. It never changes existing values.
 | `FORGE_CHECKOUTS_CONNECTOR_TOKEN`    | Lets checkouts fetch repositories through the proxy.             |
 | `FORGE_CHECKOUTS_TOKEN`              | Authenticates checkout REST/gRPC callers.                        |
 | `FORGE_ACTIONS_CONNECTOR_TOKEN`      | Lets actions read pipelines through the proxy.                   |
+| `FORGE_EXPLORER_TOKEN`              | Authenticates local explorer REST/gRPC callers.                   |
 | `FORGE_ACTIONS_TOKEN`                | Authenticates actions REST/gRPC callers and management.          |
 
 At startup, management registers the proxy, repositories, issues, checkouts and actions tokens
@@ -123,3 +125,13 @@ GitHub downloads redirect to object storage. The proxy's
 forge or caller credentials. Set a comma-separated host list for other storage
 providers; an explicitly empty value disables external downloads. Rerun
 `init-env.sh` to add the two new actions tokens to an existing installation.
+
+## Code exploration
+
+Open `http://127.0.0.1:8090` and enter `FORGE_EXPLORER_TOKEN`. gRPC listens on
+`127.0.0.1:9100`. The default root is the committed `explorer-content` sample.
+Set `FORGE_EXPLORER_ROOT=/absolute/worktree` in `.env` and recreate the explorer
+container to browse a real root, mounted read-only at `/content` as source `local`.
+Ignored and untracked files are included; choose a root whose entire contents
+callers may read. The explorer has no forge credentials and does not create or
+remove checkouts. See its [configuration and limits](../../forge-explorer/README.md).

@@ -1,0 +1,46 @@
+{
+  "components": {
+    "animated-tabs": {
+      "id": "animated-tabs",
+      "sourceURL": "https://raw.githubusercontent.com/sgomez-dev/NudaUI/b7b2842a666b9e9709bdb68628ea8bd2eb0dc686/src/components/showcase/registry/accordions-tabs.tsx",
+      "apiURL": "https://nudaui.dev/api/components/animated-tabs.json",
+      "revision": "b7b2842a666b9e9709bdb68628ea8bd2eb0dc686",
+      "retrievedAt": "2026-11-03T15:17:45.308Z",
+      "etag": "W/\"0305f5e3bc6fadfa1bbfd81f84f3650e643b885550f1e53f9fed74034b1e75cd\"",
+      "sourceChecksum": "5197e1b9941c18b20a3a849d5490c2f5db1517d7fa48632415d2171fc133b70f",
+      "license": "MIT",
+      "licenseURL": "https://github.com/sgomez-dev/NudaUI/blob/main/LICENSE",
+      "payloadChecksum": "ad74bdfd55325f24fc2c3d4a0ebb119e67000781d362ae429c1dd3b42f01e4b8",
+      "files": {
+        "code.html": "b3e161af5540e0e73a9e38fe5dcbedfb5e1c7bfe2f4308044a07a13dc725132c",
+        "code.css": "9f218b679ae12a8d11dfccaebde6689b7f72584a0e32b944ad1969b182cde46d",
+        "code.js": "3be6c830839679c2236bec072c4977ac1cfcecf21add66cc07361666379d7d84"
+      },
+      "working": {
+        "code.css": "9f218b679ae12a8d11dfccaebde6689b7f72584a0e32b944ad1969b182cde46d",
+        "code.html": "b3e161af5540e0e73a9e38fe5dcbedfb5e1c7bfe2f4308044a07a13dc725132c",
+        "code.js": "3be6c830839679c2236bec072c4977ac1cfcecf21add66cc07361666379d7d84"
+      }
+    },
+    "shine-sweep": {
+      "id": "shine-sweep",
+      "sourceURL": "https://raw.githubusercontent.com/sgomez-dev/NudaUI/b7b2842a666b9e9709bdb68628ea8bd2eb0dc686/src/components/showcase/registry/buttons.tsx",
+      "apiURL": "https://nudaui.dev/api/components/shine-sweep.json",
+      "revision": "b7b2842a666b9e9709bdb68628ea8bd2eb0dc686",
+      "retrievedAt": "2026-11-03T15:17:46.258Z",
+      "etag": "W/\"531b701532c19765f6a5b4515e56579b974a38a5c235e11a497a0415f1ae5c99\"",
+      "sourceChecksum": "b37114bdcd699345c1ee979a0787380306a9921333b9cb128fb55fe441c6506f",
+      "license": "MIT",
+      "licenseURL": "https://github.com/sgomez-dev/NudaUI/blob/main/LICENSE",
+      "payloadChecksum": "91c59b26744865e695b89b82be88680aa8192dfc85e88c7ecf189826b69a01f5",
+      "files": {
+        "code.html": "67c5f655bfc7afe6317c5e41c6e63574b308892a24b9372ba4cbfecb89981a1c",
+        "code.css": "eed498eb43c5b65bf3c09fd383779aa7773cefa71b492c589a1d74b8ac03e831"
+      },
+      "working": {
+        "code.css": "eed498eb43c5b65bf3c09fd383779aa7773cefa71b492c589a1d74b8ac03e831",
+        "code.html": "67c5f655bfc7afe6317c5e41c6e63574b308892a24b9372ba4cbfecb89981a1c"
+      }
+    }
+  }
+}

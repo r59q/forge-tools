@@ -1,6 +1,6 @@
 ---
 name: fix-lint
-description: Run and fix golangci-lint, jscpd, buf and go mod tidy findings the way CI does. Use when lint, duplication or protobuf checks fail, or before committing Go or protobuf changes.
+description: Run and fix golangci-lint, ESLint, jscpd, buf and go mod tidy findings the way CI does. Use when lint, duplication or protobuf checks fail, or before committing Go, TypeScript or protobuf changes.
 ---
 
 # Fix lint
@@ -14,6 +14,9 @@ Use the versions CI uses.
 ```sh
 # golangci-lint, from each changed Go project folder
 go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0 run ./...
+
+# ESLint, from each changed TypeScript project folder
+npm run lint
 
 # go.mod, from each changed Go project folder
 go mod tidy -diff
@@ -30,7 +33,9 @@ buf breaking <project>/proto --against '.git#branch=master,subdir=<project>/prot
 buf generate
 ```
 
-`.golangci.yml`, `.jscpd.json` and `buf.yaml` at the root configure them.
+`.golangci.yml`, `eslint.rules.mjs`, `.jscpd.json` and `buf.yaml` at the root
+configure them. Each TypeScript project applies `eslint.rules.mjs` from its own
+`eslint.config.js`.
 
 ## Fix findings
 
@@ -39,6 +44,9 @@ buf generate
 | `depguard` | Fix the import. Change the rule only when the boundary in AGENTS.md changed too. |
 | `file-length-limit` | Split the file into smaller, coherent packages, not just more files. |
 | `funlen`, `gocognit`, `nestif` | Extract small, well-named helpers. Return early to cut nesting. |
+| `max-lines-per-function`, `max-statements`, `complexity`, `max-depth` | Same as `funlen`. In frontends, move state into a plain model and split views into small classes or functions. |
+| `no-nested-ternary` | Use `if` with early returns, a `switch`, or a lookup table. |
+| `max-lines` | Same as `file-length-limit`. |
 | `errcheck` | Handle or return the error. In `defer`, check `Close` errors on writes. |
 | `errorlint` | Use `errors.Is`, `errors.As` and `%w`. |
 | `noctx`, `contextcheck` | Pass the caller's `context.Context` through. |

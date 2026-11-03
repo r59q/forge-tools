@@ -13,6 +13,7 @@ useful on its own.
 | [forge-checkouts](forge-checkouts/)               | Persistent working copies, status and diffs.                           |
 | [forge-actions](forge-actions/)                   | Pipelines, jobs, logs and artifacts across forges.                     |
 | [forge-code](forge-code/)                         | Git content across forges: trees, files, diffs and commits.            |
+| [forge-explorer](forge-explorer/)                 | Live worktree browsing, bounded search and embeddable code exploration. |
 | [forge-review](forge-review/)                     | Fixed review snapshots, assignments and native or standalone feedback. |
 | [forge-changes](forge-changes/)                   | Proposed code changes, discussion and merging across forges.           |
 | [forge-issues](forge-issues/)                     | Issues and comments across forges.                                     |
@@ -26,6 +27,7 @@ useful on its own.
 <tool>/
   library/    core features and business rules
   service/    microservice exposing the library over REST and gRPC
+  frontend/   reusable HTML/TypeScript interface, when provided
 forge-core/   shared libraries
 ```
 

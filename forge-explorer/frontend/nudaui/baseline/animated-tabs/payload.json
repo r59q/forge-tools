@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "1.0",
+  "library": "NudaUI",
+  "id": "animated-tabs",
+  "license": "MIT",
+  "code": [
+    {
+      "label": "HTML",
+      "language": "html",
+      "code": "<div class=\"nuda-tabs\">\n  <div class=\"nuda-tabs__bar\" role=\"tablist\">\n    <button class=\"nuda-tabs__tab is-active\" role=\"tab\" aria-selected=\"true\" data-tab=\"1\">Tab 1</button>\n    <button class=\"nuda-tabs__tab\" role=\"tab\" aria-selected=\"false\" data-tab=\"2\">Tab 2</button>\n    <button class=\"nuda-tabs__tab\" role=\"tab\" aria-selected=\"false\" data-tab=\"3\">Tab 3</button>\n    <div class=\"nuda-tabs__indicator\"></div>\n  </div>\n  <div class=\"nuda-tabs__panel is-active\" data-panel=\"1\" role=\"tabpanel\">Panel 1 content</div>\n  <div class=\"nuda-tabs__panel\" data-panel=\"2\" role=\"tabpanel\">Panel 2 content</div>\n  <div class=\"nuda-tabs__panel\" data-panel=\"3\" role=\"tabpanel\">Panel 3 content</div>\n</div>"
+    },
+    {
+      "label": "CSS",
+      "language": "css",
+      "code": "/* Animated Tabs\n   Tabs with a sliding indicator pill.\n   Customize: --tab-accent, --tab-bg */\n\n.nuda-tabs {\n  --tab-accent: #e4ff54;\n  --tab-bg: rgba(255, 255, 255, 0.03);\n  max-width: 500px;\n}\n\n.nuda-tabs__bar {\n  display: flex;\n  position: relative;\n  background: var(--tab-bg);\n  border-radius: 10px;\n  padding: 4px;\n  gap: 2px;\n}\n\n.nuda-tabs__tab {\n  flex: 1;\n  text-align: center;\n  font-size: 0.85rem;\n  padding: 0.5rem 0.75rem;\n  color: #888;\n  background: none;\n  border: none;\n  border-radius: 8px;\n  cursor: pointer;\n  position: relative;\n  z-index: 1;\n  transition: color 0.2s;\n}\n\n.nuda-tabs__tab.is-active {\n  color: #0a0a0a;\n  font-weight: 600;\n}\n\n.nuda-tabs__indicator {\n  position: absolute;\n  top: 4px;\n  bottom: 4px;\n  left: 4px;\n  width: calc(33.33% - 4px);\n  background: var(--tab-accent);\n  border-radius: 8px;\n  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);\n  z-index: 0;\n}\n\n.nuda-tabs__panel {\n  display: none;\n  padding: 1rem;\n  margin-top: 0.5rem;\n  background: rgba(255, 255, 255, 0.02);\n  border: 1px solid rgba(255, 255, 255, 0.05);\n  border-radius: 10px;\n  color: #ccc;\n  font-size: 0.85rem;\n  animation: nuda-tab-fade 0.3s ease-out;\n}\n\n.nuda-tabs__panel.is-active { display: block; }\n\n@keyframes nuda-tab-fade {\n  from { opacity: 0; transform: translateY(6px); }\n  to { opacity: 1; transform: translateY(0); }\n}\n\n@media (prefers-reduced-motion: reduce) {\n  .nuda-tabs__indicator { transition: none; }\n  .nuda-tabs__panel { animation: none; }\n}"
+    },
+    {
+      "label": "JAVASCRIPT",
+      "language": "javascript",
+      "code": "/* Animated Tabs — Slide indicator and switch panels */\n\n(function () {\n  var containers = document.querySelectorAll('.nuda-tabs');\n  containers.forEach(function (tabs) {\n    var tabBtns = tabs.querySelectorAll('.nuda-tabs__tab');\n    var panels = tabs.querySelectorAll('.nuda-tabs__panel');\n    var indicator = tabs.querySelector('.nuda-tabs__indicator');\n    if (!tabBtns.length || !indicator) return;\n\n    tabBtns.forEach(function (btn, i) {\n      btn.addEventListener('click', function () {\n        tabBtns.forEach(function (b) {\n          b.classList.remove('is-active');\n          b.setAttribute('aria-selected', 'false');\n        });\n        panels.forEach(function (p) { p.classList.remove('is-active'); });\n\n        btn.classList.add('is-active');\n        btn.setAttribute('aria-selected', 'true');\n        var panel = tabs.querySelector('[data-panel=\"' + btn.dataset.tab + '\"]');\n        if (panel) panel.classList.add('is-active');\n\n        indicator.style.transform = 'translateX(' + (i * 100) + '%)';\n      });\n    });\n  });\n})();"
+    }
+  ]
+}

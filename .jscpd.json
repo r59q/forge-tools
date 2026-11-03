@@ -11,7 +11,8 @@
     "**/*.pb.gw.go",
     "**/fakeforge/**",
     "**/testdata/**",
-    "**/node_modules/**"
+    "**/node_modules/**",
+    "**/nudaui/baseline/**"
   ],
   "reporters": ["console"],
   "exitCode": 1

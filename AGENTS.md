@@ -73,6 +73,9 @@ public.
   `github.com/r59q/forge-tools/<tool>/<project>`.
 - Frontend tools use HTML and TypeScript. Keep the core framework-agnostic and
   add framework adapters only when needed, e.g. for a diff viewer.
+- In frontends, keep state apart from the DOM. State lives in plain,
+  unit-tested modules; views render it. Build DOM with a small helper, not
+  element by element.
 
 ## Quality
 
@@ -80,6 +83,8 @@ public.
 - Keep code sparse and easy to scan. Dense code is strongly discouraged; use
   whitespace and small helper functions to make intent clear and code
   aesthetically pleasing.
+- Keep functions small and single-purpose. Name complex conditions with a
+  variable or helper; avoid nested ternaries.
 - Go code is `gofmt`-formatted, has a tidy `go.mod` (`go mod tidy -diff`),
   and passes `go vet ./...` and `go test ./...`, run from the project folder.
 - Protobuf passes `buf lint`, `buf format` and `buf breaking` with the root
@@ -87,11 +92,14 @@ public.
 - Code passes `golangci-lint run ./...` with the shared `.golangci.yml`. Fix
   findings instead of silencing them, and keep its `depguard` rules in sync
   with the boundaries above.
+- TypeScript passes `npm run lint`, which applies the shared
+  `eslint.rules.mjs`. It mirrors the Go limits on function and file length,
+  complexity and nesting.
 - Code passes `jscpd` with the shared `.jscpd.json`. Resolve clones with the
   duplication rule in Tools, and mark intended duplication with a reason.
 - The `fix-lint` skill in `.agents/skills/` explains how to run and fix these checks.
-- Keep files small. When a file grows too large, split it into smaller,
-  coherent packages rather than just more files.
+- Keep files and functions small. When a file grows too large, split it into
+  smaller, coherent packages rather than just more files.
 - Keep dependencies few and well maintained.
 - Never commit secrets, tokens or private data.
 
@@ -133,3 +141,5 @@ Workflows must not run on unauthorized requests.
 
 Keep everything you write short, concise and easy to understand: code
 comments, docs, commit messages, pull request descriptions and replies.
+Short means fewer words and ideas, not packed lines. In code, prefer clear
+over compact.

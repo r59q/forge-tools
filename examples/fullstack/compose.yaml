@@ -78,6 +78,21 @@ services:
       - "127.0.0.1:8088:8080"
       - "127.0.0.1:9098:9090"
 
+  # Standalone read-only exploration; no checkout lifecycle or forge credentials.
+  explorer:
+    build:
+      context: ../..
+      dockerfile: forge-explorer/service/Dockerfile
+    restart: unless-stopped
+    environment:
+      FORGE_EXPLORER_TOKEN: ${FORGE_EXPLORER_TOKEN:?set in .env}
+      FORGE_EXPLORER_ROOTS: local=/content
+    volumes:
+      - ${FORGE_EXPLORER_ROOT:-./explorer-content}:/content:ro
+    ports:
+      - "127.0.0.1:8090:8080"
+      - "127.0.0.1:9100:9090"
+
   management:
     build:
       context: ../..

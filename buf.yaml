@@ -6,6 +6,7 @@ modules:
   - path: forge-actions/service/proto
   - path: forge-changes/service/proto
   - path: forge-checkouts/service/proto
+  - path: forge-explorer/service/proto
   - path: forge-code/service/proto
   - path: forge-connector/library/proto
   - path: forge-issues/service/proto

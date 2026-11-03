@@ -6,6 +6,8 @@ on:
     paths:
       - examples/go/**
       - examples/checkouts/**
+      - examples/explorer-embed/**
+      - forge-explorer/frontend/**
       - forge-connector/library/**
       - forge-repositories/library/**
       - forge-core/forgeapi/**
@@ -16,6 +18,8 @@ on:
     paths:
       - examples/go/**
       - examples/checkouts/**
+      - examples/explorer-embed/**
+      - forge-explorer/frontend/**
       - forge-connector/library/**
       - forge-repositories/library/**
       - forge-core/forgeapi/**
@@ -46,3 +50,25 @@ jobs:
           node:24-alpine@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85 npm test
       - name: Build the example image
         run: docker build -f examples/checkouts/Dockerfile examples/checkouts
+
+  explorer-embed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: Pack the explorer from this commit
+        working-directory: forge-explorer/frontend
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+          npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP"
+      - name: Test the embedding example
+        working-directory: examples/explorer-embed
+        run: |
+          npm install --offline --no-save --ignore-scripts "$RUNNER_TEMP"/r59q-explorer-*.tgz
+          npm test

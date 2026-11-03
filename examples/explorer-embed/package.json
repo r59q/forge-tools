@@ -1,0 +1,13 @@
+{
+  "name": "explorer-embed-example",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "dependencies": {
+    "@r59q/explorer": "^0.1.0"
+  },
+  "scripts": {
+    "start": "node --env-file=.env server.mjs",
+    "test": "node --test *.test.mjs"
+  }
+}

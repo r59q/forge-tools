@@ -1,0 +1,27 @@
+name: forge-explorer-library
+
+# Libraries are published as Go modules through git, so there is no deploy job.
+on:
+  push:
+    branches: [master]
+    paths:
+      - forge-explorer/library/**
+      - .github/workflows/forge-explorer-library.yml
+      - .github/workflows/reusable-go.yml
+      - .golangci.yml
+  pull_request:
+    paths:
+      - forge-explorer/library/**
+      - .github/workflows/forge-explorer-library.yml
+      - .github/workflows/reusable-go.yml
+      - .golangci.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: ./.github/workflows/reusable-go.yml
+    with:
+      dir: forge-explorer/library

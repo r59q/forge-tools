@@ -13,7 +13,8 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Keep the runner within Playwright 1.56's supported Linux releases.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     defaults:
       run:

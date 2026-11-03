@@ -68,6 +68,7 @@ jobs:
           FORGE_CHECKOUTS_CONNECTOR_TOKEN: example-checkouts-connector-token
           FORGE_CHECKOUTS_TOKEN: example-checkouts-token
           FORGE_ACTIONS_TOKEN: example-actions-token
+          FORGE_EXPLORER_TOKEN: example-explorer-token
           FORGE_ACTIONS_CONNECTOR_TOKEN: example-actions-connector-token
         run: docker compose -f examples/fullstack/compose.yaml config --quiet
 

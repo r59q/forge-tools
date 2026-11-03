@@ -3,14 +3,14 @@ import type {
   ExplorerHandle,
   ExplorerOptions,
   Source,
-} from "./types";
-import { copyLocation, Navigation } from "./navigation";
-import { button, element } from "./components/dom";
-import { renderTabs } from "./components/tabs";
-import { renderCode } from "./components/code";
-import { createTree } from "./components/tree";
-import { createSearch } from "./components/search";
-import { styles } from "./styles";
+} from "./types.js";
+import { copyLocation, Navigation } from "./navigation.js";
+import { button, element } from "./components/dom.js";
+import { renderTabs } from "./components/tabs.js";
+import { renderCode } from "./components/code.js";
+import { createTree } from "./components/tree.js";
+import { createSearch } from "./components/search.js";
+import { styles } from "./styles.js";
 
 /** Mount one isolated explorer. The host owns provider/source selection; disposal cancels all instance work.
  * Styles and listeners live inside this host's ShadowRoot. Reuse the host after dispose().

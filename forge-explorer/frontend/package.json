@@ -1,5 +1,5 @@
 {
-  "name": "@forge-tools/explorer",
+  "name": "@r59q/explorer",
   "version": "0.1.0",
   "description": "Framework-agnostic, source-aware worktree explorer",
   "type": "module",
@@ -26,6 +26,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test test/*.test.mjs",
     "test:browser": "playwright test",
+    "test:package": "node tools/test-package.mjs",
     "build": "node tools/build.mjs",
     "nuda": "node tools/nuda.mjs"
   },
@@ -33,5 +34,13 @@
     "@playwright/test": "1.56.1",
     "esbuild": "0.25.11",
     "typescript": "5.9.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/r59q/forge-tools.git",
+    "directory": "forge-explorer/frontend"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
   }
 }

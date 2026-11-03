@@ -1,5 +1,5 @@
-import type { ContentProvider, Source } from "../types";
-import { button, element, resultSummary } from "./dom";
+import type { ContentProvider, Source } from "../types.js";
+import { button, element, resultSummary } from "./dom.js";
 
 /** A lazy directory disclosure tree with instance-owned cancellation and keyboard focus. */
 export function createTree(

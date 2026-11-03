@@ -1,6 +1,6 @@
-export { createExplorer } from "./explorer";
-export { httpProvider, ProviderError } from "./provider";
-export { styles } from "./styles";
+export { createExplorer } from "./explorer.js";
+export { httpProvider, ProviderError } from "./provider.js";
+export { styles } from "./styles.js";
 export type {
   Capabilities,
   ContentProvider,
@@ -18,4 +18,4 @@ export type {
   SearchResults,
   Source,
   SymbolLocation,
-} from "./types";
+} from "./types.js";

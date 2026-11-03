@@ -5,7 +5,7 @@ import type {
   Location,
   Range,
   Source,
-} from "./types";
+} from "./types.js";
 
 /** Empty range denotes a whole file. */
 export function wholeFile(): Range {

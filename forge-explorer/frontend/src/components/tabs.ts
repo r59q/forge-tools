@@ -1,5 +1,5 @@
-import type { Location } from "../types";
-import { element } from "./dom";
+import type { Location } from "../types.js";
+import { element } from "./dom.js";
 
 /** Scoped TypeScript adaptation of NudaUI animated-tabs. No document-wide queries or observers. */
 export function renderTabs(

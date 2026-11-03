@@ -1,6 +1,6 @@
-import type { ContentProvider, Location, Source } from "../types";
-import { validateLocation } from "../navigation";
-import { button, element, resultSummary } from "./dom";
+import type { ContentProvider, Location, Source } from "../types.js";
+import { validateLocation } from "../navigation.js";
+import { button, element, resultSummary } from "./dom.js";
 
 /** Search controls own their request, focus and cancellation independently of file navigation. */
 export function createSearch(

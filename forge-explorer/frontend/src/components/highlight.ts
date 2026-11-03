@@ -1,4 +1,4 @@
-import { element } from "./dom";
+import { element } from "./dom.js";
 
 /** Small lexical highlighter for Go, JS/TS, Python, JSON and shell; other files stay plain text.
  * Tokens are text nodes. This intentionally does not claim parser/semantic accuracy.

@@ -5,7 +5,7 @@ import type {
   Query,
   SearchResults,
   Source,
-} from "./types";
+} from "./types.js";
 
 /** API failure with the stable gRPC status code (9 means a stale location). */
 export class ProviderError extends Error {

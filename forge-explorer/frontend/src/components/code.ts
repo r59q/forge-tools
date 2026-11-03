@@ -1,6 +1,6 @@
-import type { FileContent, Range } from "../types";
-import { button, element } from "./dom";
-import { highlight } from "./highlight";
+import type { FileContent, Range } from "../types.js";
+import { button, element } from "./dom.js";
+import { highlight } from "./highlight.js";
 
 /** Render at most 200 lines at once, including full-file line numbers and selection. */
 export function renderCode(

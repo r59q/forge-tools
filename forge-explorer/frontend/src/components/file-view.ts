@@ -1,69 +1,59 @@
 import type { FileContent, Location, Range } from "../types.js";
 import type { Navigation } from "../model/navigation.js";
-import { renderBreadcrumbs } from "./breadcrumbs.js";
-import { renderCode } from "./code.js";
-import { h } from "./dom.js";
-import { PANEL_ID, renderTabs, tabId } from "./tabs.js";
+import { Breadcrumbs, FileBreadcrumbs } from "./breadcrumbs.js";
+import { renderCodeViewer } from "./code.js";
+import { FileMetadata, SelectionSummary } from "./file-metadata.js";
+import { EmptyState } from "./messages.js";
+import { Panel, PanelBody, PanelHeader } from "./layout.js";
+import { PANEL_ID, FileTabs, TabPanel, Tabs, tabId } from "./tabs.js";
 
-const NO_FILE = "Choose a file to begin.";
-
-/** FileViewActions are the navigation commands the file view can issue. */
-export interface FileViewActions {
+/** FileWorkspaceActions are the navigation commands the file view can issue. */
+export interface FileWorkspaceActions {
   open(location: Location): unknown;
   close(path: string): unknown;
   select(range: Range): void;
   showDirectory(path: string): unknown;
 }
 
-/** FileView shows the open tabs, breadcrumbs, status and the current file. */
-export class FileView {
-  readonly #tabs = h("div", { class: "nuda-tabs" });
-  readonly #breadcrumbs = h("nav", { class: "breadcrumbs", "aria-label": "Breadcrumbs" });
-  readonly #status = h("p", { class: "status", role: "status" }, NO_FILE);
-  readonly #selection = h("p", { class: "selection", role: "status" });
-  readonly #panel = h("div", {
-    id: PANEL_ID,
-    class: "nuda-tabs__panel is-active",
-    role: "tabpanel",
-    tabindex: 0,
-  });
-  readonly node = h(
-    "main",
-    {},
-    this.#tabs,
-    this.#breadcrumbs,
-    this.#status,
-    this.#selection,
-    this.#panel,
-  );
+/** FileWorkspace shows the open tabs, breadcrumbs, status and the current file. */
+export class FileWorkspace {
+  readonly #tabs = Tabs();
+  readonly #breadcrumbs = Breadcrumbs();
+  readonly #metadata = new FileMetadata();
+  readonly #selection = new SelectionSummary();
+  readonly #panel = TabPanel(PANEL_ID);
+  readonly node = Panel("main", {},
+    PanelHeader(this.#tabs, this.#breadcrumbs, this.#metadata.node, this.#selection.node),
+    PanelBody(this.#panel));
   // The file and range on screen. Redrawing only when they change keeps focus.
   #shown?: { file: FileContent; range: Range };
 
   constructor(
     private readonly rootLabel: string,
-    private readonly actions: FileViewActions,
+    private readonly actions: FileWorkspaceActions,
   ) {}
 
+  /** update renders navigation state while retaining unchanged code rows. */
   update(model: Navigation): void {
     const path = model.location?.path;
 
-    this.#status.textContent = statusText(model);
-    this.#status.classList.toggle("error", model.error !== "");
+    this.#metadata.update(model);
     this.#panel.setAttribute("aria-busy", String(model.loading));
 
-    renderTabs(this.#tabs, model.tabs.all, path, this.actions.open, this.actions.close);
+    FileTabs(this.#tabs, model.tabs.all, path, this.actions.open, this.actions.close);
     this.#labelPanel(model.tabs.indexOf(path));
-    renderBreadcrumbs(this.#breadcrumbs, this.rootLabel, path, this.actions.showDirectory);
+    FileBreadcrumbs(this.#breadcrumbs, this.rootLabel, path, this.actions.showDirectory);
     this.#showFile(model.file, model.location);
   }
 
+  /** showSelection announces the selection before the host callback runs. */
   showSelection(location: Location): void {
-    const { startLine, endLine } = location.range;
-    this.#selection.textContent = `Selected lines ${startLine}–${endLine}`;
+    this.#selection.update(location.range);
   }
 
   #labelPanel(tabIndex: number): void {
     if (tabIndex >= 0) {
+      this.#panel.removeAttribute("aria-label");
       this.#panel.setAttribute("aria-labelledby", tabId(tabIndex));
       return;
     }
@@ -74,7 +64,7 @@ export class FileView {
 
   #showFile(file: FileContent | undefined, location: Location | undefined): void {
     if (!file || !location) {
-      this.#panel.replaceChildren(h("p", {}, "No file open."));
+      this.#panel.replaceChildren(EmptyState("No file open."));
       this.#shown = undefined;
       return;
     }
@@ -83,19 +73,10 @@ export class FileView {
     if (shown?.file === file && sameRange(shown.range, location.range)) return;
 
     this.#shown = { file, range: { ...location.range } };
-    this.#selection.textContent = "";
-    renderCode(this.#panel, file, location.range, this.actions.select);
+    this.#selection.update();
+    renderCodeViewer(this.#panel, file, location.range, this.actions.select);
     this.#panel.querySelector<HTMLButtonElement>('.line-number[tabindex="0"]')?.focus();
   }
-}
-
-function statusText(model: Navigation): string {
-  if (model.error) return model.error;
-  if (model.loading) return "Loading file…";
-  if (!model.location) return NO_FILE;
-
-  const { path, version } = model.location;
-  return `${path} · ${version.slice(0, 12)}`;
 }
 
 function sameRange(a: Range, b: Range): boolean {

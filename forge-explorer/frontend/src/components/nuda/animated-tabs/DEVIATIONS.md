@@ -15,3 +15,7 @@ responsive sizing, contrast, focus indicators and reduced-motion rules within
 the instance ShadowRoot. `code.html` and `code.js` remain comparison references;
 they are never inserted or executed. Direct edits and larger rewrites are allowed;
 record meaningful changes here. Navigation and browser tests cover the adapter.
+
+The adapter names its parts `Tabs`, `TabList`, `Tab`, `TabPanel` and `FileTabs`.
+Shared `ScrollArea` contains overflow; shared primitive CSS owns focus and reduced
+motion. Active panels use the tab label; empty panels use “File content”.

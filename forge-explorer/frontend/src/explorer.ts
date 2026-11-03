@@ -1,5 +1,5 @@
+import { CapabilitySummary, ExplorerShell, ExplorerSidebar } from "./components/shell.js";
 import type {
-  Capabilities,
   ContentProvider,
   ExplorerHandle,
   ExplorerOptions,
@@ -7,19 +7,12 @@ import type {
 } from "./types.js";
 import { copyLocation } from "./model/location.js";
 import { Navigation } from "./model/navigation.js";
-import { button, h } from "./components/dom.js";
-import { FileView } from "./components/file-view.js";
-import { Search } from "./components/search.js";
-import { Toolbar } from "./components/toolbar.js";
-import { Tree } from "./components/tree.js";
+import { h } from "./components/dom.js";
+import { FileWorkspace } from "./components/file-view.js";
+import { SearchPanel } from "./components/search.js";
+import { ExplorerToolbar } from "./components/toolbar.js";
+import { FileTree } from "./components/tree.js";
 import { styles } from "./styles.js";
-
-const SEMANTIC_OPERATIONS: Array<keyof Capabilities> = [
-  "symbols",
-  "definitions",
-  "references",
-  "history",
-];
 
 /** createExplorer mounts one isolated explorer in host's shadow root.
  * The host owns the provider and source. dispose() cancels all instance work
@@ -35,26 +28,19 @@ export function createExplorer(
   const shadow = emptyShadowRoot(host);
   const lifetime = new AbortController();
 
-  const files: FileView = new FileView(source.label, {
+  const files: FileWorkspace = new FileWorkspace(source.label, {
     open: (location) => model.open(location),
     close: (path) => closeTab(path),
     select: (range) => model.select(range),
     showDirectory: (path) => tree.show(path),
   });
   const model: Navigation = new Navigation(provider, source, withSelection(options, files), render);
-  const toolbar = new Toolbar(model, closeTab);
-  const tree = new Tree(provider, source, (path) => model.open(path), lifetime.signal);
-  const search = new Search(provider, source, (location) => model.open(location), lifetime.signal);
+  const toolbar = new ExplorerToolbar(model, closeTab);
+  const tree = new FileTree(provider, source, (path) => model.open(path), lifetime.signal);
+  const search = new SearchPanel(provider, source, (location) => model.open(location), lifetime.signal);
 
-  const sidebar = h("aside", {}, button("Refresh tree", () => tree.show(".")), tree.node, search.node);
-  const shell = h(
-    "section",
-    { class: "explorer", "aria-label": `${source.label} explorer` },
-    ...sourceHeader(source),
-    toolbar.node,
-    h("div", { class: "layout" }, sidebar, files.node),
-    capabilityNote(provider, source),
-  );
+  const sidebar = ExplorerSidebar(tree.node, search.node, () => tree.show("."));
+  const shell = ExplorerShell(source, toolbar.node, sidebar, files.node, CapabilitySummary(provider, source));
   shadow.append(h("style", {}, styles), shell);
   bindHistoryKeys(shell, model, lifetime.signal);
 
@@ -95,7 +81,7 @@ function emptyShadowRoot(host: HTMLElement): ShadowRoot {
 }
 
 // withSelection shows the selection in the file view before notifying the host.
-function withSelection(options: ExplorerOptions, files: FileView): ExplorerOptions {
+function withSelection(options: ExplorerOptions, files: FileWorkspace): ExplorerOptions {
   return {
     ...options,
     onSelection(location) {
@@ -103,25 +89,6 @@ function withSelection(options: ExplorerOptions, files: FileView): ExplorerOptio
       options.onSelection?.(location);
     },
   };
-}
-
-function sourceHeader(source: Source): HTMLElement[] {
-  const content = source.kind === "worktree" ? "live content" : source.version;
-
-  return [
-    h("h2", {}, source.label),
-    h("p", { class: "source-caption" }, `${source.kind} · ${source.id} · ${content}`),
-  ];
-}
-
-// capabilityNote states honestly which semantic operations are available.
-function capabilityNote(provider: ContentProvider, source: Source): HTMLElement {
-  const describe = (operation: keyof Capabilities): string => {
-    const available = source.capabilities[operation] && provider[operation] !== undefined;
-    return `${operation}: ${available ? "available through provider" : "unsupported"}`;
-  };
-
-  return h("p", { class: "capabilities" }, SEMANTIC_OPERATIONS.map(describe).join(" · "));
 }
 
 // bindHistoryKeys maps Alt+Left and Alt+Right to back and forward.

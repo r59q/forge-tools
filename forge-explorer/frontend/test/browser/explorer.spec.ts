@@ -41,6 +41,10 @@ test("standalone browsing, highlighting, search, selection and history", async (
     explorer.getByRole("tab", { name: "hello.go", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
   await explorer.getByRole("button", { name: "Forward", exact: true }).click();
+  // Navigation replaces the tabs and moves focus when the file read finishes.
+  await expect(
+    explorer.getByRole("tab", { name: "sub/other.ts", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
   await explorer
     .getByRole("tab", { name: "sub/other.ts", exact: true })
     .focus();
@@ -49,6 +53,9 @@ test("standalone browsing, highlighting, search, selection and history", async (
     explorer.getByRole("tab", { name: "hello.go", exact: true }),
   ).toBeFocused();
   await page.keyboard.press("Enter");
+  await expect(
+    explorer.getByRole("tab", { name: "hello.go", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
   await expect(explorer.getByText(/definitions: unsupported/)).toBeVisible();
   await explorer.getByRole("tab", { name: "hello.go", exact: true }).focus();
   await page.keyboard.press("Delete");

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Two source embedding example</title>
+    <link rel="stylesheet" href="/app.css" />
+    <script type="module" src="/embedding.js"></script>
+  </head>
+  <body>
+    <h1>Old and new explorers</h1>
+    <p>
+      Configure roots named <code>old</code> and <code>new</code>. Each instance
+      keeps its own source and state.
+    </p>
+    <form>
+      <label
+        >Service token
+        <input id="token" type="password" autocomplete="off" required /></label
+      ><button>Connect both</button>
+    </form>
+    <p id="status" role="status"></p>
+    <p>
+      <button id="counterpart">Open old file on new side</button>
+      <button id="combined">Open combined location</button>
+      <button id="dispose-old">Dispose old explorer</button>
+    </p>
+    <section aria-label="Old side">
+      <h2>Old</h2>
+      <div id="old"></div>
+    </section>
+    <section aria-label="New side">
+      <h2>New</h2>
+      <div id="new"></div>
+    </section>
+  </body>
+</html>

@@ -1,0 +1,253 @@
+:host {
+  --explorer-bg: #111722;
+  --explorer-panel: #1b2534;
+  --explorer-text: #e5edf8;
+  --explorer-muted: #abbad1;
+  --explorer-accent: #98d9ff;
+  display: block;
+  color: var(--explorer-text);
+  font:
+    14px/1.5 system-ui,
+    sans-serif;
+  color-scheme: dark;
+}
+* {
+  box-sizing: border-box;
+}
+.explorer {
+  background: var(--explorer-bg);
+  border: 1px solid #40516a;
+  border-radius: 12px;
+  padding: 16px;
+}
+h2 {
+  font-size: 1.25rem;
+  margin: 0;
+}
+p {
+  margin: 8px 0;
+}
+.source-caption,
+.capabilities,
+.partial {
+  color: var(--explorer-muted);
+  font-size: 0.85rem;
+}
+.toolbar,
+.breadcrumbs,
+.code-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+}
+.layout {
+  display: grid;
+  grid-template-columns: minmax(200px, 26%) minmax(0, 1fr);
+  gap: 16px;
+}
+aside,
+main {
+  min-width: 0;
+}
+aside {
+  border-right: 1px solid #40516a;
+  padding-right: 16px;
+}
+button,
+input,
+select {
+  font: inherit;
+}
+button {
+  cursor: pointer;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+:focus-visible {
+  outline: 3px solid var(--explorer-accent);
+  outline-offset: 2px;
+}
+input,
+select {
+  min-width: 0;
+  max-width: 100%;
+  padding: 7px;
+  color: var(--explorer-text);
+  background: var(--explorer-panel);
+  border: 1px solid #66809f;
+  border-radius: 5px;
+}
+input::placeholder {
+  color: var(--explorer-muted);
+}
+.nuda-shine-sweep {
+  --nuda-ss-bg: var(--explorer-panel);
+  --nuda-ss-clr: var(--explorer-text);
+  padding: 6px 10px;
+  font-size: 0.85rem;
+}
+.nuda-shine-sweep::after {
+  pointer-events: none;
+}
+.nuda-tabs {
+  max-width: none;
+  --tab-accent: var(--explorer-accent);
+  --tab-bg: var(--explorer-panel);
+}
+.nuda-tabs__bar {
+  overflow-x: auto;
+}
+.nuda-tabs__tab {
+  color: var(--explorer-muted);
+  flex: 0 0 auto;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nuda-tabs__tab.is-active {
+  background: var(--explorer-accent);
+  color: #111722;
+}
+.nuda-tabs__panel {
+  padding: 0;
+  color: var(--explorer-text);
+  margin: 0;
+  border: 0;
+  background: transparent;
+  animation: none;
+}
+.tree {
+  max-height: 380px;
+  overflow: auto;
+}
+.tree ul {
+  padding-left: 16px;
+  list-style: none;
+  margin: 4px 0;
+}
+.tree > ul {
+  padding-left: 0;
+}
+.tree .file {
+  text-align: left;
+  overflow-wrap: anywhere;
+  background: transparent;
+}
+summary {
+  padding: 5px;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.search {
+  margin-top: 16px;
+  border-top: 1px solid #40516a;
+  padding-top: 12px;
+}
+.search form {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.search input {
+  grid-column: 1 / -1;
+}
+.search-results {
+  padding: 0;
+  list-style: none;
+  max-height: 400px;
+  overflow: auto;
+}
+.search-results li {
+  margin: 8px 0;
+}
+.search-results button {
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.search-results code {
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--explorer-muted);
+}
+.error {
+  color: #ffb6ba;
+}
+.status,
+.selection {
+  overflow-wrap: anywhere;
+}
+.code {
+  overflow: auto;
+  max-height: 65vh;
+  margin: 0;
+  background: #0b111b;
+  font:
+    13px/1.65 ui-monospace,
+    monospace;
+  tab-size: 4;
+}
+.code-line {
+  display: flex;
+  min-width: max-content;
+}
+.line-number {
+  color: var(--explorer-muted);
+  background: transparent;
+  border: 0;
+  border-right: 1px solid #40516a;
+  min-width: 5em;
+  padding: 0 12px;
+  text-align: right;
+  flex: 0 0 5em;
+  font: inherit;
+  user-select: none;
+}
+.code-line code {
+  padding: 0 12px;
+  font: inherit;
+}
+.code-line.selected {
+  background: #253e58;
+}
+.syntax-keyword {
+  color: #c7a3ff;
+}
+.syntax-string {
+  color: #a9df9b;
+}
+.syntax-comment {
+  color: #97abc2;
+}
+.syntax-number {
+  color: #ffcd94;
+}
+.code-controls input {
+  width: 90px;
+}
+@media (max-width: 720px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  aside {
+    border-right: 0;
+    padding-right: 0;
+  }
+  .tree {
+    max-height: 200px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

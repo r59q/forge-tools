@@ -30,6 +30,8 @@ linters:
             - "**/forge-*/library/**"
             - "!**/forge-connector/**"
           deny:
+            - pkg: "github.com/r59q/forge-tools/forge-explorer/service"
+              desc: libraries must not import services
             - pkg: "google.golang.org/grpc"
               desc: libraries hold business rules; transport belongs in services
             - pkg: "github.com/grpc-ecosystem"
@@ -56,6 +58,8 @@ linters:
           files:
             - "**/forge-core/**"
           deny:
+            - pkg: "github.com/r59q/forge-tools/forge-explorer"
+              desc: forge-core must not depend on any tool
             - pkg: "github.com/r59q/forge-tools/forge-actions"
               desc: forge-core must not depend on any tool
             - pkg: "github.com/r59q/forge-tools/forge-changes"
@@ -78,6 +82,8 @@ linters:
           files:
             - "**/forge-connector/**"
           deny:
+            - pkg: "github.com/r59q/forge-tools/forge-explorer"
+              desc: forge-connector knows no tool domain
             - pkg: "github.com/r59q/forge-tools/forge-actions"
               desc: forge-connector knows no tool domain
             - pkg: "github.com/r59q/forge-tools/forge-changes"
@@ -98,6 +104,8 @@ linters:
           files:
             - "**/forge-actions/**"
           deny:
+            - pkg: "github.com/r59q/forge-tools/forge-explorer"
+              desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-changes"
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-checkouts"
@@ -116,6 +124,8 @@ linters:
           files:
             - "**/forge-changes/**"
           deny:
+            - pkg: "github.com/r59q/forge-tools/forge-explorer"
+              desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-actions"
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-checkouts"
@@ -134,6 +144,8 @@ linters:
           files:
             - "**/forge-checkouts/**"
           deny:
+            - pkg: "github.com/r59q/forge-tools/forge-explorer"
+              desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-actions"
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-changes"
@@ -152,6 +164,8 @@ linters:
           files:
             - "**/forge-code/**"
           deny:
+            - pkg: "github.com/r59q/forge-tools/forge-explorer"
+              desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-actions"
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-changes"
@@ -170,6 +184,8 @@ linters:
           files:
             - "**/forge-issues/**"
           deny:
+            - pkg: "github.com/r59q/forge-tools/forge-explorer"
+              desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-actions"
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-changes"
@@ -188,6 +204,8 @@ linters:
           files:
             - "**/forge-repositories/**"
           deny:
+            - pkg: "github.com/r59q/forge-tools/forge-explorer"
+              desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-actions"
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-changes"
@@ -206,6 +224,8 @@ linters:
           files:
             - "**/forge-review/**"
           deny:
+            - pkg: "github.com/r59q/forge-tools/forge-explorer"
+              desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-actions"
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-changes"
@@ -217,6 +237,26 @@ linters:
             - pkg: "github.com/r59q/forge-tools/forge-issues"
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-repositories"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-tools-management"
+              desc: tools must not depend on each other
+        explorer-no-other-tools:
+          files:
+            - "**/forge-explorer/**"
+          deny:
+            - pkg: "github.com/r59q/forge-tools/forge-actions"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-changes"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-checkouts"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-code"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-issues"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-repositories"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-review"
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-tools-management"
               desc: tools must not depend on each other

@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, writeFile, mkdir, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { stage, apply } from "../tools/nuda-store.mjs";
-import { fromRegistry, validatePayload } from "../tools/nuda-source.mjs";
+import { stage, apply } from "../scripts/nuda-store.mjs";
+import { fromRegistry, validatePayload } from "../scripts/nuda-source.mjs";
 
 const payload = (css = ".sample {}") => ({
   schemaVersion: "1.0",
@@ -140,7 +140,7 @@ test("official registry extraction reads exact literal code without executing JS
 });
 
 test("committed baselines and provenance checksums match", async () => {
-  const { digest, json, blocks } = await import("../tools/nuda-source.mjs");
+  const { digest, json, blocks } = await import("../scripts/nuda-source.mjs");
   const manifest = JSON.parse(await readFile("nudaui/manifest.json", "utf8"));
   for (const [id, entry] of Object.entries(manifest.components)) {
     const source = JSON.parse(

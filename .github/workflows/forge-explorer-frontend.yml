@@ -51,6 +51,6 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run build
       - name: Publish unpublished version to GitHub Packages
-        run: node tools/publish.mjs
+        run: node scripts/publish.mjs
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

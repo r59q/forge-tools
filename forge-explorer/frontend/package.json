@@ -16,6 +16,8 @@
   },
   "files": [
     "dist",
+    "!dist/app",
+    "!dist/dev",
     "nudaui/LICENSE",
     "nudaui/manifest.json",
     "README.md",
@@ -27,9 +29,11 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test test/*.test.mjs",
     "test:browser": "playwright test",
-    "test:package": "node tools/test-package.mjs",
-    "build": "node tools/build.mjs",
-    "nuda": "node tools/nuda.mjs",
+    "test:package": "node scripts/test-package.mjs",
+    "build": "node scripts/build.mjs",
+    "dev": "node --env-file-if-exists=.env scripts/dev.mjs",
+    "dev:setup": "sh scripts/dev-setup.sh",
+    "nuda": "node scripts/nuda.mjs",
     "lint": "eslint ."
   },
   "devDependencies": {

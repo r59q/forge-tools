@@ -1,14 +1,8 @@
 import { build } from "esbuild";
 import { mkdir, readFile, writeFile, copyFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
+import { appEntry, appShell, appStyles, common } from "./app-assets.mjs";
 
-const common = {
-  bundle: true,
-  format: "esm",
-  target: "es2023",
-  loader: { ".css": "text" },
-  legalComments: "inline",
-};
 await mkdir("dist/app", { recursive: true });
 await build({
   ...common,
@@ -17,7 +11,7 @@ await build({
 });
 await build({
   ...common,
-  entryPoints: ["app/main.ts"],
+  entryPoints: [appEntry],
   outfile: "dist/app/app.js",
   minify: true,
 });
@@ -41,16 +35,11 @@ execFileSync(
 );
 const { styles } = await import("../dist/explorer.js");
 await writeFile("dist/styles.css", styles);
-await copyFile("app/index.html", "dist/app/index.html");
-const appStyles = await Promise.all([
-  "src/components/nuda/shine-sweep/code.css",
-  "src/components/primitives.css",
-  "app/app.css",
-].map((file) => readFile(file, "utf8")));
-await writeFile("dist/app/app.css", appStyles.join("\n"));
-await copyFile("nudaui/LICENSE", "dist/app/NUDAUI-LICENSE.txt");
+await copyFile(appShell.page, "dist/app/index.html");
+await writeFile("dist/app/app.css", await appStyles());
+await copyFile(appShell.license, "dist/app/NUDAUI-LICENSE.txt");
 // Include upstream notices in the consumable JS bundle as well as the package.
-const license = await readFile("nudaui/LICENSE", "utf8");
+const license = await readFile(appShell.license, "utf8");
 for (const file of [
   "dist/explorer.js",
   "dist/app/app.js",

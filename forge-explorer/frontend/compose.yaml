@@ -1,0 +1,78 @@
+# A local stack for developing the explorer against real forge repositories.
+# scripts/dev-setup.sh connects a forge account through the connector, checks
+# out the repositories and points the explorer at them.
+name: forge-explorer-dev
+
+services:
+  # Stores the forge connection and its encrypted token.
+  broker:
+    build:
+      context: ../..
+      dockerfile: forge-connector/broker/Dockerfile
+    restart: unless-stopped
+    environment:
+      FORGE_BROKER_KEY: ${FORGE_BROKER_KEY:?run npm run dev:setup}
+      FORGE_BROKER_ADMIN_TOKEN: ${FORGE_BROKER_ADMIN_TOKEN:?run npm run dev:setup}
+    volumes:
+      - broker-data:/data
+
+  # Calls the forge for checkouts, with tokens from the broker.
+  proxy:
+    build:
+      context: ../..
+      dockerfile: forge-connector/proxy/Dockerfile
+    restart: unless-stopped
+    environment:
+      FORGE_PROXY_BROKER_ADDR: broker:9090
+      FORGE_PROXY_TOKEN: ${FORGE_PROXY_TOKEN:?run npm run dev:setup}
+
+  # Adds connections and registers the proxy and checkouts in the broker.
+  management:
+    build:
+      context: ../..
+      dockerfile: forge-tools-management/service/Dockerfile
+    restart: unless-stopped
+    environment:
+      FORGE_MANAGEMENT_TOKEN: ${FORGE_MANAGEMENT_TOKEN:?run npm run dev:setup}
+      FORGE_MANAGEMENT_CONNECTOR_ADDRESS: broker:9090
+      FORGE_MANAGEMENT_CONNECTOR_INSECURE: "true"
+      FORGE_MANAGEMENT_CONNECTOR_ADMIN_TOKEN: ${FORGE_BROKER_ADMIN_TOKEN:?run npm run dev:setup}
+      FORGE_MANAGEMENT_PROXY_TOKEN: ${FORGE_PROXY_TOKEN:?run npm run dev:setup}
+      FORGE_MANAGEMENT_CHECKOUTS_CONNECTOR_TOKEN: ${FORGE_CHECKOUTS_CONNECTOR_TOKEN:?run npm run dev:setup}
+    ports:
+      - "127.0.0.1:8183:8080"
+
+  # Clones the repositories through the proxy into the checkouts volume.
+  checkouts:
+    build:
+      context: ../..
+      dockerfile: forge-checkouts/service/Dockerfile
+    restart: unless-stopped
+    environment:
+      FORGE_CHECKOUTS_TOKEN: ${FORGE_CHECKOUTS_TOKEN:?run npm run dev:setup}
+      FORGE_CHECKOUTS_CONNECTOR_URL: http://proxy:8081
+      FORGE_CHECKOUTS_CONNECTOR_TOKEN: ${FORGE_CHECKOUTS_CONNECTOR_TOKEN:?run npm run dev:setup}
+    volumes:
+      - checkouts-data:/data
+    ports:
+      - "127.0.0.1:8188:8080"
+
+  # Reads the checkouts at the same paths as the checkouts service, read-only.
+  # Until dev-setup.sh sets FORGE_EXPLORER_ROOTS, it serves this project's src/.
+  explorer:
+    build:
+      context: ../..
+      dockerfile: forge-explorer/service/Dockerfile
+    restart: unless-stopped
+    environment:
+      FORGE_EXPLORER_TOKEN: ${FORGE_EXPLORER_TOKEN:?run npm run dev:setup}
+      FORGE_EXPLORER_ROOTS: ${FORGE_EXPLORER_ROOTS:-explorer-src=/explorer-src}
+    volumes:
+      - checkouts-data:/data:ro
+      - ./src:/explorer-src:ro
+    ports:
+      - "127.0.0.1:8190:8080"
+
+volumes:
+  broker-data:
+  checkouts-data:

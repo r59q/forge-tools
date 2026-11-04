@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { publishPackage } from "../tools/publish.mjs";
+import { publishPackage } from "../scripts/publish.mjs";
 
 const manifest = JSON.parse(
   readFileSync(new URL("../package.json", import.meta.url), "utf8"),

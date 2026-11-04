@@ -29,7 +29,7 @@ render it. See the [component catalogue](COMPONENTS.md) for named parts and stat
 
 The build emits `dist/explorer.js`, public declarations in `dist/types`,
 `dist/styles.css`, and the standalone app in `dist/app`. `npm pack` produces the
-consumable package. The service serves `dist/app` as static files; Go checks need
+consumable package, without the standalone app. The service serves `dist/app` as static files; Go checks need
 no frontend build. Normal builds, tests and runtime never contact NudaUI.
 
 The [frontend workflow](../../.github/workflows/forge-explorer-frontend.yml)
@@ -61,6 +61,53 @@ in your user npm configuration, never in committed files. To consume a local
 build without registry access, run `npm pack` after building and install the
 resulting `r59q-explorer-0.1.0.tgz` in the host project. The service image includes
 the standalone app and has its own [publishing pipeline](../service/README.md#asset-packaging).
+
+## Development
+
+[compose.yaml](compose.yaml) runs the explorer service against real forge
+repositories. The [connector](../../forge-connector/) holds your forge token,
+[checkouts](../../forge-checkouts/service/) clones the repositories through
+it, and the explorer service reads those checkouts. It needs Docker Compose,
+`curl`, `jq` and `openssl`.
+
+```sh
+npm run dev:setup     # first run creates .env and stops
+$EDITOR .env          # set FORGE_DEV_TOKEN and FORGE_DEV_REPOSITORIES
+npm run dev:setup     # starts the stack, connects the forge, checks out
+npm run dev           # live reload on http://127.0.0.1:8091
+```
+
+`npm run dev` rebuilds and reloads the page after every change. It forwards
+API calls to the explorer service with the service token, then connects right
+away. It reads `FORGE_EXPLORER_TOKEN` and `EXPLORER_URL` (default
+`http://127.0.0.1:8090`) from the environment or `.env`, so it also works
+with a service started another way. `EXPLORER_DEV_PORT` changes its port.
+
+| Variable                 | Meaning                                                 |
+| ------------------------ | ------------------------------------------------------- |
+| `FORGE_DEV_FORGE`        | `github`, `gitlab` or `forgejo`                         |
+| `FORGE_DEV_HOST`         | Self-hosted forge host; empty for the public forges     |
+| `FORGE_DEV_TOKEN`        | Forge token with read access to the repositories        |
+| `FORGE_DEV_REPOSITORIES` | `owner/name` list, separated by spaces                  |
+| `FORGE_DEV_REFERENCE`    | Branch, tag or commit to check out, default `HEAD`      |
+| `FORGE_EXPLORER_ROOTS`   | Written by setup: one explorer source per checkout      |
+
+Run `npm run dev:setup` again after changing them. It reuses the
+`explorer-dev` connection, replaces its token and adds missing checkouts.
+Each repository becomes a source named like `owner-name`. Until then, the
+explorer shows this project's `src/`.
+
+| Service    | Address                 | Sign in                                         |
+| ---------- | ----------------------- | ----------------------------------------------- |
+| Explorer   | `http://127.0.0.1:8190` | `FORGE_EXPLORER_TOKEN`                          |
+| Management | `http://127.0.0.1:8183` | `operator` / `FORGE_MANAGEMENT_TOKEN`           |
+| Checkouts  | `http://127.0.0.1:8188` | `Authorization: Bearer <FORGE_CHECKOUTS_TOKEN>` |
+
+Ports differ from the [full-stack example](../../examples/fullstack/), so both
+can run. After changing a service, run `docker compose up --build -d <name>`.
+Checkouts do not follow the forge: remove one through the checkouts API to
+get newer commits, or reset everything with `docker compose down -v`, which
+deletes the stored forge token and all checkouts.
 
 ## Embedding contract
 

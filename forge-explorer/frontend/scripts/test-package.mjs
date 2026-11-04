@@ -17,6 +17,9 @@ try {
   for (const required of ["dist/types/index.d.ts", "nudaui/LICENSE", "LICENSE"]) {
     assert.ok(packed.files.some((file) => file.path === required), required);
   }
+  // The standalone app and dev build belong to the service, not to embedders.
+  const appFiles = packed.files.filter((file) => /^dist\/(app|dev)\//.test(file.path));
+  assert.deepEqual(appFiles, [], "dist/app and dist/dev are not packed");
   writeFileSync(join(consumer, "package.json"), '{"private":true,"type":"module"}');
   execFileSync("npm", [
     "install", "--offline", "--ignore-scripts", "--no-audit", "--no-fund",

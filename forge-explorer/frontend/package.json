@@ -19,6 +19,7 @@
     "nudaui/LICENSE",
     "nudaui/manifest.json",
     "README.md",
+    "COMPONENTS.md",
     "examples/embedding.ts",
     "LICENSE"
   ],

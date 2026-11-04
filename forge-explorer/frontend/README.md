@@ -23,8 +23,9 @@ from repository root (Go, curl, jq and frontend dependencies must be installed).
 `EXPLORER_CHROMIUM=/path/to/chromium` selects an existing browser executable.
 
 `src/model/` holds state with no DOM: navigation, history, tabs and location
-checks. `src/components/` holds views that render it. `npm run lint` applies the
-repository's shared [ESLint rules](../../eslint.rules.mjs).
+checks, plus search requests and cancellation. `src/components/` holds views that
+render it. See the [component catalogue](COMPONENTS.md) for named parts and states.
+`npm run lint` applies the repository's shared [ESLint rules](../../eslint.rules.mjs).
 
 The build emits `dist/explorer.js`, public declarations in `dist/types`,
 `dist/styles.css`, and the standalone app in `dist/app`. `npm pack` produces the
@@ -140,7 +141,7 @@ it is not represented as a response from the unavailable JSON endpoint.
 - `nudaui/manifest.json`: IDs, API/source URLs, upstream revision where available,
   retrieval time, ETag, raw source checksum, payload and individual code checksums.
 - `src/components/nuda/<id>/`: maintained working copies and deviation notes.
-- `src/components/tabs.ts`, `dom.ts`: typed instance-scoped adapters.
+- `src/components/tabs.ts`, `controls.ts`: typed instance-scoped adapters.
 - `nudaui/LICENSE`: full upstream MIT license and copyright notice, also shipped
   in bundles and the standalone app. Baseline source is never edited by hand.
 

@@ -1,23 +1,24 @@
+import { Button } from "./controls.js";
 import type { FileContent, Range } from "../types.js";
-import { button, h } from "./dom.js";
-import { highlight } from "./highlight.js";
+import { Text } from "./messages.js";
+import { ScrollArea } from "./layout.js";
+import { CodeLine, CodeNavigation, GoToLine } from "./code-parts.js";
 
 const PAGE_SIZE = 200;
 
-/** renderCode shows file one page of lines at a time. Line-number buttons select whole lines. */
-export function renderCode(
+/** renderCodeViewer shows file one page of lines at a time. Line-number buttons select whole lines. */
+export function renderCodeViewer(
   container: HTMLElement,
   file: FileContent,
   range: Range,
   select: (range: Range) => void,
 ): void {
-  const view = new CodeView(file, range, select);
+  const view = new CodeViewer(file, range, select);
   container.replaceChildren(view.controls, view.code);
 }
 
-// CodeView renders one page of lines and owns its selection and keyboard focus.
-// Only the focused line's button is in the tab order.
-class CodeView {
+/** CodeViewer renders at most 200 lines and owns line selection and keyboard focus. */
+export class CodeViewer {
   readonly code: HTMLPreElement;
   readonly controls: HTMLElement;
 
@@ -29,10 +30,10 @@ class CodeView {
   #focusLine: number;
   #first: number; // zero-based index of the first rendered line
 
-  readonly #previous = button("Previous lines", () => this.#moveTo(this.#first - PAGE_SIZE + 1));
-  readonly #next = button("Next lines", () => this.#moveTo(this.#first + PAGE_SIZE + 1));
-  readonly #position = h("span");
-  readonly #jump = h("input", { type: "number", min: 1, "aria-label": "Go to line" });
+  readonly #previous = Button("Previous lines", () => this.#moveTo(this.#first - PAGE_SIZE + 1));
+  readonly #next = Button("Next lines", () => this.#moveTo(this.#first + PAGE_SIZE + 1));
+  readonly #position = Text("");
+  readonly #jump: HTMLInputElement;
 
   constructor(file: FileContent, range: Range, select: (range: Range) => void) {
     this.#lines = file.text.split("\n");
@@ -43,27 +44,12 @@ class CodeView {
     this.#focusLine = this.#anchor;
     this.#first = pageStart(this.#anchor);
 
-    this.controls = this.#createControls();
-    this.code = h("pre", { class: "code", "aria-label": this.#path });
+    this.#jump = GoToLine(this.#lines.length, (line) => this.#jumpTo(line));
+    this.controls = CodeNavigation(this.#previous, this.#position, this.#next, this.#jump);
+    this.code = ScrollArea("pre", { class: "code", "aria-label": this.#path });
     this.code.addEventListener("click", (event) => this.#onClick(event));
     this.code.addEventListener("keydown", (event) => this.#onKey(event));
     this.#draw();
-  }
-
-  #createControls(): HTMLElement {
-    this.#jump.max = String(this.#lines.length);
-    this.#jump.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") this.#jumpTo(Number(this.#jump.value));
-    });
-
-    return h(
-      "div",
-      { class: "code-controls" },
-      this.#previous,
-      this.#position,
-      this.#next,
-      this.#jump,
-    );
   }
 
   #onClick(event: MouseEvent): void {
@@ -126,7 +112,7 @@ class CodeView {
     const end = Math.min(this.#first + PAGE_SIZE, this.#lines.length);
     const rows: HTMLElement[] = [];
     for (let index = this.#first; index < end; index++) {
-      rows.push(createRow(index + 1, this.#lines[index] ?? "", this.#path));
+      rows.push(CodeLine(index + 1, this.#lines[index] ?? "", this.#path));
     }
 
     this.code.replaceChildren(...rows);
@@ -152,21 +138,6 @@ class CodeView {
       if (gutter) gutter.tabIndex = line === this.#focusLine ? 0 : -1;
     }
   }
-}
-
-function createRow(line: number, text: string, path: string): HTMLElement {
-  const gutter = h(
-    "button",
-    { type: "button", class: "line-number", "aria-label": `Select line ${line}` },
-    String(line),
-  );
-
-  return h(
-    "div",
-    { class: "code-line", "data-line": line },
-    gutter,
-    h("code", {}, highlight(text, path)),
-  );
 }
 
 // pageStart returns the zero-based index of the first line on line's page.

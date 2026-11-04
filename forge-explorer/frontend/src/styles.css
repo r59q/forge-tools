@@ -55,44 +55,6 @@ aside {
   border-right: 1px solid #40516a;
   padding-right: 16px;
 }
-button,
-input,
-select {
-  font: inherit;
-}
-button {
-  cursor: pointer;
-}
-button:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-:focus-visible {
-  outline: 3px solid var(--explorer-accent);
-  outline-offset: 2px;
-}
-input,
-select {
-  min-width: 0;
-  max-width: 100%;
-  padding: 7px;
-  color: var(--explorer-text);
-  background: var(--explorer-panel);
-  border: 1px solid #66809f;
-  border-radius: 5px;
-}
-input::placeholder {
-  color: var(--explorer-muted);
-}
-.nuda-shine-sweep {
-  --nuda-ss-bg: var(--explorer-panel);
-  --nuda-ss-clr: var(--explorer-text);
-  padding: 6px 10px;
-  font-size: 0.85rem;
-}
-.nuda-shine-sweep::after {
-  pointer-events: none;
-}
 .nuda-tabs {
   max-width: none;
   --tab-accent: var(--explorer-accent);
@@ -152,6 +114,9 @@ summary {
   display: grid;
   gap: 8px;
   grid-template-columns: minmax(0, 1fr) auto;
+}
+.search-options {
+  display: contents;
 }
 .search input {
   grid-column: 1 / -1;
@@ -240,14 +205,5 @@ summary {
   }
   .tree {
     max-height: 200px;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation: none !important;
-    transition: none !important;
-    scroll-behavior: auto !important;
   }
 }

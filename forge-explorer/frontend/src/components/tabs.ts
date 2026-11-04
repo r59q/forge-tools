@@ -1,3 +1,4 @@
+import { ScrollArea } from "./layout.js";
 import type { Location } from "../types.js";
 import { h } from "./dom.js";
 
@@ -9,10 +10,10 @@ export function tabId(index: number): string {
   return `file-tab-${index}`;
 }
 
-/** renderTabs is a scoped TypeScript adaptation of NudaUI animated-tabs.
+/** FileTabs is a scoped TypeScript adaptation of NudaUI animated-tabs.
  * It uses no document-wide queries or observers.
  */
-export function renderTabs(
+export function FileTabs(
   container: HTMLElement,
   locations: Location[],
   active: string | undefined,
@@ -20,13 +21,9 @@ export function renderTabs(
   close: (path: string) => void,
 ): void {
   const tabs = locations.map((location, index) =>
-    createTab(location, index, location.path === active, open),
+    FileTab(location, index, location.path === active, open),
   );
-  const bar = h(
-    "div",
-    { class: "nuda-tabs__bar", role: "tablist", "aria-label": "Open files" },
-    ...tabs,
-  );
+  const bar = TabList("Open files", tabs);
 
   bar.addEventListener("keydown", (event) => {
     const index = tabs.indexOf(event.target as HTMLButtonElement);
@@ -44,25 +41,13 @@ export function renderTabs(
   container.replaceChildren(bar);
 }
 
-function createTab(
+function FileTab(
   location: Location,
   index: number,
   active: boolean,
   open: (location: Location) => void,
 ): HTMLButtonElement {
-  const tab = h(
-    "button",
-    {
-      type: "button",
-      id: tabId(index),
-      class: active ? "nuda-tabs__tab is-active" : "nuda-tabs__tab",
-      role: "tab",
-      "aria-controls": PANEL_ID,
-      "aria-selected": String(active),
-      tabindex: active ? 0 : -1,
-    },
-    location.path,
-  );
+  const tab = Tab(location.path, tabId(index), PANEL_ID, active);
 
   tab.addEventListener("click", () => open(location));
   return tab;
@@ -93,4 +78,31 @@ function keyTarget(key: string, index: number, count: number): number | undefine
     default:
       return undefined;
   }
+}
+
+/** Tabs contains a scoped tab list. */
+export function Tabs(): HTMLDivElement {
+  return h("div", { class: "nuda-tabs" });
+}
+
+/** TabList is a labeled, horizontally scrollable set of tabs. */
+export function TabList(label: string, tabs: HTMLButtonElement[]): HTMLDivElement {
+  return ScrollArea("div", { class: "nuda-tabs__bar", role: "tablist", "aria-label": label }, ...tabs);
+}
+
+/** Tab is a specialised manual-activation control with a panel relationship. */
+export function Tab(label: string, id: string, panel: string, active: boolean): HTMLButtonElement {
+  return h("button", {
+    type: "button", id,
+    class: active ? "nuda-tabs__tab is-active" : "nuda-tabs__tab",
+    role: "tab",
+    "aria-controls": panel,
+    "aria-selected": String(active),
+    tabindex: active ? 0 : -1,
+  }, label);
+}
+
+/** TabPanel is the focusable content region associated with an active tab. */
+export function TabPanel(id: string): HTMLDivElement {
+  return h("div", { id, class: "nuda-tabs__panel is-active", role: "tabpanel", tabindex: 0 });
 }

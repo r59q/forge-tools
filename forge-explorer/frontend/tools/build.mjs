@@ -42,7 +42,12 @@ execFileSync(
 const { styles } = await import("../dist/explorer.js");
 await writeFile("dist/styles.css", styles);
 await copyFile("app/index.html", "dist/app/index.html");
-await copyFile("app/app.css", "dist/app/app.css");
+const appStyles = await Promise.all([
+  "src/components/nuda/shine-sweep/code.css",
+  "src/components/primitives.css",
+  "app/app.css",
+].map((file) => readFile(file, "utf8")));
+await writeFile("dist/app/app.css", appStyles.join("\n"));
 await copyFile("nudaui/LICENSE", "dist/app/NUDAUI-LICENSE.txt");
 // Include upstream notices in the consumable JS bundle as well as the package.
 const license = await readFile("nudaui/LICENSE", "utf8");

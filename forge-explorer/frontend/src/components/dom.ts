@@ -18,23 +18,6 @@ export function h<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
-/** button creates a NudaUI Shine Sweep button. A promise from action is not awaited. */
-export function button(
-  label: string,
-  action: () => unknown,
-  attributes: Attributes = {},
-): HTMLButtonElement {
-  const className = `nuda-shine-sweep ${attributes.class ?? ""}`.trim();
-  const node = h(
-    "button",
-    { type: "button", ...attributes, class: className },
-    h("span", { class: "nuda-shine-sweep__label" }, label),
-  );
-
-  node.addEventListener("click", () => void action());
-  return node;
-}
-
 const ARROW_STEPS: Record<string, number> = { ArrowDown: 1, ArrowUp: -1 };
 
 /** focusSibling moves focus between controls on ArrowUp and ArrowDown. */
@@ -48,26 +31,4 @@ export function focusSibling(event: KeyboardEvent, controls: HTMLElement[]): voi
 
   event.preventDefault();
   target.focus();
-}
-
-/** resultSummary explains empty and partial results. */
-export function resultSummary(
-  count: number,
-  state: { skipped: number; truncated: boolean; canceled: boolean },
-): string {
-  const notes = [countText(count)];
-
-  if (state.skipped) {
-    notes.push(`${state.skipped} skipped (policy, unsupported content or read failures).`);
-  }
-  if (state.truncated) notes.push("Truncated at the configured limit.");
-  if (state.canceled) notes.push("Canceled; results may be incomplete.");
-
-  return notes.join(" ");
-}
-
-function countText(count: number): string {
-  if (count === 0) return "No results.";
-
-  return count === 1 ? "1 result." : `${count} results.`;
 }

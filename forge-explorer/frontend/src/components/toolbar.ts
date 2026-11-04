@@ -1,8 +1,9 @@
+import { Button } from "./controls.js";
 import type { Navigation } from "../model/navigation.js";
-import { button, h } from "./dom.js";
+import { Toolbar } from "./layout.js";
 
-/** Toolbar holds the history and file buttons. */
-export class Toolbar {
+/** ExplorerToolbar holds the history and file buttons. */
+export class ExplorerToolbar {
   readonly back: HTMLButtonElement;
   readonly node: HTMLElement;
   readonly #forward: HTMLButtonElement;
@@ -13,16 +14,14 @@ export class Toolbar {
     private readonly model: Navigation,
     closeFile: (path: string) => unknown,
   ) {
-    this.back = button("Back", () => model.back());
-    this.#forward = button("Forward", () => model.forward());
-    this.#reload = button("Reload file", () => model.refresh());
-    this.#close = button("Close file", () => {
+    this.back = Button("Back", () => model.back());
+    this.#forward = Button("Forward", () => model.forward());
+    this.#reload = Button("Reload file", () => model.refresh());
+    this.#close = Button("Close file", () => {
       if (model.location) closeFile(model.location.path);
     });
 
-    this.node = h(
-      "div",
-      { class: "toolbar" },
+    this.node = Toolbar(
       this.back,
       this.#forward,
       this.#reload,
@@ -30,6 +29,7 @@ export class Toolbar {
     );
   }
 
+  /** update enables only actions supported by the current navigation state. */
   update(): void {
     this.back.disabled = !this.model.canGoBack;
     this.#forward.disabled = !this.model.canGoForward;

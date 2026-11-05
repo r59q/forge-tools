@@ -18,6 +18,7 @@ useful on its own.
 | [forge-changes](forge-changes/)                   | Proposed code changes, discussion and merging across forges.           |
 | [forge-issues](forge-issues/)                     | Issues and comments across forges.                                     |
 | [forge-pipeprint](forge-pipeprint/)               | Pipeprint: one pipeline language compiled to and from every forge.     |
+| [forge-reactor](forge-reactor/)                   | Forge events from webhooks and polls, delivered through RabbitMQ.      |
 | [forge-connector](forge-connector/)               | Forge connections and authentication for every tool.                   |
 | [forge-repositories](forge-repositories/)         | Repositories, branches and tags across forges.                         |
 | [forge-tools-management](forge-tools-management/) | Web interface to connect forges and inspect forge-tools.               |

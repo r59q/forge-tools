@@ -77,7 +77,7 @@ func (h *Webhooks) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	case req.Method != http.MethodPost:
 		w.Header().Set("Allow", http.MethodPost)
-		status(w, http.StatusMethodNotAllowed)
+		reply(w, http.StatusMethodNotAllowed)
 
 		return
 	}
@@ -88,23 +88,23 @@ func (h *Webhooks) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		var tooLarge *http.MaxBytesError
 		if errors.As(err, &tooLarge) {
-			status(w, http.StatusRequestEntityTooLarge)
+			reply(w, http.StatusRequestEntityTooLarge)
 		} else {
-			status(w, http.StatusBadRequest)
+			reply(w, http.StatusBadRequest)
 		}
 
 		return
 	}
 
-	reply, code := h.accept(ctx, src, req.Header, body)
+	answer, code := h.accept(ctx, src, req.Header, body)
 	if code != http.StatusAccepted {
-		status(w, code)
+		reply(w, code)
 
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(reply)
+	_ = json.NewEncoder(w).Encode(answer)
 }
 
 // accept parses and stores one delivery and returns the reply and status.
@@ -143,7 +143,7 @@ func (h *Webhooks) accept(ctx context.Context, src Source, header http.Header, b
 	return webhookReply{Event: e.ID, Duplicate: duplicate}, http.StatusAccepted
 }
 
-// status writes a bare status line as the body.
-func status(w http.ResponseWriter, code int) {
+// reply writes a bare status line as the body.
+func reply(w http.ResponseWriter, code int) {
 	http.Error(w, http.StatusText(code), code)
 }

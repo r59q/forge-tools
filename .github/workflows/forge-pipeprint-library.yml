@@ -1,0 +1,27 @@
+name: forge-pipeprint-library
+
+# Libraries are published as Go modules through git, so there is no deploy job.
+on:
+  push:
+    branches: [master]
+    paths:
+      - forge-pipeprint/library/**
+      - .github/workflows/forge-pipeprint-library.yml
+      - .github/workflows/reusable-go.yml
+      - .golangci.yml
+  pull_request:
+    paths:
+      - forge-pipeprint/library/**
+      - .github/workflows/forge-pipeprint-library.yml
+      - .github/workflows/reusable-go.yml
+      - .golangci.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: ./.github/workflows/reusable-go.yml
+    with:
+      dir: forge-pipeprint/library

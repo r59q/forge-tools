@@ -1,0 +1,6 @@
+pipeline.native.github.permissions: github-only setting dropped
+jobs.lint.runs_on: GitHub-hosted runner "ubuntu-latest" dropped
+jobs.test.runs_on: GitHub-hosted runner "ubuntu-latest" dropped
+jobs.test.steps[1]: action actions/cache@v4 cannot run on GitLab; dropped
+jobs.deploy.runs_on: GitHub-hosted runner "ubuntu-latest" dropped
+jobs.deploy.if: no gitlab expression; the job runs unconditionally

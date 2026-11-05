@@ -1,0 +1,190 @@
+syntax = "proto3";
+
+package forge.pipeprint.v1;
+
+import "google/api/annotations.proto";
+
+option go_package = "github.com/r59q/forge-tools/forge-pipeprint/service/pipeprintpb";
+
+// PipeprintService compiles pipeline definitions between forge formats and
+// Pipeprint, the shared pipeline language. It reads only the content in
+// each request; it never contacts a forge. Every RPC requires the service
+// token in the Authorization: Bearer header (gRPC metadata).
+//
+// Formats are pipeprint, pipeprint-json, github, forgejo and gitlab. An
+// empty from detects the format.
+service PipeprintService {
+  // ListFormats lists the supported formats. GET /v1/pipeprint/formats.
+  rpc ListFormats(ListFormatsRequest) returns (ListFormatsResponse) {
+    option (google.api.http) = {get: "/v1/pipeprint/formats"};
+  }
+  // Convert compiles content from one format to another. Invalid content
+  // returns INVALID_ARGUMENT; use Check to see why. POST /v1/pipeprint/convert.
+  rpc Convert(ConvertRequest) returns (ConvertResponse) {
+    option (google.api.http) = {
+      post: "/v1/pipeprint/convert"
+      body: "*"
+    };
+  }
+  // Check validates content and lists every problem. POST /v1/pipeprint/check.
+  rpc Check(CheckRequest) returns (CheckResponse) {
+    option (google.api.http) = {
+      post: "/v1/pipeprint/check"
+      body: "*"
+    };
+  }
+  // Graph returns the jobs and needs of a pipeline, for visualization.
+  // POST /v1/pipeprint/graph.
+  rpc Graph(GraphRequest) returns (GraphResponse) {
+    option (google.api.http) = {
+      post: "/v1/pipeprint/graph"
+      body: "*"
+    };
+  }
+  // Render draws a pipeline as text. POST /v1/pipeprint/render.
+  rpc Render(RenderRequest) returns (RenderResponse) {
+    option (google.api.http) = {
+      post: "/v1/pipeprint/render"
+      body: "*"
+    };
+  }
+}
+
+// Format is one supported file format.
+message Format {
+  // format is the name used in requests, such as gitlab.
+  string format = 1;
+  // title is a display name, such as GitLab CI/CD.
+  string title = 2;
+  // path is where the forge reads the file, with * for any name.
+  string path = 3;
+}
+
+// ListFormatsRequest lists the formats.
+message ListFormatsRequest {}
+
+// ListFormatsResponse holds every format.
+message ListFormatsResponse {
+  repeated Format formats = 1;
+}
+
+// Warning reports a setting dropped, moved or defaulted while compiling.
+message Warning {
+  // path locates the setting, such as jobs.build.native.github.permissions.
+  string path = 1;
+  // message says what happened.
+  string message = 2;
+}
+
+// Problem is one reason content is invalid.
+message Problem {
+  // path locates the field, or is empty for syntax errors.
+  string path = 1;
+  // message says what is wrong.
+  string message = 2;
+}
+
+// ConvertRequest is content and the formats to convert between.
+message ConvertRequest {
+  // content is the file's text.
+  string content = 1;
+  // from is the content's format. Empty detects it.
+  string from = 2;
+  // to is the format to write.
+  string to = 3;
+}
+
+// ConvertResponse is the converted content.
+message ConvertResponse {
+  // content is the converted file's text.
+  string content = 1;
+  // warnings list what the target cannot hold, in order.
+  repeated Warning warnings = 2;
+}
+
+// CheckRequest is content to validate.
+message CheckRequest {
+  // content is the file's text.
+  string content = 1;
+  // from is the content's format. Empty detects it.
+  string from = 2;
+}
+
+// CheckResponse lists the problems.
+message CheckResponse {
+  // valid is true when there are no problems.
+  bool valid = 1;
+  // format is the format read, detected when the request had none.
+  string format = 2;
+  // problems are in file order.
+  repeated Problem problems = 3;
+}
+
+// GraphRequest is content to graph.
+message GraphRequest {
+  // content is the file's text.
+  string content = 1;
+  // from is the content's format. Empty detects it.
+  string from = 2;
+}
+
+// Node is one job.
+message Node {
+  // id names the job in edges.
+  string id = 1;
+  // name is the display name, if any.
+  string name = 2;
+  // stage is the job's stage, if any.
+  string stage = 3;
+  // level is 1 for jobs without needs, and one more than the highest
+  // needed job otherwise.
+  int32 level = 4;
+  // runs_on are runner labels.
+  repeated string runs_on = 5;
+  // image is the container image, if any.
+  string image = 6;
+  // steps are short step labels.
+  repeated string steps = 7;
+  // matrix is true when the job runs once per matrix combination.
+  bool matrix = 8;
+  // condition is the job's condition, if any.
+  string condition = 9;
+}
+
+// Edge points from a needed job to the job that needs it.
+message Edge {
+  string from = 1;
+  string to = 2;
+}
+
+// GraphResponse is the pipeline's graph.
+message GraphResponse {
+  // name is the pipeline name.
+  string name = 1;
+  // nodes are ordered by level and then file order.
+  repeated Node nodes = 2;
+  repeated Edge edges = 3;
+  // levels is the highest node level.
+  int32 levels = 4;
+  // triggers summarizes the triggers, such as "push [main], pull_request".
+  string triggers = 5;
+}
+
+// RenderRequest is content to draw and drawing options.
+message RenderRequest {
+  // content is the file's text.
+  string content = 1;
+  // from is the content's format. Empty detects it.
+  string from = 2;
+  // steps lists each job's steps.
+  bool steps = 3;
+  // ascii draws with ASCII characters only.
+  bool ascii = 4;
+  // width wraps rows of boxes. Zero means 100.
+  int32 width = 5;
+}
+
+// RenderResponse is the drawing.
+message RenderResponse {
+  string text = 1;
+}

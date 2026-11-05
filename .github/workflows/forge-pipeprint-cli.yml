@@ -1,0 +1,66 @@
+name: forge-pipeprint-cli
+
+# Tests the pipeprint CLI. Pushing a tag such as forge-pipeprint/cli/v1.2.3
+# publishes a GitHub release with binaries. Path filters do not apply to
+# tag pushes, so every such tag releases.
+on:
+  push:
+    branches: [master]
+    tags: ["forge-pipeprint/cli/v*"]
+    paths:
+      - forge-pipeprint/cli/**
+      - forge-pipeprint/library/**
+      - .github/workflows/forge-pipeprint-cli.yml
+      - .github/workflows/reusable-go.yml
+      - .golangci.yml
+  pull_request:
+    paths:
+      - forge-pipeprint/cli/**
+      - forge-pipeprint/library/**
+      - .github/workflows/forge-pipeprint-cli.yml
+      - .github/workflows/reusable-go.yml
+      - .golangci.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: ./.github/workflows/reusable-go.yml
+    with:
+      dir: forge-pipeprint/cli
+
+  # Only people with write access can push tags.
+  release:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/forge-pipeprint/cli/v')
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: forge-pipeprint/cli
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+          cache-dependency-path: forge-pipeprint/cli/go.mod
+      - name: Build binaries
+        env:
+          TAG: ${{ github.ref_name }}
+        run: VERSION="${TAG#forge-pipeprint/cli/}" ./release.sh
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="${TAG#forge-pipeprint/cli/}"
+          gh release create "$TAG" dist/* --verify-tag \
+            --title "pipeprint $version" \
+            --notes "pipeprint $version for Linux, macOS and Windows. Check downloads with SHA256SUMS."

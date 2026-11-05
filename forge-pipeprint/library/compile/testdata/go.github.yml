@@ -1,0 +1,40 @@
+name: Go
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    container: golang:1.27
+    steps:
+      - uses: actions/checkout@v4
+      - run: go vet ./...
+  test:
+    needs: lint
+    runs-on: ubuntu-latest
+    container: golang:1.27
+    services:
+      db:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: test
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/go/pkg/mod
+      - run: |
+          go test ./...
+      - if: always()
+        run: echo finished
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - run: ./deploy.sh

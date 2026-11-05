@@ -1,0 +1,35 @@
+name: Go
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    container: golang:1.27
+    steps:
+      - uses: actions/checkout@v4
+      - run: go vet ./...
+  test:
+    needs: lint
+    runs-on: ubuntu-latest
+    container: golang:1.27
+    services:
+      db:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: test
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: go test ./...
+      - if: always()
+        run: echo finished
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./deploy.sh

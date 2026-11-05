@@ -1,0 +1,81 @@
+name: CI
+on:
+  push:
+    branches: [main, "release/**"]
+    tags: ["v*"]
+    paths-ignore: [docs/**]
+  pull_request:
+    types: [opened, synchronize]
+  schedule:
+    - cron: "0 3 * * 1"
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      level:
+        type: choice
+        options: [debug, info]
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+env:
+  GOFLAGS: -mod=mod
+jobs:
+  lint:
+    runs-on: [self-hosted, linux]
+    container:
+      image: golang:1.27
+      options: --cpus 2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Vet
+        run: go vet ./...
+  test:
+    needs: lint
+    runs-on: ubuntu-latest
+    container: golang:1.27
+    services:
+      db:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: test
+        ports: ["5432:5432"]
+    timeout-minutes: 20
+    continue-on-error: ${{ matrix.experimental }}
+    strategy:
+      matrix:
+        go: ["1.26", "1.27"]
+        os: [linux]
+    env:
+      CGO_ENABLED: 0
+    steps:
+      - uses: actions/checkout@v4
+      - id: test
+        run: |
+          go test ./...
+          go test -race ./...
+        working-directory: lib
+        env:
+          TZ: UTC
+      - if: ${{ always() }}
+        run: echo done
+  deploy:
+    name: Deploy site
+    needs: [lint, test]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://example.org
+    continue-on-error: true
+    steps:
+      - run: ./deploy.sh
+      - if: failure()
+        run: ./rollback.sh
+  notify:
+    needs: deploy
+    uses: ./.github/workflows/notify.yml
+    secrets: inherit

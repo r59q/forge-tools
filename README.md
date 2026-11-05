@@ -17,6 +17,7 @@ useful on its own.
 | [forge-review](forge-review/)                     | Fixed review snapshots, assignments and native or standalone feedback. |
 | [forge-changes](forge-changes/)                   | Proposed code changes, discussion and merging across forges.           |
 | [forge-issues](forge-issues/)                     | Issues and comments across forges.                                     |
+| [forge-pipeprint](forge-pipeprint/)               | Pipeprint: one pipeline language compiled to and from every forge.     |
 | [forge-connector](forge-connector/)               | Forge connections and authentication for every tool.                   |
 | [forge-repositories](forge-repositories/)         | Repositories, branches and tags across forges.                         |
 | [forge-tools-management](forge-tools-management/) | Web interface to connect forges and inspect forge-tools.               |
@@ -28,6 +29,7 @@ useful on its own.
   library/    core features and business rules
   service/    microservice exposing the library over REST and gRPC
   frontend/   reusable HTML/TypeScript interface, when provided
+  cli/        command-line tool, when provided
 forge-core/   shared libraries
 ```
 

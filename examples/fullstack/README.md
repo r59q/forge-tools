@@ -6,7 +6,8 @@ Runs the whole stack with Docker Compose: the
 [issues service](../../forge-issues/service/), the
 [checkouts service](../../forge-checkouts/service/), the
 [actions service](../../forge-actions/service/), the
-[explorer service](../../forge-explorer/service/) and the
+[explorer service](../../forge-explorer/service/), the
+[pipeprint service](../../forge-pipeprint/service/) and the
 [management interface](../../forge-tools-management/). You connect forges in
 the browser.
 
@@ -44,6 +45,7 @@ updating this example. It never changes existing values.
 | `FORGE_ACTIONS_CONNECTOR_TOKEN`      | Lets actions read pipelines through the proxy.                   |
 | `FORGE_EXPLORER_TOKEN`              | Authenticates local explorer REST/gRPC callers.                   |
 | `FORGE_ACTIONS_TOKEN`                | Authenticates actions REST/gRPC callers and management.          |
+| `FORGE_PIPEPRINT_TOKEN`              | Authenticates pipeprint REST/gRPC callers.                       |
 
 At startup, management registers the proxy, repositories, issues, checkouts and actions tokens
 in the broker. To rotate any secret except `FORGE_BROKER_KEY`, change it in
@@ -75,7 +77,7 @@ tokens*. GitLab and Forgejo have personal access tokens in user settings.
 
 ## Notes
 
-- Management, checkouts and actions are reachable from the host, on `127.0.0.1`. The other
+- Management, checkouts, actions, explorer and pipeprint are reachable from the host, on `127.0.0.1`. The other
   services talk over the Compose network in plaintext; use TLS endpoints
   for remote access.
 - All operators see what the connected accounts can see. Management grants
@@ -135,3 +137,16 @@ container to browse a real root, mounted read-only at `/content` as source `loca
 Ignored and untracked files are included; choose a root whose entire contents
 callers may read. The explorer has no forge credentials and does not create or
 remove checkouts. See its [configuration and limits](../../forge-explorer/README.md).
+
+## Pipeline compiling
+
+The pipeprint API listens on `127.0.0.1:8092` (REST) and `127.0.0.1:9102`
+(gRPC), authenticated with `FORGE_PIPEPRINT_TOKEN`. It converts pipeline files
+between GitHub, Forgejo, GitLab and [Pipeprint](../../forge-pipeprint/), and
+returns job graphs. It reads only the request and holds no forge credentials.
+
+```sh
+jq -n --rawfile c .gitlab-ci.yml '{content: $c, to: "github"}' |
+  curl -fsS -H "Authorization: Bearer $FORGE_PIPEPRINT_TOKEN" \
+    http://127.0.0.1:8092/v1/pipeprint/convert -d @-
+```

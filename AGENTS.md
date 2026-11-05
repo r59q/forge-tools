@@ -126,6 +126,7 @@ Each tool has its own pipelines that build, test and deploy its projects:
 one workflow per project, `.github/workflows/<tool>-<project>.yml`, that runs
 only when that project or its dependencies change. Put shared steps in
 `reusable-*.yml` workflows. Services deploy their image on pushes to `master`.
+CLIs publish release binaries on tags named `<tool>/<project>/v*`.
 
 Workflows must not run on unauthorized requests.
 

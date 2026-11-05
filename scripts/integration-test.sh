@@ -44,6 +44,13 @@ FORGE_EXPLORER_TEST_TOKEN=$(sed -n 's/^FORGE_EXPLORER_TOKEN=//p' "$(dirname "$0"
 FORGE_PIPEPRINT_TEST_TOKEN=$(sed -n 's/^FORGE_PIPEPRINT_TOKEN=//p' "$(dirname "$0")/../examples/fullstack/.env") \
   sh "$(dirname "$0")/pipeprint-integration-test.sh"
 
+# The reactor uses its configured webhook source and RabbitMQ, independent of forge state.
+env_file="$(dirname "$0")/../examples/fullstack/.env"
+FORGE_REACTOR_TEST_TOKEN=$(sed -n 's/^FORGE_REACTOR_TOKEN=//p' "$env_file") \
+  FORGE_REACTOR_TEST_WEBHOOK_SECRET=$(sed -n 's/^FORGE_REACTOR_WEBHOOK_SECRET=//p' "$env_file") \
+  FORGE_REACTOR_TEST_RABBITMQ_PASSWORD=$(sed -n 's/^FORGE_REACTOR_RABBITMQ_PASSWORD=//p' "$env_file") \
+  sh "$(dirname "$0")/reactor-integration-test.sh"
+
 # The forge token goes through stdin to keep it out of process arguments.
 conn=$(jq -n --arg f "$forge" --arg h "$host" --arg c "$FORGE_TEST_TOKEN" \
   '{forge: $f, host: $h, name: "integration-test-\($f)", credential: $c}' |

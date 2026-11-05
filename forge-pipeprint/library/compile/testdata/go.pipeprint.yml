@@ -1,0 +1,51 @@
+pipeprint: v1
+name: Go
+triggers:
+  push:
+    branches:
+      - main
+  pull_request: {}
+jobs:
+  - id: lint
+    runs_on:
+      - ubuntu-latest
+    image: golang:1.27
+    steps:
+      - uses: actions/checkout@v4
+      - run: go vet ./...
+  - id: test
+    needs:
+      - lint
+    runs_on:
+      - ubuntu-latest
+    image: golang:1.27
+    services:
+      - name: db
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: test
+    timeout_minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/go/pkg/mod
+      - run: |
+          go test ./...
+      - run: echo finished
+        always: true
+  - id: deploy
+    needs:
+      - test
+    runs_on:
+      - ubuntu-latest
+    if:
+      github: github.ref == 'refs/heads/main'
+    environment:
+      name: production
+    steps:
+      - run: ./deploy.sh
+native:
+  github:
+    permissions:
+      contents: read

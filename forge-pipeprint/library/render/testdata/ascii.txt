@@ -1,0 +1,27 @@
+CI
+on: push [main, v*], pull_request, schedule [0 3 * * *], schedule, manual, release
+
+level 1 - check
++-------------------+
+| lint              |
+| image golang:1.27 |
++-------------------+
++-----------------------+
+| build (matrix)        |
+| runs on ubuntu-latest |
++-----------------------+
+  |
+  v
+level 2 - test
++----------------+ +--------------+
+| test           | | docs         |
+| <- lint, build | | <- lint      |
++----------------+ +--------------+
+  |
+  v
+level 3
++------------------------------------------+
+| Deploy to production with a very long n~ |
+| <- test                                  |
+| if github.ref == 'refs/heads/main'       |
++------------------------------------------+

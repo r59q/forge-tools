@@ -1,0 +1,52 @@
+stages: [build, test, deploy]
+variables:
+  GO_VERSION: "1.27"
+workflow:
+  name: Demo
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+.go: &go
+  image: golang:1.27
+build:
+  <<: *go
+  stage: build
+  tags: [docker]
+  script:
+    - go build ./...
+lint:
+  <<: *go
+  stage: build
+  script: [go vet ./...]
+test:
+  <<: *go
+  stage: test
+  services:
+    - postgres:16
+  timeout: 1h 30m
+  script:
+    - go test ./...
+  after_script:
+    - echo done
+  artifacts:
+    paths: [cover.out]
+deploy:
+  stage: deploy
+  needs: [test]
+  environment: {name: prod, url: https://x.example}
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+  script: ["./deploy.sh"]
+pages:
+  stage: deploy
+  needs:
+    - job: build
+      artifacts: true
+  variables:
+    GIT_STRATEGY: none
+  parallel:
+    matrix:
+      - SITE: [docs, blog]
+  allow_failure: true
+  script:
+    - ./publish.sh $SITE

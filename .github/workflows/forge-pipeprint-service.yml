@@ -1,0 +1,62 @@
+name: forge-pipeprint-service
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - forge-pipeprint/service/**
+      - forge-pipeprint/library/**
+      - forge-core/forgeapi/**
+      - forge-core/servicekit/**
+      - .dockerignore
+      - .github/workflows/forge-pipeprint-service.yml
+      - buf.yaml
+      - buf.lock
+      - .github/workflows/reusable-*.yml
+  pull_request:
+    paths:
+      - forge-pipeprint/service/**
+      - forge-pipeprint/library/**
+      - forge-core/forgeapi/**
+      - forge-core/servicekit/**
+      - .dockerignore
+      - .github/workflows/forge-pipeprint-service.yml
+      - buf.yaml
+      - buf.lock
+      - .github/workflows/reusable-*.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: ./.github/workflows/reusable-go.yml
+    with:
+      dir: forge-pipeprint/service
+
+  proto:
+    uses: ./.github/workflows/reusable-proto.yml
+    with:
+      dir: forge-pipeprint/service
+
+  # Pull requests build the image without pushing or registry access.
+  image:
+    if: github.event_name == 'pull_request'
+    needs: test
+    uses: ./.github/workflows/reusable-docker.yml
+    with:
+      image: forge-pipeprint-service
+      dockerfile: forge-pipeprint/service/Dockerfile
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+    needs: test
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/reusable-docker.yml
+    with:
+      image: forge-pipeprint-service
+      dockerfile: forge-pipeprint/service/Dockerfile
+      push: true

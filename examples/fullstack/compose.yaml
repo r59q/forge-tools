@@ -93,6 +93,18 @@ services:
       - "127.0.0.1:8090:8080"
       - "127.0.0.1:9100:9090"
 
+  # Compiles pipeline definitions between forges; no forge credentials.
+  pipeprint:
+    build:
+      context: ../..
+      dockerfile: forge-pipeprint/service/Dockerfile
+    restart: unless-stopped
+    environment:
+      FORGE_PIPEPRINT_TOKEN: ${FORGE_PIPEPRINT_TOKEN:?set in .env}
+    ports:
+      - "127.0.0.1:8092:8080"
+      - "127.0.0.1:9102:9090"
+
   management:
     build:
       context: ../..

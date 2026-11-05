@@ -1,0 +1,32 @@
+workflow:
+  name: Go
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+stages:
+  - stage-1
+  - stage-2
+  - stage-3
+lint:
+  stage: stage-1
+  image: golang:1.27
+  script:
+    - go vet ./...
+test:
+  stage: stage-2
+  image: golang:1.27
+  services:
+    - name: postgres:16
+      alias: db
+      variables:
+        POSTGRES_PASSWORD: test
+  timeout: 15m
+  script:
+    - go test ./...
+  after_script:
+    - echo finished
+deploy:
+  stage: stage-3
+  environment: production
+  script:
+    - ./deploy.sh

@@ -81,6 +81,7 @@ func clientFlags(fs *flag.FlagSet, env environment) []serviceClient {
 		{"forge-issues", "issues-connector", "ISSUES_CONNECTOR", false},
 		{"forge-checkouts", "checkouts-connector", "CHECKOUTS_CONNECTOR", false},
 		{"forge-actions", "actions-connector", "ACTIONS_CONNECTOR", false},
+		{"forge-reactor", "reactor-connector", "REACTOR_CONNECTOR", false},
 	}
 	clients := make([]serviceClient, len(definitions))
 	for i, definition := range definitions {
@@ -116,6 +117,8 @@ func clientDefaultEnv(name string) string {
 		return "FORGE_MANAGEMENT_CHECKOUTS_CONNECTOR_TOKEN"
 	case "forge-actions":
 		return "FORGE_MANAGEMENT_ACTIONS_CONNECTOR_TOKEN"
+	case "forge-reactor":
+		return "FORGE_MANAGEMENT_REACTOR_CONNECTOR_TOKEN"
 	default:
 		return ""
 	}

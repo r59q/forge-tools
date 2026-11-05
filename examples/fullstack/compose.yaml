@@ -105,6 +105,44 @@ services:
       - "127.0.0.1:8092:8080"
       - "127.0.0.1:9102:9090"
 
+  # Queues reactor deliveries. Subscribers consume and acknowledge here. The
+  # fixed hostname keeps the node name, and so its data, across recreation.
+  rabbitmq:
+    image: rabbitmq:4-management@sha256:af6f50d38098d8bd52fef7f3fa85015dd8b2bf6def58e995bf584ae9ba0f6407
+    hostname: rabbitmq
+    restart: unless-stopped
+    environment:
+      # Applied only when the volume is new; see README.md to rotate.
+      RABBITMQ_DEFAULT_USER: reactor
+      RABBITMQ_DEFAULT_PASS: ${FORGE_REACTOR_RABBITMQ_PASSWORD:?set in .env}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+
+  # Turns webhooks, branch polls and published events into RabbitMQ
+  # deliveries. Polls read branch heads through the proxy.
+  reactor:
+    build:
+      context: ../..
+      dockerfile: forge-reactor/service/Dockerfile
+    restart: unless-stopped
+    environment:
+      FORGE_REACTOR_TOKEN: ${FORGE_REACTOR_TOKEN:?set in .env}
+      FORGE_REACTOR_RABBITMQ_URL: amqp://reactor:${FORGE_REACTOR_RABBITMQ_PASSWORD:?set in .env}@rabbitmq:5672/
+      FORGE_REACTOR_CONNECTOR_URL: http://proxy:8081
+      FORGE_REACTOR_CONNECTOR_TOKEN: ${FORGE_REACTOR_CONNECTOR_TOKEN:?set in .env}
+      FORGE_REACTOR_CONFIG: /config/reactor.json
+      # Named by secretEnv in reactor.json.
+      FORGE_REACTOR_WEBHOOK_SECRET: ${FORGE_REACTOR_WEBHOOK_SECRET:?set in .env}
+    volumes:
+      - reactor-data:/data
+      - ${FORGE_REACTOR_CONFIG_FILE:-./reactor.json}:/config/reactor.json:ro
+    ports:
+      - "127.0.0.1:8093:8080"
+      - "127.0.0.1:9103:9090"
+
   management:
     build:
       context: ../..
@@ -116,7 +154,7 @@ services:
       FORGE_MANAGEMENT_CONNECTOR_INSECURE: "true"
       FORGE_MANAGEMENT_CONNECTOR_ADMIN_TOKEN: ${FORGE_BROKER_ADMIN_TOKEN:?set in .env}
       # Registered in the broker at startup, for the proxy, repositories and
-      # issues, checkouts and actions.
+      # issues, checkouts, actions and reactor.
       FORGE_MANAGEMENT_PROXY_TOKEN: ${FORGE_PROXY_TOKEN:?set in .env}
       FORGE_MANAGEMENT_REPOSITORIES_CONNECTOR_TOKEN: ${FORGE_REPOSITORIES_CONNECTOR_TOKEN:?set in .env}
       FORGE_MANAGEMENT_REPOSITORIES_ADDRESS: repositories:9090
@@ -131,11 +169,14 @@ services:
       FORGE_MANAGEMENT_ISSUES_ADDRESS: issues:9090
       FORGE_MANAGEMENT_ISSUES_INSECURE: "true"
       FORGE_MANAGEMENT_ISSUES_TOKEN: ${FORGE_ISSUES_TOKEN:?set in .env}
+      FORGE_MANAGEMENT_REACTOR_CONNECTOR_TOKEN: ${FORGE_REACTOR_CONNECTOR_TOKEN:?set in .env}
     ports:
       - "127.0.0.1:8083:8080"
       - "127.0.0.1:9093:9090"
 
 volumes:
   broker-data:
+  rabbitmq-data:
+  reactor-data:
   checkouts-data:
     name: ${FORGE_CHECKOUTS_DATA_VOLUME:-${COMPOSE_PROJECT_NAME}_checkouts-data}

@@ -7,7 +7,8 @@ Runs the whole stack with Docker Compose: the
 [checkouts service](../../forge-checkouts/service/), the
 [actions service](../../forge-actions/service/), the
 [explorer service](../../forge-explorer/service/), the
-[pipeprint service](../../forge-pipeprint/service/) and the
+[pipeprint service](../../forge-pipeprint/service/), the
+[reactor service](../../forge-reactor/service/) with RabbitMQ and the
 [management interface](../../forge-tools-management/). You connect forges in
 the browser.
 
@@ -46,10 +47,16 @@ updating this example. It never changes existing values.
 | `FORGE_EXPLORER_TOKEN`              | Authenticates local explorer REST/gRPC callers.                   |
 | `FORGE_ACTIONS_TOKEN`                | Authenticates actions REST/gRPC callers and management.          |
 | `FORGE_PIPEPRINT_TOKEN`              | Authenticates pipeprint REST/gRPC callers.                       |
+| `FORGE_REACTOR_TOKEN`                | Authenticates reactor REST/gRPC callers.                         |
+| `FORGE_REACTOR_CONNECTOR_TOKEN`      | Lets the reactor poll branches through the proxy.                |
+| `FORGE_REACTOR_RABBITMQ_PASSWORD`    | RabbitMQ password of user `reactor`, for the reactor and you.    |
+| `FORGE_REACTOR_WEBHOOK_SECRET`       | Signs webhooks for the example source in `reactor.json`.         |
 
-At startup, management registers the proxy, repositories, issues, checkouts and actions tokens
-in the broker. To rotate any secret except `FORGE_BROKER_KEY`, change it in
-`.env` and run `docker compose up -d` again.
+At startup, management registers the proxy, repositories, issues, checkouts, actions and reactor
+tokens in the broker. To rotate any secret except `FORGE_BROKER_KEY` and
+`FORGE_REACTOR_RABBITMQ_PASSWORD`, change it in `.env` and run
+`docker compose up -d` again. The RabbitMQ password is set only when its volume
+is created; see [Forge events](#forge-events).
 
 ## Connect a forge
 
@@ -77,7 +84,7 @@ tokens*. GitLab and Forgejo have personal access tokens in user settings.
 
 ## Notes
 
-- Management, checkouts, actions, explorer and pipeprint are reachable from the host, on `127.0.0.1`. The other
+- Management, checkouts, actions, explorer, pipeprint, the reactor and RabbitMQ are reachable from the host, on `127.0.0.1`. The other
   services talk over the Compose network in plaintext; use TLS endpoints
   for remote access.
 - All operators see what the connected accounts can see. Management grants
@@ -149,4 +156,40 @@ returns job graphs. It reads only the request and holds no forge credentials.
 jq -n --rawfile c .gitlab-ci.yml '{content: $c, to: "github"}' |
   curl -fsS -H "Authorization: Bearer $FORGE_PIPEPRINT_TOKEN" \
     http://127.0.0.1:8092/v1/pipeprint/convert -d @-
+```
+
+## Forge events
+
+The reactor API listens on `127.0.0.1:8093` (REST) and `127.0.0.1:9103`
+(gRPC), authenticated with `FORGE_REACTOR_TOKEN`. It turns forge webhooks and
+branch polls into events, and delivers each to the RabbitMQ queue
+`forge-reactor.<subscription>` of every matching subscription. Consumers
+acknowledge there; the reactor holds no business logic. See the
+[tool README](../../forge-reactor/README.md#events) for the event types.
+
+[reactor.json](reactor.json) configures one GitHub webhook source, `example`,
+signed with `FORGE_REACTOR_WEBHOOK_SECRET`, and no polls. To use your own,
+set `FORGE_REACTOR_CONFIG_FILE` in `.env` to its path and recreate the reactor
+container. Set each webhook `connection` and poll `connection` to a
+connection ID from management; polls read Forgejo branches through the proxy.
+Forges reach webhooks at `POST /webhooks/<source>`, so expose only that path.
+
+```sh
+jq -n '{id: "deploy", filter: {types: ["forge.branch.updated"]}}' |
+  curl -fsS -H "Authorization: Bearer $FORGE_REACTOR_TOKEN" \
+    http://127.0.0.1:8093/v1/subscriptions -d @-
+```
+
+Consume the queue with any AMQP 0-9-1 client at
+`amqp://reactor:<FORGE_REACTOR_RABBITMQ_PASSWORD>@127.0.0.1:5672/`. The
+RabbitMQ management interface is at `http://127.0.0.1:15672`, signed in as
+`reactor`. The `rabbitmq-data` volume keeps queues and messages, and
+`reactor-data` keeps subscriptions, delivery history and poll baselines.
+
+RabbitMQ sets the password only when `rabbitmq-data` is created. To rotate it,
+change `.env`, then run:
+
+```sh
+docker compose exec rabbitmq rabbitmqctl change_password reactor "<new password>"
+docker compose up -d
 ```

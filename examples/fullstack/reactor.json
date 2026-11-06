@@ -1,0 +1,6 @@
+{
+  "webhooks": [
+    {"id": "example", "forge": "github", "connection": "example", "secretEnv": "FORGE_REACTOR_WEBHOOK_SECRET"}
+  ],
+  "polls": []
+}

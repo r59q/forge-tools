@@ -80,6 +80,7 @@ connection, including ones added later:
 | `--issues-connector-token-*`       | `forge-issues`                                  |
 | `--checkouts-connector-token-*`    | `forge-checkouts`                               |
 | `--actions-connector-token-*`      | `forge-actions`                                 |
+| `--reactor-connector-token-*`      | `forge-reactor`                                 |
 
 If the broker does not yet accept a token, management replaces the client of
 that name with one using the token, so changing a token and restarting
@@ -113,6 +114,8 @@ errors. Without a token setting, nothing is registered.
 | `--issues-connector-token-env`        | `FORGE_MANAGEMENT_ISSUES_CONNECTOR_TOKEN_ENV`        | `FORGE_MANAGEMENT_ISSUES_CONNECTOR_TOKEN`, if set, when connected       |
 | `--checkouts-connector-token-file`    | `FORGE_MANAGEMENT_CHECKOUTS_CONNECTOR_TOKEN_FILE`    | none                                                                    |
 | `--checkouts-connector-token-env`     | `FORGE_MANAGEMENT_CHECKOUTS_CONNECTOR_TOKEN_ENV`     | `FORGE_MANAGEMENT_CHECKOUTS_CONNECTOR_TOKEN`, if set, when connected    |
+| `--reactor-connector-token-file`      | `FORGE_MANAGEMENT_REACTOR_CONNECTOR_TOKEN_FILE`      | none                                                                    |
+| `--reactor-connector-token-env`       | `FORGE_MANAGEMENT_REACTOR_CONNECTOR_TOKEN_ENV`       | `FORGE_MANAGEMENT_REACTOR_CONNECTOR_TOKEN`, if set, when connected      |
 | `--issues-address`                    | `FORGE_MANAGEMENT_ISSUES_ADDRESS`                    | none                                                                    |
 | `--issues-token-file`                 | `FORGE_MANAGEMENT_ISSUES_TOKEN_FILE`                 | none                                                                    |
 | `--issues-token-env`                  | `FORGE_MANAGEMENT_ISSUES_TOKEN_ENV`                  | `FORGE_MANAGEMENT_ISSUES_TOKEN` when connected                          |

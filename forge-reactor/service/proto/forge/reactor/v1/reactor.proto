@@ -1,0 +1,313 @@
+syntax = "proto3";
+package forge.reactor.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/r59q/forge-tools/forge-reactor/service/reactorpb";
+
+// ReactorService publishes events, manages subscriptions and inspects
+// delivery history. Every RPC requires Authorization: Bearer <service token>.
+// Subscribers do not use this service to receive events: they consume their
+// subscription's RabbitMQ queue and acknowledge there.
+service ReactorService {
+  // PublishEvent stores an event with origin "published" and hands it to every
+  // matching subscription. It returns once the event is durably stored.
+  rpc PublishEvent(PublishEventRequest) returns (PublishEventResponse) {
+    option (google.api.http) = {
+      post: "/v1/events"
+      body: "*"
+    };
+  }
+  // GetEvent reads a retained event and its deliveries.
+  rpc GetEvent(GetEventRequest) returns (GetEventResponse) {
+    option (google.api.http) = {get: "/v1/events/{id}"};
+  }
+  // ListEvents lists retained events, newest first.
+  rpc ListEvents(ListEventsRequest) returns (ListEventsResponse) {
+    option (google.api.http) = {get: "/v1/events"};
+  }
+  // CreateSubscription creates a durable subscription and its queue.
+  rpc CreateSubscription(CreateSubscriptionRequest) returns (CreateSubscriptionResponse) {
+    option (google.api.http) = {
+      post: "/v1/subscriptions"
+      body: "subscription"
+      response_body: "subscription"
+    };
+  }
+  // GetSubscription reads a subscription.
+  rpc GetSubscription(GetSubscriptionRequest) returns (GetSubscriptionResponse) {
+    option (google.api.http) = {
+      get: "/v1/subscriptions/{id}"
+      response_body: "subscription"
+    };
+  }
+  // ListSubscriptions lists every subscription.
+  rpc ListSubscriptions(ListSubscriptionsRequest) returns (ListSubscriptionsResponse) {
+    option (google.api.http) = {get: "/v1/subscriptions"};
+  }
+  // DeleteSubscription deletes a subscription, cancels its pending
+  // deliveries and removes its queue, with any messages still in it.
+  rpc DeleteSubscription(DeleteSubscriptionRequest) returns (DeleteSubscriptionResponse) {
+    option (google.api.http) = {delete: "/v1/subscriptions/{id}"};
+  }
+  // ListDeliveries lists delivery history, newest first.
+  rpc ListDeliveries(ListDeliveriesRequest) returns (ListDeliveriesResponse) {
+    option (google.api.http) = {get: "/v1/deliveries"};
+  }
+  // ReplayEvents delivers retained events to one subscription again, keeping
+  // their IDs. It creates new deliveries, never new events.
+  rpc ReplayEvents(ReplayEventsRequest) returns (ReplayEventsResponse) {
+    option (google.api.http) = {
+      post: "/v1/subscriptions/{subscription}:replay"
+      body: "*"
+    };
+  }
+}
+
+// Event is the envelope every consumer receives. On the queue it is JSON
+// with the same field names; here data and payload are Structs, so their
+// numbers are doubles.
+message Event {
+  // ID never changes, across retries and replay alike.
+  string id = 1;
+  // Type is a dotted name, such as forge.branch.updated.
+  string type = 2;
+  // Origin is webhook, poll or published.
+  string origin = 3;
+  // Source is the configured webhook source or poll target, if any.
+  string source = 4;
+  // Forge is github or forgejo, if the event has one.
+  string forge = 5;
+  // Connection is the forge-connector connection ID, if any.
+  string connection = 6;
+  // Repository is the owner/name path, if any.
+  string repository = 7;
+  // Subject is what changed, such as refs/heads/main or pulls/12.
+  string subject = 8;
+  // OccurredAt is when the forge says the change happened, if known.
+  google.protobuf.Timestamp occurred_at = 9;
+  // AcceptedAt is when the reactor stored the event.
+  google.protobuf.Timestamp accepted_at = 10;
+  // Data holds the normalized details.
+  google.protobuf.Struct data = 11;
+  // Native describes the native webhook delivery, for webhook events.
+  Native native = 12;
+}
+
+// Native preserves a webhook delivery, without headers or secrets.
+message Native {
+  // Event is the native event name, such as push.
+  string event = 1;
+  // Delivery is the forge's delivery ID.
+  string delivery = 2;
+  // Payload is the native body, less any top-level secret field.
+  google.protobuf.Struct payload = 3;
+}
+
+// Filter selects events. Each non-empty list must contain the event's value.
+message Filter {
+  // Types are event types.
+  repeated string types = 1;
+  // Connections are forge-connector connection IDs.
+  repeated string connections = 2;
+  // Repositories are owner/name paths, compared without case.
+  repeated string repositories = 3;
+  // Origins are webhook, poll or published.
+  repeated string origins = 4;
+}
+
+// Subscription is a durable consumer with its own queue.
+message Subscription {
+  // ID names the subscription and its queue, forge-reactor.<id>.
+  string id = 1;
+  // Description is an optional note for operators.
+  string description = 2;
+  // Filter selects events; an empty filter matches every event.
+  Filter filter = 3;
+  // CreatedAt is set by the reactor.
+  google.protobuf.Timestamp created_at = 4;
+}
+
+// Attempt is one hand-off to the broker.
+message Attempt {
+  // At is when the attempt finished.
+  google.protobuf.Timestamp at = 1;
+  // Error is why the broker did not confirm; empty means it confirmed.
+  string error = 2;
+}
+
+// Delivery is one event for one subscription. broker_accepted means the
+// broker confirmed the message; consumer processing is tracked by RabbitMQ.
+message Delivery {
+  // ID identifies this delivery; a replay creates a new one.
+  string id = 1;
+  // EventID is the delivered event.
+  string event_id = 2;
+  // Subscription is the receiving subscription.
+  string subscription = 3;
+  // Replay reports a delivery requested by a replay.
+  bool replay = 4;
+  // Status is pending, broker_accepted, failed or cancelled.
+  string status = 5;
+  // Attempts records every hand-off attempt, oldest first.
+  repeated Attempt attempts = 6;
+  // CreatedAt is when the delivery was created.
+  google.protobuf.Timestamp created_at = 7;
+  // NextAttemptAt is when a pending delivery is next due.
+  google.protobuf.Timestamp next_attempt_at = 8;
+  // AcceptedAt is when the broker confirmed the message.
+  google.protobuf.Timestamp accepted_at = 9;
+}
+
+// PublishEventRequest describes an event to publish.
+message PublishEventRequest {
+  // Type is a dotted name, such as build.finished.
+  string type = 1;
+  // Forge is github or forgejo, or empty.
+  string forge = 2;
+  // Connection is a forge-connector connection ID, or empty.
+  string connection = 3;
+  // Repository is an owner/name path, or empty.
+  string repository = 4;
+  // Subject is what the event is about inside the repository, or empty.
+  string subject = 5;
+  // OccurredAt is when it happened, if known.
+  google.protobuf.Timestamp occurred_at = 6;
+  // Data holds the event details.
+  google.protobuf.Struct data = 7;
+  // IdempotencyKey, if set, makes retries of one publish return the first
+  // event for as long as the dedup window lasts.
+  string idempotency_key = 8;
+}
+
+// PublishEventResponse returns the stored event.
+message PublishEventResponse {
+  // Event is the stored event, or the earlier one for a duplicate.
+  Event event = 1;
+  // Duplicate reports a repeated idempotency key.
+  bool duplicate = 2;
+}
+
+// GetEventRequest names an event.
+message GetEventRequest {
+  // ID is the event ID.
+  string id = 1;
+}
+
+// GetEventResponse returns an event and its history.
+message GetEventResponse {
+  // Event is the event.
+  Event event = 1;
+  // Deliveries are its deliveries, oldest first.
+  repeated Delivery deliveries = 2;
+}
+
+// ListEventsRequest selects events.
+message ListEventsRequest {
+  // Types are event types.
+  repeated string types = 1;
+  // Connections are forge-connector connection IDs.
+  repeated string connections = 2;
+  // Repositories are owner/name paths.
+  repeated string repositories = 3;
+  // Origins are webhook, poll or published.
+  repeated string origins = 4;
+  // PageSize caps the page, 50 by default and at most 500.
+  int32 page_size = 5;
+  // PageToken continues an earlier listing.
+  string page_token = 6;
+}
+
+// ListEventsResponse is one page of events.
+message ListEventsResponse {
+  // Events are newest first.
+  repeated Event events = 1;
+  // NextPageToken continues the listing; empty at the end.
+  string next_page_token = 2;
+}
+
+// CreateSubscriptionRequest describes a subscription.
+message CreateSubscriptionRequest {
+  // Subscription is the new subscription; created_at is ignored.
+  Subscription subscription = 1;
+}
+
+// CreateSubscriptionResponse returns the stored subscription.
+message CreateSubscriptionResponse {
+  // Subscription is the stored subscription.
+  Subscription subscription = 1;
+}
+
+// GetSubscriptionRequest names a subscription.
+message GetSubscriptionRequest {
+  // ID is the subscription ID.
+  string id = 1;
+}
+
+// GetSubscriptionResponse returns a subscription.
+message GetSubscriptionResponse {
+  // Subscription is the subscription.
+  Subscription subscription = 1;
+}
+
+// ListSubscriptionsRequest lists every subscription.
+message ListSubscriptionsRequest {}
+
+// ListSubscriptionsResponse holds every subscription.
+message ListSubscriptionsResponse {
+  // Subscriptions are sorted by ID.
+  repeated Subscription subscriptions = 1;
+}
+
+// DeleteSubscriptionRequest names a subscription.
+message DeleteSubscriptionRequest {
+  // ID is the subscription ID.
+  string id = 1;
+}
+
+// DeleteSubscriptionResponse is empty.
+message DeleteSubscriptionResponse {}
+
+// ListDeliveriesRequest selects deliveries. Empty fields match all.
+message ListDeliveriesRequest {
+  // Subscription is the receiving subscription.
+  string subscription = 1;
+  // EventID is the delivered event.
+  string event_id = 2;
+  // Status is pending, broker_accepted, failed or cancelled.
+  string status = 3;
+  // PageSize caps the page, 50 by default and at most 500.
+  int32 page_size = 4;
+  // PageToken continues an earlier listing.
+  string page_token = 5;
+}
+
+// ListDeliveriesResponse is one page of deliveries.
+message ListDeliveriesResponse {
+  // Deliveries are newest first.
+  repeated Delivery deliveries = 1;
+  // NextPageToken continues the listing; empty at the end.
+  string next_page_token = 2;
+}
+
+// ReplayEventsRequest selects retained events for one subscription. Give
+// either event_ids or since, not both.
+message ReplayEventsRequest {
+  // Subscription receives the events.
+  string subscription = 1;
+  // EventIDs are specific retained events, at most 1000.
+  repeated string event_ids = 2;
+  // Since selects events accepted at or after it. A time before retained
+  // history fails with OUT_OF_RANGE.
+  google.protobuf.Timestamp since = 3;
+  // Until, if set, selects events accepted before it.
+  google.protobuf.Timestamp until = 4;
+}
+
+// ReplayEventsResponse returns the new deliveries.
+message ReplayEventsResponse {
+  // Deliveries are the new deliveries, in acceptance order of their events.
+  repeated Delivery deliveries = 1;
+}

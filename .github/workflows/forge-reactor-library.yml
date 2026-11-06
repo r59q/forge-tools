@@ -1,0 +1,74 @@
+name: forge-reactor-library
+
+# Libraries are published as Go modules through git, so there is no deploy job.
+on:
+  push:
+    branches: [master]
+    paths:
+      - forge-reactor/library/**
+      - forge-core/forgeapi/**
+      - .github/workflows/forge-reactor-library.yml
+      - .github/workflows/reusable-go.yml
+      - .golangci.yml
+  pull_request:
+    paths:
+      - forge-reactor/library/**
+      - forge-core/forgeapi/**
+      - .github/workflows/forge-reactor-library.yml
+      - .github/workflows/reusable-go.yml
+      - .golangci.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: ./.github/workflows/reusable-go.yml
+    with:
+      dir: forge-reactor/library
+
+  # Runs the RabbitMQ tests, including persistence across a broker restart.
+  rabbitmq:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      rabbitmq:
+        image: rabbitmq:4@sha256:485319d42170eab53d8a030e1cc49d95e41f5d325479fa504736db8091981eb7
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 5s
+          --health-timeout 10s
+          --health-retries 20
+    env:
+      FORGE_REACTOR_RABBITMQ_URL: amqp://guest:guest@localhost:5672/
+    defaults:
+      run:
+        working-directory: forge-reactor/library
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+          cache-dependency-path: forge-reactor/library/go.mod
+      - name: Integration tests
+        run: go test -race -count=1 -run Integration ./rabbitmq/
+      - name: Publish before restart
+        run: FORGE_REACTOR_RABBITMQ_PHASE=publish go test -count=1 -run IntegrationPersistence ./rabbitmq/
+      - name: Restart RabbitMQ
+        env:
+          CONTAINER: ${{ job.services.rabbitmq.id }}
+        run: |
+          docker restart "$CONTAINER"
+          for _ in $(seq 60); do
+            if [ "$(docker inspect --format '{{.State.Health.Status}}' "$CONTAINER")" = healthy ]; then exit 0; fi
+            sleep 2
+          done
+          echo "RabbitMQ did not become healthy" >&2
+          exit 1
+      - name: Consume after restart
+        run: FORGE_REACTOR_RABBITMQ_PHASE=consume go test -count=1 -run IntegrationPersistence ./rabbitmq/

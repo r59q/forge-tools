@@ -144,6 +144,8 @@ message Filter {
   repeated string repositories = 3;
   // Origins are webhook, poll or published.
   repeated string origins = 4;
+  // Sources are webhook source or poll target IDs.
+  repeated string sources = 5;
 }
 
 // Subscription is a durable consumer with its own queue.
@@ -246,6 +248,8 @@ message ListEventsRequest {
   int32 page_size = 5;
   // PageToken continues an earlier listing.
   string page_token = 6;
+  // Sources are webhook source or poll target IDs.
+  repeated string sources = 7;
 }
 
 // ListEventsResponse is one page of events.

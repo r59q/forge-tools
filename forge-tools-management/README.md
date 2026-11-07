@@ -21,6 +21,10 @@ connection.
   [forge-reactor](../forge-reactor/). The reactor generates each secret, shown
   once, and can create the webhook on the forge. Sources from the reactor's
   configuration file are listed read-only. The capability is optional.
+- **Events** lists the events forge-reactor received, filtered by source,
+  type or repository, with each event's data and deliveries. The Webhooks
+  page shows each source's latest event. It comes with the Webhooks
+  capability.
 
 Projects:
 

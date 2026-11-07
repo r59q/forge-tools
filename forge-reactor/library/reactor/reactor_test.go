@@ -31,6 +31,8 @@ func TestAcceptFansOutToMatchingSubscriptions(t *testing.T) {
 	subscribe(t, r, "pulls", Filter{Types: []string{TypePullRequestOpened}})
 	subscribe(t, r, "other-conn", Filter{Connections: []string{"forgejo"}})
 	subscribe(t, r, "polls", Filter{Origins: []Origin{OriginPoll}})
+	subscribe(t, r, "source", Filter{Sources: []string{webhookEvent().Source}})
+	subscribe(t, r, "other-source", Filter{Sources: []string{"elsewhere"}})
 
 	e := accept(t, r, webhookEvent(), "k")
 	if e.ID == "" || e.AcceptedAt.IsZero() {
@@ -45,7 +47,7 @@ func TestAcceptFansOutToMatchingSubscriptions(t *testing.T) {
 		got = append(got, d.Subscription)
 	}
 	slices.Sort(got)
-	if want := []string{"all", "origin", "repo", "typed"}; !slices.Equal(got, want) {
+	if want := []string{"all", "origin", "repo", "source", "typed"}; !slices.Equal(got, want) {
 		t.Errorf("subscriptions = %v, want %v", got, want)
 	}
 }
@@ -54,6 +56,12 @@ func TestFilterEmptyEventFieldNeverMatchesList(t *testing.T) {
 	f := Filter{Connections: []string{"gh"}}
 	if f.Match(Event{Type: "x", Origin: OriginPublished}) {
 		t.Error("event without a connection matched a connection filter")
+	}
+	if (Filter{Sources: []string{"gh"}}).Match(Event{Type: "x", Origin: OriginPublished}) {
+		t.Error("event without a source matched a source filter")
+	}
+	if (Filter{Sources: []string{""}}).validate() == nil {
+		t.Error("empty source accepted")
 	}
 	if !(Filter{}).Match(Event{Type: "x", Origin: OriginPublished}) {
 		t.Error("empty filter did not match")

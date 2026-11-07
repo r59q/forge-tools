@@ -8,6 +8,7 @@ package managementpb
 
 import (
 	actionspb "github.com/r59q/forge-tools/forge-actions/service/actionspb"
+	reactorpb "github.com/r59q/forge-tools/forge-reactor/service/reactorpb"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -2180,11 +2181,246 @@ func (x *RemoveWebhookResponse) GetFailedRepositories() []string {
 	return nil
 }
 
+// ListEventsRequest selects events. Empty fields match all.
+type ListEventsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// source is a webhook source or poll target ID.
+	Source string `protobuf:"bytes,1,opt,name=source,proto3" json:"source,omitempty"`
+	// type is an event type, such as forge.branch.updated.
+	Type string `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
+	// repository is an owner/name path, compared without case.
+	Repository string `protobuf:"bytes,3,opt,name=repository,proto3" json:"repository,omitempty"`
+	// page_token continues an earlier listing.
+	PageToken     string `protobuf:"bytes,4,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListEventsRequest) Reset() {
+	*x = ListEventsRequest{}
+	mi := &file_forge_management_v1_management_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListEventsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListEventsRequest) ProtoMessage() {}
+
+func (x *ListEventsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_forge_management_v1_management_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListEventsRequest.ProtoReflect.Descriptor instead.
+func (*ListEventsRequest) Descriptor() ([]byte, []int) {
+	return file_forge_management_v1_management_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *ListEventsRequest) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+func (x *ListEventsRequest) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *ListEventsRequest) GetRepository() string {
+	if x != nil {
+		return x.Repository
+	}
+	return ""
+}
+
+func (x *ListEventsRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+// ListEventsResponse is one page of events, without native payloads.
+type ListEventsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// configured is false when management has no forge-reactor.
+	Configured bool `protobuf:"varint,1,opt,name=configured,proto3" json:"configured,omitempty"`
+	// events are newest first, at most 50.
+	Events []*reactorpb.Event `protobuf:"bytes,2,rep,name=events,proto3" json:"events,omitempty"`
+	// next_page_token continues the listing; empty at the end.
+	NextPageToken string `protobuf:"bytes,3,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListEventsResponse) Reset() {
+	*x = ListEventsResponse{}
+	mi := &file_forge_management_v1_management_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListEventsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListEventsResponse) ProtoMessage() {}
+
+func (x *ListEventsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_forge_management_v1_management_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListEventsResponse.ProtoReflect.Descriptor instead.
+func (*ListEventsResponse) Descriptor() ([]byte, []int) {
+	return file_forge_management_v1_management_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *ListEventsResponse) GetConfigured() bool {
+	if x != nil {
+		return x.Configured
+	}
+	return false
+}
+
+func (x *ListEventsResponse) GetEvents() []*reactorpb.Event {
+	if x != nil {
+		return x.Events
+	}
+	return nil
+}
+
+func (x *ListEventsResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
+// GetEventRequest names an event.
+type GetEventRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetEventRequest) Reset() {
+	*x = GetEventRequest{}
+	mi := &file_forge_management_v1_management_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetEventRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetEventRequest) ProtoMessage() {}
+
+func (x *GetEventRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_forge_management_v1_management_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetEventRequest.ProtoReflect.Descriptor instead.
+func (*GetEventRequest) Descriptor() ([]byte, []int) {
+	return file_forge_management_v1_management_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *GetEventRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+// GetEventResponse holds the event and its deliveries, oldest first.
+type GetEventResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Event         *reactorpb.Event       `protobuf:"bytes,1,opt,name=event,proto3" json:"event,omitempty"`
+	Deliveries    []*reactorpb.Delivery  `protobuf:"bytes,2,rep,name=deliveries,proto3" json:"deliveries,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetEventResponse) Reset() {
+	*x = GetEventResponse{}
+	mi := &file_forge_management_v1_management_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetEventResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetEventResponse) ProtoMessage() {}
+
+func (x *GetEventResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_forge_management_v1_management_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetEventResponse.ProtoReflect.Descriptor instead.
+func (*GetEventResponse) Descriptor() ([]byte, []int) {
+	return file_forge_management_v1_management_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *GetEventResponse) GetEvent() *reactorpb.Event {
+	if x != nil {
+		return x.Event
+	}
+	return nil
+}
+
+func (x *GetEventResponse) GetDeliveries() []*reactorpb.Delivery {
+	if x != nil {
+		return x.Deliveries
+	}
+	return nil
+}
+
 var File_forge_management_v1_management_proto protoreflect.FileDescriptor
 
 const file_forge_management_v1_management_proto_rawDesc = "" +
 	"\n" +
-	"$forge/management/v1/management.proto\x12\x13forge.management.v1\x1a\x1eforge/actions/v1/actions.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x19\n" +
+	"$forge/management/v1/management.proto\x12\x13forge.management.v1\x1a\x1eforge/actions/v1/actions.proto\x1a\x1eforge/reactor/v1/reactor.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x19\n" +
 	"\x17ListRepositoriesRequest\"\x7f\n" +
 	"\x18ListRepositoriesResponse\x12\x1e\n" +
 	"\n" +
@@ -2364,7 +2600,28 @@ const file_forge_management_v1_management_proto_rawDesc = "" +
 	"\x14RemoveWebhookRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"H\n" +
 	"\x15RemoveWebhookResponse\x12/\n" +
-	"\x13failed_repositories\x18\x01 \x03(\tR\x12failedRepositories2\x8a\x11\n" +
+	"\x13failed_repositories\x18\x01 \x03(\tR\x12failedRepositories\"~\n" +
+	"\x11ListEventsRequest\x12\x16\n" +
+	"\x06source\x18\x01 \x01(\tR\x06source\x12\x12\n" +
+	"\x04type\x18\x02 \x01(\tR\x04type\x12\x1e\n" +
+	"\n" +
+	"repository\x18\x03 \x01(\tR\n" +
+	"repository\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x04 \x01(\tR\tpageToken\"\x8d\x01\n" +
+	"\x12ListEventsResponse\x12\x1e\n" +
+	"\n" +
+	"configured\x18\x01 \x01(\bR\n" +
+	"configured\x12/\n" +
+	"\x06events\x18\x02 \x03(\v2\x17.forge.reactor.v1.EventR\x06events\x12&\n" +
+	"\x0fnext_page_token\x18\x03 \x01(\tR\rnextPageToken\"!\n" +
+	"\x0fGetEventRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"}\n" +
+	"\x10GetEventResponse\x12-\n" +
+	"\x05event\x18\x01 \x01(\v2\x17.forge.reactor.v1.EventR\x05event\x12:\n" +
+	"\n" +
+	"deliveries\x18\x02 \x03(\v2\x1a.forge.reactor.v1.DeliveryR\n" +
+	"deliveries2\xef\x12\n" +
 	"\x11ManagementService\x12}\n" +
 	"\rListPipelines\x12).forge.management.v1.ListPipelinesRequest\x1a*.forge.management.v1.ListPipelinesResponse\"\x15\x82\xd3\xe4\x93\x02\x0f\x12\r/v1/pipelines\x12\x86\x01\n" +
 	"\vGetPipeline\x12'.forge.management.v1.GetPipelineRequest\x1a(.forge.management.v1.GetPipelineResponse\"$\x82\xd3\xe4\x93\x02\x1eb\bpipeline\x12\x12/v1/pipelines/{id}\x12x\n" +
@@ -2388,7 +2645,11 @@ const file_forge_management_v1_management_proto_rawDesc = "" +
 	"\n" +
 	"AddWebhook\x12&.forge.management.v1.AddWebhookRequest\x1a'.forge.management.v1.AddWebhookResponse\"\x17\x82\xd3\xe4\x93\x02\x11:\x01*\"\f/v1/webhooks\x12\x9d\x01\n" +
 	"\x13RotateWebhookSecret\x12/.forge.management.v1.RotateWebhookSecretRequest\x1a0.forge.management.v1.RotateWebhookSecretResponse\"#\x82\xd3\xe4\x93\x02\x1d:\x01*\"\x18/v1/webhooks/{id}:rotate\x12\x81\x01\n" +
-	"\rRemoveWebhook\x12).forge.management.v1.RemoveWebhookRequest\x1a*.forge.management.v1.RemoveWebhookResponse\"\x19\x82\xd3\xe4\x93\x02\x13*\x11/v1/webhooks/{id}BIZGgithub.com/r59q/forge-tools/forge-tools-management/service/managementpbb\x06proto3"
+	"\rRemoveWebhook\x12).forge.management.v1.RemoveWebhookRequest\x1a*.forge.management.v1.RemoveWebhookResponse\"\x19\x82\xd3\xe4\x93\x02\x13*\x11/v1/webhooks/{id}\x12q\n" +
+	"\n" +
+	"ListEvents\x12&.forge.management.v1.ListEventsRequest\x1a'.forge.management.v1.ListEventsResponse\"\x12\x82\xd3\xe4\x93\x02\f\x12\n" +
+	"/v1/events\x12p\n" +
+	"\bGetEvent\x12$.forge.management.v1.GetEventRequest\x1a%.forge.management.v1.GetEventResponse\"\x17\x82\xd3\xe4\x93\x02\x11\x12\x0f/v1/events/{id}BIZGgithub.com/r59q/forge-tools/forge-tools-management/service/managementpbb\x06proto3"
 
 var (
 	file_forge_management_v1_management_proto_rawDescOnce sync.Once
@@ -2402,7 +2663,7 @@ func file_forge_management_v1_management_proto_rawDescGZIP() []byte {
 	return file_forge_management_v1_management_proto_rawDescData
 }
 
-var file_forge_management_v1_management_proto_msgTypes = make([]protoimpl.MessageInfo, 36)
+var file_forge_management_v1_management_proto_msgTypes = make([]protoimpl.MessageInfo, 40)
 var file_forge_management_v1_management_proto_goTypes = []any{
 	(*ListRepositoriesRequest)(nil),     // 0: forge.management.v1.ListRepositoriesRequest
 	(*ListRepositoriesResponse)(nil),    // 1: forge.management.v1.ListRepositoriesResponse
@@ -2440,66 +2701,79 @@ var file_forge_management_v1_management_proto_goTypes = []any{
 	(*RotateWebhookSecretResponse)(nil), // 33: forge.management.v1.RotateWebhookSecretResponse
 	(*RemoveWebhookRequest)(nil),        // 34: forge.management.v1.RemoveWebhookRequest
 	(*RemoveWebhookResponse)(nil),       // 35: forge.management.v1.RemoveWebhookResponse
-	(*timestamppb.Timestamp)(nil),       // 36: google.protobuf.Timestamp
-	(*actionspb.Pipeline)(nil),          // 37: forge.actions.v1.Pipeline
-	(*actionspb.Job)(nil),               // 38: forge.actions.v1.Job
-	(*actionspb.Log)(nil),               // 39: forge.actions.v1.Log
+	(*ListEventsRequest)(nil),           // 36: forge.management.v1.ListEventsRequest
+	(*ListEventsResponse)(nil),          // 37: forge.management.v1.ListEventsResponse
+	(*GetEventRequest)(nil),             // 38: forge.management.v1.GetEventRequest
+	(*GetEventResponse)(nil),            // 39: forge.management.v1.GetEventResponse
+	(*timestamppb.Timestamp)(nil),       // 40: google.protobuf.Timestamp
+	(*actionspb.Pipeline)(nil),          // 41: forge.actions.v1.Pipeline
+	(*actionspb.Job)(nil),               // 42: forge.actions.v1.Job
+	(*actionspb.Log)(nil),               // 43: forge.actions.v1.Log
+	(*reactorpb.Event)(nil),             // 44: forge.reactor.v1.Event
+	(*reactorpb.Delivery)(nil),          // 45: forge.reactor.v1.Delivery
 }
 var file_forge_management_v1_management_proto_depIdxs = []int32{
 	2,  // 0: forge.management.v1.ListRepositoriesResponse.repositories:type_name -> forge.management.v1.Repository
 	5,  // 1: forge.management.v1.ListIssuesResponse.issues:type_name -> forge.management.v1.Issue
-	36, // 2: forge.management.v1.Issue.updated_at:type_name -> google.protobuf.Timestamp
+	40, // 2: forge.management.v1.Issue.updated_at:type_name -> google.protobuf.Timestamp
 	8,  // 3: forge.management.v1.ListConnectionsResponse.connections:type_name -> forge.management.v1.Connection
-	36, // 4: forge.management.v1.Connection.checked_at:type_name -> google.protobuf.Timestamp
+	40, // 4: forge.management.v1.Connection.checked_at:type_name -> google.protobuf.Timestamp
 	8,  // 5: forge.management.v1.AddConnectionResponse.connection:type_name -> forge.management.v1.Connection
 	8,  // 6: forge.management.v1.TestConnectionResponse.connection:type_name -> forge.management.v1.Connection
 	8,  // 7: forge.management.v1.RotateCredentialResponse.connection:type_name -> forge.management.v1.Connection
-	37, // 8: forge.management.v1.ListPipelinesResponse.pipelines:type_name -> forge.actions.v1.Pipeline
-	37, // 9: forge.management.v1.GetPipelineResponse.pipeline:type_name -> forge.actions.v1.Pipeline
-	38, // 10: forge.management.v1.ListJobsResponse.jobs:type_name -> forge.actions.v1.Job
-	38, // 11: forge.management.v1.GetJobResponse.job:type_name -> forge.actions.v1.Job
-	39, // 12: forge.management.v1.ReadJobLogResponse.log:type_name -> forge.actions.v1.Log
-	36, // 13: forge.management.v1.Webhook.created_at:type_name -> google.protobuf.Timestamp
+	41, // 8: forge.management.v1.ListPipelinesResponse.pipelines:type_name -> forge.actions.v1.Pipeline
+	41, // 9: forge.management.v1.GetPipelineResponse.pipeline:type_name -> forge.actions.v1.Pipeline
+	42, // 10: forge.management.v1.ListJobsResponse.jobs:type_name -> forge.actions.v1.Job
+	42, // 11: forge.management.v1.GetJobResponse.job:type_name -> forge.actions.v1.Job
+	43, // 12: forge.management.v1.ReadJobLogResponse.log:type_name -> forge.actions.v1.Log
+	40, // 13: forge.management.v1.Webhook.created_at:type_name -> google.protobuf.Timestamp
 	27, // 14: forge.management.v1.ListWebhooksResponse.webhooks:type_name -> forge.management.v1.Webhook
 	27, // 15: forge.management.v1.AddWebhookResponse.webhook:type_name -> forge.management.v1.Webhook
 	27, // 16: forge.management.v1.RotateWebhookSecretResponse.webhook:type_name -> forge.management.v1.Webhook
-	17, // 17: forge.management.v1.ManagementService.ListPipelines:input_type -> forge.management.v1.ListPipelinesRequest
-	19, // 18: forge.management.v1.ManagementService.GetPipeline:input_type -> forge.management.v1.GetPipelineRequest
-	21, // 19: forge.management.v1.ManagementService.ListJobs:input_type -> forge.management.v1.ListJobsRequest
-	23, // 20: forge.management.v1.ManagementService.GetJob:input_type -> forge.management.v1.GetJobRequest
-	25, // 21: forge.management.v1.ManagementService.ReadJobLog:input_type -> forge.management.v1.ReadJobLogRequest
-	0,  // 22: forge.management.v1.ManagementService.ListRepositories:input_type -> forge.management.v1.ListRepositoriesRequest
-	3,  // 23: forge.management.v1.ManagementService.ListIssues:input_type -> forge.management.v1.ListIssuesRequest
-	6,  // 24: forge.management.v1.ManagementService.ListConnections:input_type -> forge.management.v1.ListConnectionsRequest
-	9,  // 25: forge.management.v1.ManagementService.AddConnection:input_type -> forge.management.v1.AddConnectionRequest
-	11, // 26: forge.management.v1.ManagementService.TestConnection:input_type -> forge.management.v1.TestConnectionRequest
-	13, // 27: forge.management.v1.ManagementService.RotateCredential:input_type -> forge.management.v1.RotateCredentialRequest
-	15, // 28: forge.management.v1.ManagementService.RemoveConnection:input_type -> forge.management.v1.RemoveConnectionRequest
-	28, // 29: forge.management.v1.ManagementService.ListWebhooks:input_type -> forge.management.v1.ListWebhooksRequest
-	30, // 30: forge.management.v1.ManagementService.AddWebhook:input_type -> forge.management.v1.AddWebhookRequest
-	32, // 31: forge.management.v1.ManagementService.RotateWebhookSecret:input_type -> forge.management.v1.RotateWebhookSecretRequest
-	34, // 32: forge.management.v1.ManagementService.RemoveWebhook:input_type -> forge.management.v1.RemoveWebhookRequest
-	18, // 33: forge.management.v1.ManagementService.ListPipelines:output_type -> forge.management.v1.ListPipelinesResponse
-	20, // 34: forge.management.v1.ManagementService.GetPipeline:output_type -> forge.management.v1.GetPipelineResponse
-	22, // 35: forge.management.v1.ManagementService.ListJobs:output_type -> forge.management.v1.ListJobsResponse
-	24, // 36: forge.management.v1.ManagementService.GetJob:output_type -> forge.management.v1.GetJobResponse
-	26, // 37: forge.management.v1.ManagementService.ReadJobLog:output_type -> forge.management.v1.ReadJobLogResponse
-	1,  // 38: forge.management.v1.ManagementService.ListRepositories:output_type -> forge.management.v1.ListRepositoriesResponse
-	4,  // 39: forge.management.v1.ManagementService.ListIssues:output_type -> forge.management.v1.ListIssuesResponse
-	7,  // 40: forge.management.v1.ManagementService.ListConnections:output_type -> forge.management.v1.ListConnectionsResponse
-	10, // 41: forge.management.v1.ManagementService.AddConnection:output_type -> forge.management.v1.AddConnectionResponse
-	12, // 42: forge.management.v1.ManagementService.TestConnection:output_type -> forge.management.v1.TestConnectionResponse
-	14, // 43: forge.management.v1.ManagementService.RotateCredential:output_type -> forge.management.v1.RotateCredentialResponse
-	16, // 44: forge.management.v1.ManagementService.RemoveConnection:output_type -> forge.management.v1.RemoveConnectionResponse
-	29, // 45: forge.management.v1.ManagementService.ListWebhooks:output_type -> forge.management.v1.ListWebhooksResponse
-	31, // 46: forge.management.v1.ManagementService.AddWebhook:output_type -> forge.management.v1.AddWebhookResponse
-	33, // 47: forge.management.v1.ManagementService.RotateWebhookSecret:output_type -> forge.management.v1.RotateWebhookSecretResponse
-	35, // 48: forge.management.v1.ManagementService.RemoveWebhook:output_type -> forge.management.v1.RemoveWebhookResponse
-	33, // [33:49] is the sub-list for method output_type
-	17, // [17:33] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	44, // 17: forge.management.v1.ListEventsResponse.events:type_name -> forge.reactor.v1.Event
+	44, // 18: forge.management.v1.GetEventResponse.event:type_name -> forge.reactor.v1.Event
+	45, // 19: forge.management.v1.GetEventResponse.deliveries:type_name -> forge.reactor.v1.Delivery
+	17, // 20: forge.management.v1.ManagementService.ListPipelines:input_type -> forge.management.v1.ListPipelinesRequest
+	19, // 21: forge.management.v1.ManagementService.GetPipeline:input_type -> forge.management.v1.GetPipelineRequest
+	21, // 22: forge.management.v1.ManagementService.ListJobs:input_type -> forge.management.v1.ListJobsRequest
+	23, // 23: forge.management.v1.ManagementService.GetJob:input_type -> forge.management.v1.GetJobRequest
+	25, // 24: forge.management.v1.ManagementService.ReadJobLog:input_type -> forge.management.v1.ReadJobLogRequest
+	0,  // 25: forge.management.v1.ManagementService.ListRepositories:input_type -> forge.management.v1.ListRepositoriesRequest
+	3,  // 26: forge.management.v1.ManagementService.ListIssues:input_type -> forge.management.v1.ListIssuesRequest
+	6,  // 27: forge.management.v1.ManagementService.ListConnections:input_type -> forge.management.v1.ListConnectionsRequest
+	9,  // 28: forge.management.v1.ManagementService.AddConnection:input_type -> forge.management.v1.AddConnectionRequest
+	11, // 29: forge.management.v1.ManagementService.TestConnection:input_type -> forge.management.v1.TestConnectionRequest
+	13, // 30: forge.management.v1.ManagementService.RotateCredential:input_type -> forge.management.v1.RotateCredentialRequest
+	15, // 31: forge.management.v1.ManagementService.RemoveConnection:input_type -> forge.management.v1.RemoveConnectionRequest
+	28, // 32: forge.management.v1.ManagementService.ListWebhooks:input_type -> forge.management.v1.ListWebhooksRequest
+	30, // 33: forge.management.v1.ManagementService.AddWebhook:input_type -> forge.management.v1.AddWebhookRequest
+	32, // 34: forge.management.v1.ManagementService.RotateWebhookSecret:input_type -> forge.management.v1.RotateWebhookSecretRequest
+	34, // 35: forge.management.v1.ManagementService.RemoveWebhook:input_type -> forge.management.v1.RemoveWebhookRequest
+	36, // 36: forge.management.v1.ManagementService.ListEvents:input_type -> forge.management.v1.ListEventsRequest
+	38, // 37: forge.management.v1.ManagementService.GetEvent:input_type -> forge.management.v1.GetEventRequest
+	18, // 38: forge.management.v1.ManagementService.ListPipelines:output_type -> forge.management.v1.ListPipelinesResponse
+	20, // 39: forge.management.v1.ManagementService.GetPipeline:output_type -> forge.management.v1.GetPipelineResponse
+	22, // 40: forge.management.v1.ManagementService.ListJobs:output_type -> forge.management.v1.ListJobsResponse
+	24, // 41: forge.management.v1.ManagementService.GetJob:output_type -> forge.management.v1.GetJobResponse
+	26, // 42: forge.management.v1.ManagementService.ReadJobLog:output_type -> forge.management.v1.ReadJobLogResponse
+	1,  // 43: forge.management.v1.ManagementService.ListRepositories:output_type -> forge.management.v1.ListRepositoriesResponse
+	4,  // 44: forge.management.v1.ManagementService.ListIssues:output_type -> forge.management.v1.ListIssuesResponse
+	7,  // 45: forge.management.v1.ManagementService.ListConnections:output_type -> forge.management.v1.ListConnectionsResponse
+	10, // 46: forge.management.v1.ManagementService.AddConnection:output_type -> forge.management.v1.AddConnectionResponse
+	12, // 47: forge.management.v1.ManagementService.TestConnection:output_type -> forge.management.v1.TestConnectionResponse
+	14, // 48: forge.management.v1.ManagementService.RotateCredential:output_type -> forge.management.v1.RotateCredentialResponse
+	16, // 49: forge.management.v1.ManagementService.RemoveConnection:output_type -> forge.management.v1.RemoveConnectionResponse
+	29, // 50: forge.management.v1.ManagementService.ListWebhooks:output_type -> forge.management.v1.ListWebhooksResponse
+	31, // 51: forge.management.v1.ManagementService.AddWebhook:output_type -> forge.management.v1.AddWebhookResponse
+	33, // 52: forge.management.v1.ManagementService.RotateWebhookSecret:output_type -> forge.management.v1.RotateWebhookSecretResponse
+	35, // 53: forge.management.v1.ManagementService.RemoveWebhook:output_type -> forge.management.v1.RemoveWebhookResponse
+	37, // 54: forge.management.v1.ManagementService.ListEvents:output_type -> forge.management.v1.ListEventsResponse
+	39, // 55: forge.management.v1.ManagementService.GetEvent:output_type -> forge.management.v1.GetEventResponse
+	38, // [38:56] is the sub-list for method output_type
+	20, // [20:38] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_forge_management_v1_management_proto_init() }
@@ -2513,7 +2787,7 @@ func file_forge_management_v1_management_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_forge_management_v1_management_proto_rawDesc), len(file_forge_management_v1_management_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   36,
+			NumMessages:   40,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

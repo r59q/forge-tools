@@ -186,13 +186,15 @@ needs `Authorization: Bearer <operator token>`.
 | `AddWebhook`          | `POST /v1/webhooks` with `{"id","connection","repositories","register"}` |
 | `RotateWebhookSecret` | `POST /v1/webhooks/{id}:rotate`                                          |
 | `RemoveWebhook`       | `DELETE /v1/webhooks/{id}`                                               |
+| `ListEvents`          | `GET /v1/events?source=&type=&repository=&pageToken=`                    |
+| `GetEvent`            | `GET /v1/events/{id}`                                                    |
 
 The browser routes use HTTP Basic authentication: `GET /`, `GET /issues`
 with the same query as `ListIssues`, `GET /connections`,
 `POST /connections`, and `POST /connections/{id}/test`, `/credential` and
-`/delete`, `GET /webhooks`, `POST /webhooks`, and
-`POST /webhooks/{id}/rotate` and `/delete`. REST and gRPC ignore forwarded identity and `Grpc-Metadata-*`
-headers. The operator token is never rendered in HTML.
+`/delete`, `GET /webhooks`, `POST /webhooks`, `POST /webhooks/{id}/rotate`
+and `/delete`, and `GET /events` and `GET /events/{id}`. REST and gRPC ignore
+forwarded identity and `Grpc-Metadata-*` headers. The operator token is never rendered in HTML.
 
 ```sh
 api() { curl -fsS -H "Authorization: Bearer $(cat /tmp/management-operator-token)" "$@"; }
@@ -275,7 +277,13 @@ to repositories; the page then shows its payload URL and secret once. With
 needs `--public-url` and a connector, and the connection's token must be
 allowed to manage repository webhooks. Rotate replaces the secret on the
 reactor and on registered webhooks. Remove deletes the source and its
-registered webhooks. Repositories the forge did not update are listed.
+registered webhooks. Repositories the forge did not update are listed. Each
+row shows the source's latest retained event.
+
+The Events page lists the reactor's retained events, 50 per page, newest
+first, filtered by source, type or repository. An event's page shows its
+fields, data, native payload and deliveries to subscriptions. Listings over
+REST and gRPC leave out native payloads; `GetEvent` includes them.
 
 ## Pipeline browsing
 

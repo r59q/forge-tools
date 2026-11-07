@@ -3,6 +3,7 @@ syntax = "proto3";
 package forge.management.v1;
 
 import "forge/actions/v1/actions.proto";
+import "forge/reactor/v1/reactor.proto";
 import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 
@@ -11,7 +12,7 @@ option go_package = "github.com/r59q/forge-tools/forge-tools-management/service/
 // ManagementService sets up and inspects forge-tools. Every RPC requires the
 // management operator token in Authorization: Bearer metadata. Use TLS across
 // networks. Connection RPCs fail with UNIMPLEMENTED when no connector is
-// configured, and webhook RPCs when no forge-reactor is.
+// configured, and webhook and event RPCs when no forge-reactor is.
 service ManagementService {
   // ListPipelines reads one page. GET /v1/pipelines?source=&repository=.
   rpc ListPipelines(ListPipelinesRequest) returns (ListPipelinesResponse) {
@@ -121,6 +122,15 @@ service ManagementService {
   // DELETE /v1/webhooks/{id}.
   rpc RemoveWebhook(RemoveWebhookRequest) returns (RemoveWebhookResponse) {
     option (google.api.http) = {delete: "/v1/webhooks/{id}"};
+  }
+  // ListEvents reads one page of forge-reactor events, newest first.
+  // GET /v1/events?source=&type=&repository=&page_token=.
+  rpc ListEvents(ListEventsRequest) returns (ListEventsResponse) {
+    option (google.api.http) = {get: "/v1/events"};
+  }
+  // GetEvent reads one event and its deliveries. GET /v1/events/{id}.
+  rpc GetEvent(GetEventRequest) returns (GetEventResponse) {
+    option (google.api.http) = {get: "/v1/events/{id}"};
   }
 }
 
@@ -414,4 +424,37 @@ message RemoveWebhookRequest {
 message RemoveWebhookResponse {
   // failed_repositories still have the webhook; remove it by hand.
   repeated string failed_repositories = 1;
+}
+
+// ListEventsRequest selects events. Empty fields match all.
+message ListEventsRequest {
+  // source is a webhook source or poll target ID.
+  string source = 1;
+  // type is an event type, such as forge.branch.updated.
+  string type = 2;
+  // repository is an owner/name path, compared without case.
+  string repository = 3;
+  // page_token continues an earlier listing.
+  string page_token = 4;
+}
+
+// ListEventsResponse is one page of events, without native payloads.
+message ListEventsResponse {
+  // configured is false when management has no forge-reactor.
+  bool configured = 1;
+  // events are newest first, at most 50.
+  repeated forge.reactor.v1.Event events = 2;
+  // next_page_token continues the listing; empty at the end.
+  string next_page_token = 3;
+}
+
+// GetEventRequest names an event.
+message GetEventRequest {
+  string id = 1;
+}
+
+// GetEventResponse holds the event and its deliveries, oldest first.
+message GetEventResponse {
+  forge.reactor.v1.Event event = 1;
+  repeated forge.reactor.v1.Delivery deliveries = 2;
 }

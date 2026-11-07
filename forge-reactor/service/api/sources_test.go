@@ -54,6 +54,13 @@ func TestManagedSourceLifecycle(t *testing.T) {
 		t.Fatalf("delivery: %d %s", rec.Code, rec.Body)
 	}
 
+	for source, want := range map[string]int{"app": 1, "static": 0} {
+		events, err := s.ListEvents(ctx, &pb.ListEventsRequest{Sources: []string{source}})
+		if err != nil || len(events.GetEvents()) != want {
+			t.Fatalf("events from %s: %v %v", source, events, err)
+		}
+	}
+
 	list, err := s.ListWebhookSources(ctx, &pb.ListWebhookSourcesRequest{})
 	ids := []string{}
 	for _, src := range list.GetSources() {

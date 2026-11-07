@@ -245,7 +245,9 @@ type Filter struct {
 	// Repositories are owner/name paths, compared without case.
 	Repositories []string `protobuf:"bytes,3,rep,name=repositories,proto3" json:"repositories,omitempty"`
 	// Origins are webhook, poll or published.
-	Origins       []string `protobuf:"bytes,4,rep,name=origins,proto3" json:"origins,omitempty"`
+	Origins []string `protobuf:"bytes,4,rep,name=origins,proto3" json:"origins,omitempty"`
+	// Sources are webhook source or poll target IDs.
+	Sources       []string `protobuf:"bytes,5,rep,name=sources,proto3" json:"sources,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -304,6 +306,13 @@ func (x *Filter) GetRepositories() []string {
 func (x *Filter) GetOrigins() []string {
 	if x != nil {
 		return x.Origins
+	}
+	return nil
+}
+
+func (x *Filter) GetSources() []string {
+	if x != nil {
+		return x.Sources
 	}
 	return nil
 }
@@ -835,7 +844,9 @@ type ListEventsRequest struct {
 	// PageSize caps the page, 50 by default and at most 500.
 	PageSize int32 `protobuf:"varint,5,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
 	// PageToken continues an earlier listing.
-	PageToken     string `protobuf:"bytes,6,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	PageToken string `protobuf:"bytes,6,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	// Sources are webhook source or poll target IDs.
+	Sources       []string `protobuf:"bytes,7,rep,name=sources,proto3" json:"sources,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -910,6 +921,13 @@ func (x *ListEventsRequest) GetPageToken() string {
 		return x.PageToken
 	}
 	return ""
+}
+
+func (x *ListEventsRequest) GetSources() []string {
+	if x != nil {
+		return x.Sources
+	}
+	return nil
 }
 
 // ListEventsResponse is one page of events.
@@ -2138,12 +2156,13 @@ const file_forge_reactor_v1_reactor_proto_rawDesc = "" +
 	"\x06Native\x12\x14\n" +
 	"\x05event\x18\x01 \x01(\tR\x05event\x12\x1a\n" +
 	"\bdelivery\x18\x02 \x01(\tR\bdelivery\x121\n" +
-	"\apayload\x18\x03 \x01(\v2\x17.google.protobuf.StructR\apayload\"~\n" +
+	"\apayload\x18\x03 \x01(\v2\x17.google.protobuf.StructR\apayload\"\x98\x01\n" +
 	"\x06Filter\x12\x14\n" +
 	"\x05types\x18\x01 \x03(\tR\x05types\x12 \n" +
 	"\vconnections\x18\x02 \x03(\tR\vconnections\x12\"\n" +
 	"\frepositories\x18\x03 \x03(\tR\frepositories\x12\x18\n" +
-	"\aorigins\x18\x04 \x03(\tR\aorigins\"\xad\x01\n" +
+	"\aorigins\x18\x04 \x03(\tR\aorigins\x12\x18\n" +
+	"\asources\x18\x05 \x03(\tR\asources\"\xad\x01\n" +
 	"\fSubscription\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x120\n" +
@@ -2188,7 +2207,7 @@ const file_forge_reactor_v1_reactor_proto_rawDesc = "" +
 	"\x05event\x18\x01 \x01(\v2\x17.forge.reactor.v1.EventR\x05event\x12:\n" +
 	"\n" +
 	"deliveries\x18\x02 \x03(\v2\x1a.forge.reactor.v1.DeliveryR\n" +
-	"deliveries\"\xc5\x01\n" +
+	"deliveries\"\xdf\x01\n" +
 	"\x11ListEventsRequest\x12\x14\n" +
 	"\x05types\x18\x01 \x03(\tR\x05types\x12 \n" +
 	"\vconnections\x18\x02 \x03(\tR\vconnections\x12\"\n" +
@@ -2196,7 +2215,8 @@ const file_forge_reactor_v1_reactor_proto_rawDesc = "" +
 	"\aorigins\x18\x04 \x03(\tR\aorigins\x12\x1b\n" +
 	"\tpage_size\x18\x05 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\x06 \x01(\tR\tpageToken\"m\n" +
+	"page_token\x18\x06 \x01(\tR\tpageToken\x12\x18\n" +
+	"\asources\x18\a \x03(\tR\asources\"m\n" +
 	"\x12ListEventsResponse\x12/\n" +
 	"\x06events\x18\x01 \x03(\v2\x17.forge.reactor.v1.EventR\x06events\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"_\n" +

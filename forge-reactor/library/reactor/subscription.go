@@ -10,8 +10,8 @@ import (
 const maxFilterValues = 64
 
 // Filter selects events. Each non-empty list must contain the event's value;
-// an empty list matches any value. An event without a connection or
-// repository never matches a non-empty list for that field.
+// an empty list matches any value. An event without a connection, repository
+// or source never matches a non-empty list for that field.
 type Filter struct {
 	// Types are event types.
 	Types []string `json:"types,omitempty"`
@@ -21,6 +21,8 @@ type Filter struct {
 	Repositories []string `json:"repositories,omitempty"`
 	// Origins are event origins.
 	Origins []Origin `json:"origins,omitempty"`
+	// Sources are webhook source or poll target IDs.
+	Sources []string `json:"sources,omitempty"`
 }
 
 // Subscription is a durable consumer of matching events. Each subscription
@@ -39,17 +41,23 @@ type Subscription struct {
 // Match reports whether f selects e.
 func (f Filter) Match(e Event) bool {
 	return (len(f.Types) == 0 || slices.Contains(f.Types, e.Type)) &&
-		(len(f.Connections) == 0 || (e.Connection != "" && slices.Contains(f.Connections, e.Connection))) &&
+		matchSet(f.Connections, e.Connection) &&
 		(len(f.Repositories) == 0 || (e.Repository != "" && slices.ContainsFunc(f.Repositories, func(r string) bool {
 			return strings.EqualFold(r, e.Repository)
 		}))) &&
-		(len(f.Origins) == 0 || slices.Contains(f.Origins, e.Origin))
+		(len(f.Origins) == 0 || slices.Contains(f.Origins, e.Origin)) &&
+		matchSet(f.Sources, e.Source)
+}
+
+// matchSet reports whether values is empty or holds a nonempty value.
+func matchSet(values []string, value string) bool {
+	return len(values) == 0 || (value != "" && slices.Contains(values, value))
 }
 
 // validate checks f's values.
 func (f Filter) validate() error {
 	if len(f.Types) > maxFilterValues || len(f.Connections) > maxFilterValues ||
-		len(f.Repositories) > maxFilterValues || len(f.Origins) > maxFilterValues {
+		len(f.Repositories) > maxFilterValues || len(f.Origins) > maxFilterValues || len(f.Sources) > maxFilterValues {
 		return ErrInvalid
 	}
 	for _, t := range f.Types {
@@ -57,7 +65,7 @@ func (f Filter) validate() error {
 			return ErrInvalid
 		}
 	}
-	for _, v := range slices.Concat(f.Connections, f.Repositories) {
+	for _, v := range slices.Concat(f.Connections, f.Repositories, f.Sources) {
 		if v == "" || !validText(v, 512) {
 			return ErrInvalid
 		}

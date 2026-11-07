@@ -124,7 +124,7 @@ for gRPC). Responses are not cached.
 | --------------------- | ---------------------------------------------- |
 | `PublishEvent`        | `POST /v1/events`                              |
 | `GetEvent`            | `GET /v1/events/{id}`                          |
-| `ListEvents`          | `GET /v1/events?types=…&origins=…&pageSize=…`  |
+| `ListEvents`          | `GET /v1/events?types=…&sources=…&pageSize=…`  |
 | `CreateSubscription`  | `POST /v1/subscriptions`                       |
 | `GetSubscription`     | `GET /v1/subscriptions/{id}`                   |
 | `ListSubscriptions`   | `GET /v1/subscriptions`                        |
@@ -142,8 +142,9 @@ Create a subscription, then consume `forge-reactor.<id>` from RabbitMQ:
 {"id":"deploy","description":"Deploys main","filter":{"types":["forge.branch.updated"],"repositories":["team/app"]}}
 ```
 
-Filter fields are `types`, `connections`, `repositories` and `origins`. An empty
-field matches everything; values within a field are alternatives. Every
+Filter fields are `types`, `connections`, `repositories`, `origins` and
+`sources`, the webhook source or poll target IDs. An empty field matches
+everything; values within a field are alternatives. Every
 subscription whose filter matches gets its own delivery.
 
 Publish an event from another tool. It has origin `published` and needs no

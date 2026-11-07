@@ -1,0 +1,64 @@
+{{define "title"}}Events{{end}}
+{{define "content"}}
+  <div class="heading">
+    <h1>Events</h1>
+    <a href="/events">Newest</a>
+  </div>
+
+  <p>Events forge-reactor received from webhooks, polls and other tools, newest first. They are kept for 7 days, up to the newest 1000.</p>
+
+  <form method="get" action="/events" class="filter">
+    <label>Source <input name="source" value="{{.Query.Source}}" placeholder="webhook source ID" autocomplete="off"></label>
+    <label>Type <input name="type" value="{{.Query.Type}}" placeholder="forge.branch.updated" list="event-types" autocomplete="off"></label>
+    <datalist id="event-types">
+      <option value="forge.branch.updated">
+      <option value="forge.pull_request.opened">
+    </datalist>
+    <label>Repository <input name="repository" value="{{.Query.Repository}}" placeholder="owner/name" autocomplete="off"></label>
+    <button>Filter</button>
+  </form>
+
+  {{if .Problem}}
+    <section role="alert">
+      <h2>Event listing failed</h2>
+      <p>{{.Problem}}</p>
+    </section>
+  {{else if not .Listing.Configured}}
+    <section>
+      <h2>No forge-reactor configured</h2>
+      <p>Set a reactor address and token in the management startup settings to see events.</p>
+    </section>
+  {{else if .Listing.Events}}
+    <div class="table">
+      <table>
+        <caption>{{len .Listing.Events}} events{{if .Query.PageToken}}, older page{{end}}</caption>
+        <thead>
+          <tr>
+            <th scope="col">Received</th>
+            <th scope="col">Type</th>
+            <th scope="col">Source</th>
+            <th scope="col">Repository</th>
+            <th scope="col">Subject</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Listing.Events}}
+            <tr>
+              <td><a href="/events/{{.Id}}">{{if .AcceptedAt}}{{.AcceptedAt.AsTime.Format "2006-01-02 15:04:05 MST"}}{{else}}{{.Id}}{{end}}</a></td>
+              <td>{{.Type}}<p class="id">{{.Origin}}</p></td>
+              <td>{{if .Source}}<a href="/events?source={{.Source}}">{{.Source}}</a>{{else}}—{{end}}</td>
+              <td>{{if .Repository}}{{.Repository}}{{else}}—{{end}}</td>
+              <td>{{if .Subject}}{{.Subject}}{{else}}—{{end}}</td>
+            </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{if .NextURL}}<p><a href="{{.NextURL}}">Older events</a></p>{{end}}
+  {{else}}
+    <section>
+      <h2>No events</h2>
+      <p>{{if or .Query.Source .Query.Type .Query.Repository}}No retained event matches these filters.{{else}}forge-reactor has not received any events yet, or they have expired.{{end}}</p>
+    </section>
+  {{end}}
+{{end}}

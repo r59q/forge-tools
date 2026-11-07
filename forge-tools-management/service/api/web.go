@@ -9,13 +9,14 @@ import (
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/r59q/forge-tools/forge-core/servicekit"
+	rpb "github.com/r59q/forge-tools/forge-reactor/service/reactorpb"
 	pb "github.com/r59q/forge-tools/forge-tools-management/service/managementpb"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
-//go:embed layout.html repositories.html issues.html connections.html pipelines.html webhooks.html style.css
+//go:embed layout.html repositories.html issues.html connections.html pipelines.html webhooks.html events.html event.html style.css
 var files embed.FS
 
 // views holds the parsed web pages.
@@ -25,6 +26,8 @@ type views struct {
 	connections  *template.Template
 	pipelines    *template.Template
 	webhooks     *template.Template
+	events       *template.Template
+	event        *template.Template
 }
 
 // parseViews parses the embedded pages. They never change, so a failure is a
@@ -37,14 +40,26 @@ func parseViews() views {
 		"phases":  func() []string { return []string{"queued", "running", "waiting", "finished", "unknown"} },
 		"results": func() []string { return []string{"success", "failure", "cancelled", "skipped", "neutral", "unknown"} },
 		"join":    func(values []string) string { return strings.Join(values, ", ") },
+		"lastError": func(attempts []*rpb.Attempt) string {
+			if len(attempts) == 0 {
+				return ""
+			}
+
+			return attempts[len(attempts)-1].GetError()
+		},
+	}
+	withHelpers := func(name string) *template.Template {
+		return template.Must(template.New(name).Funcs(helpers).ParseFS(files, "layout.html", name+".html"))
 	}
 
 	return views{
 		repositories: page("repositories"),
 		issues:       page("issues"),
 		connections:  page("connections"),
-		pipelines:    template.Must(template.New("pipelines").Funcs(helpers).ParseFS(files, "layout.html", "pipelines.html")),
-		webhooks:     template.Must(template.New("webhooks").Funcs(helpers).ParseFS(files, "layout.html", "webhooks.html")),
+		pipelines:    withHelpers("pipelines"),
+		webhooks:     withHelpers("webhooks"),
+		events:       withHelpers("events"),
+		event:        withHelpers("event"),
 	}
 }
 
@@ -129,6 +144,7 @@ func (s *Server) pages() http.Handler {
 		s.changed(w, r, err, "removed", nil)
 	})
 	s.webhookPages(mux)
+	s.eventPages(mux)
 
 	return mux
 }

@@ -78,6 +78,7 @@
             <th scope="col">Forge</th>
             <th scope="col">Repositories</th>
             <th scope="col">Setup</th>
+            <th scope="col">Last event</th>
             <th scope="col">Actions</th>
           </tr>
         </thead>
@@ -92,6 +93,10 @@
               <td>{{if .Repositories}}{{join .Repositories}}{{else}}Any{{end}}</td>
               <td>
                 {{if not .Managed}}Configuration file{{else if .Registered}}Registered on the forge{{else}}Added by hand{{end}}
+              </td>
+              <td>
+                {{$id := .Id}}
+                {{with index $.LastEvents $id}}<a href="/events?source={{$id}}">{{.}}</a>{{else}}None retained{{end}}
               </td>
               <td class="actions">
                 {{if .Managed}}

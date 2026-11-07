@@ -65,6 +65,14 @@ secret, and `RemoveWebhook` the repositories whose forge webhook remained.
 Errors are `ErrInvalid`, `ErrNotFound`, `ErrExists`, `ErrRegistration`,
 `ErrNotConfigured` or `ErrUnavailable`.
 
+## Events
+
+Set `Config.Events` to a `*reactor.Reactor` or an `EventReader` adapter.
+`ListEvents` returns one page of 50 events, newest first, for an
+`EventQuery` of source, type and repository. `LatestEvent` returns a
+source's newest event, and `GetEvent` one event with its deliveries. Every
+result is checked against the query.
+
 ## Pipelines
 
 Set `Config.Pipelines` to an `actions.Client` or `PipelineReader` adapter.

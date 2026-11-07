@@ -9,11 +9,18 @@ their queue and acknowledge to RabbitMQ.
 forge-reactor holds no business logic. It reports that something happened;
 deciding what to do about it is up to the consumers.
 
-- [library](library/): Go envelope, verification, polling, fan-out, replay and the RabbitMQ broker.
+- [library](library/): Go envelope, verification, polling, fan-out, replay, managed webhook sources and the RabbitMQ broker.
 - [service](service/): REST and gRPC from one protobuf definition, plus native webhook ingress.
 
 Forge credentials stay in [forge-connector](../forge-connector/); polling
-asks it for sessions. forge-reactor owns only the webhook secrets.
+and webhook registration ask it for sessions. forge-reactor owns only the
+webhook secrets.
+
+Webhook sources come from a configuration file or are managed through the
+API, such as from the
+[management UI](../forge-tools-management/). For managed sources,
+forge-reactor generates the secret and can create, update and delete the
+webhook on GitHub and Forgejo repositories.
 
 ## Events
 

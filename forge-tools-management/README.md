@@ -17,11 +17,15 @@ connection.
 
 - **Pipelines** browses repository executions, jobs, steps and logs through
   [forge-actions](../forge-actions/). The capability is optional.
+- **Webhooks** adds, rotates and removes webhook sources in
+  [forge-reactor](../forge-reactor/). The reactor generates each secret, shown
+  once, and can create the webhook on the forge. Sources from the reactor's
+  configuration file are listed read-only. The capability is optional.
 
 Projects:
 
-- [library](library/) holds connection management, repository and issue
-  listing, and service client registration.
+- [library](library/) holds connection and webhook management, repository
+  and issue listing, and service client registration.
 - [service](service/) provides the web interface, REST and gRPC. At startup
   it registers the proxy, repositories and issues service tokens in the
   connector, so every token comes from one configuration file.

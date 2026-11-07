@@ -204,9 +204,12 @@ func TestIntegrationOutageRecovery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d := next(t, deliveries); d.MessageId != first.ID {
-		t.Fatalf("before outage got %q", d.MessageId)
+	before := next(t, deliveries)
+	if before.MessageId != first.ID {
+		t.Fatalf("before outage got %q", before.MessageId)
 	}
+	// The consumer takes one unacked message at a time.
+	_ = before.Ack(false)
 
 	// During the outage the event is stored and its delivery retried.
 	p.cut()

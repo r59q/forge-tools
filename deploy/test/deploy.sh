@@ -57,7 +57,7 @@ upload() {
 }
 
 start() {
-  remote "./init-env.sh && docker compose pull --quiet &&
+  remote "./init-env.sh '$url' && docker compose pull --quiet &&
     docker compose up -d --remove-orphans --wait --wait-timeout 300"
 }
 

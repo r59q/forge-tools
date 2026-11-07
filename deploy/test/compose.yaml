@@ -68,6 +68,9 @@ services:
       FORGE_MANAGEMENT_ACTIONS_ADDRESS: actions:9090
       FORGE_MANAGEMENT_ACTIONS_INSECURE: "true"
       FORGE_MANAGEMENT_ACTIONS_TOKEN: ${FORGE_ACTIONS_TOKEN:?set in .env}
+      FORGE_MANAGEMENT_REACTOR_ADDRESS: reactor:9090
+      FORGE_MANAGEMENT_REACTOR_INSECURE: "true"
+      FORGE_MANAGEMENT_REACTOR_TOKEN: ${FORGE_REACTOR_TOKEN:?set in .env}
 
   repositories:
     image: ghcr.io/r59q/forge-repositories-service:${FORGE_IMAGE_TAG:-latest}
@@ -173,6 +176,9 @@ services:
       # Named by secretEnv in reactor.json.
       FORGE_REACTOR_GITHUB_WEBHOOK_SECRET: ${FORGE_REACTOR_GITHUB_WEBHOOK_SECRET:?set in .env}
       FORGE_REACTOR_FORGEJO_WEBHOOK_SECRET: ${FORGE_REACTOR_FORGEJO_WEBHOOK_SECRET:?set in .env}
+      # Where forges deliver webhooks that the reactor registers. init-env.sh
+      # sets it from deploy.sh's URL.
+      FORGE_REACTOR_PUBLIC_URL: ${FORGE_REACTOR_PUBLIC_URL:-}
     volumes:
       - reactor-data:/data
       - ./reactor.json:/config/reactor.json:ro

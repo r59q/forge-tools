@@ -13,6 +13,7 @@ import (
 
 	"github.com/r59q/forge-tools/forge-core/forgeapi/forgeauth"
 	"github.com/r59q/forge-tools/forge-reactor/library/reactor"
+	"github.com/r59q/forge-tools/forge-reactor/library/sources"
 	pb "github.com/r59q/forge-tools/forge-reactor/service/reactorpb"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -39,9 +40,31 @@ func newReactor(t *testing.T) *reactor.Reactor {
 	return r
 }
 
+// manager returns an empty managed source manager.
+func manager(t *testing.T) *sources.Manager {
+	t.Helper()
+	m, err := sources.New(&sources.Manager{Store: &sources.MemoryStore{}, PublicURL: "https://example.org/reactor"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return m
+}
+
+// noSources returns sources with nothing configured.
+func noSources(t *testing.T) *Sources {
+	t.Helper()
+	src, err := NewSources(context.Background(), nil, manager(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return src
+}
+
 func server(t *testing.T) *Server {
 	t.Helper()
-	s, err := New(newReactor(t), forgeauth.StaticToken(token), time.Second)
+	s, err := New(newReactor(t), noSources(t), forgeauth.StaticToken(token), time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,11 +77,12 @@ func authed() context.Context {
 }
 
 func TestNew(t *testing.T) {
-	r := newReactor(t)
+	r, src, tok := newReactor(t), noSources(t), forgeauth.StaticToken(token)
 	for name, err := range map[string]error{
-		"reactor": func() error { _, err := New(nil, forgeauth.StaticToken(token), time.Second); return err }(),
-		"token":   func() error { _, err := New(r, nil, time.Second); return err }(),
-		"timeout": func() error { _, err := New(r, forgeauth.StaticToken(token), 0); return err }(),
+		"reactor": func() error { _, err := New(nil, src, tok, time.Second); return err }(),
+		"sources": func() error { _, err := New(r, nil, tok, time.Second); return err }(),
+		"token":   func() error { _, err := New(r, src, nil, time.Second); return err }(),
+		"timeout": func() error { _, err := New(r, src, tok, 0); return err }(),
 	} {
 		if !errors.Is(err, ErrInvalid) {
 			t.Errorf("%s: %v", name, err)

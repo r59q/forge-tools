@@ -1575,6 +1575,541 @@ func (x *ReplayEventsResponse) GetDeliveries() []*Delivery {
 	return nil
 }
 
+// WebhookSource receives native webhooks at /webhooks/{id}.
+type WebhookSource struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// ID names the source.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Forge is github or forgejo.
+	Forge string `protobuf:"bytes,2,opt,name=forge,proto3" json:"forge,omitempty"`
+	// Connection is the forge-connector connection ID its events carry.
+	Connection string `protobuf:"bytes,3,opt,name=connection,proto3" json:"connection,omitempty"`
+	// Repositories, if set, are the only owner/name paths accepted.
+	Repositories []string `protobuf:"bytes,4,rep,name=repositories,proto3" json:"repositories,omitempty"`
+	// Managed is false for sources from the configuration file, which the
+	// API cannot change.
+	Managed bool `protobuf:"varint,5,opt,name=managed,proto3" json:"managed,omitempty"`
+	// Registered reports webhooks that forge-reactor created on the forge.
+	Registered bool `protobuf:"varint,6,opt,name=registered,proto3" json:"registered,omitempty"`
+	// URL is the payload URL, if forge-reactor has a public URL.
+	Url string `protobuf:"bytes,7,opt,name=url,proto3" json:"url,omitempty"`
+	// CreatedAt is when a managed source was created.
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WebhookSource) Reset() {
+	*x = WebhookSource{}
+	mi := &file_forge_reactor_v1_reactor_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WebhookSource) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WebhookSource) ProtoMessage() {}
+
+func (x *WebhookSource) ProtoReflect() protoreflect.Message {
+	mi := &file_forge_reactor_v1_reactor_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WebhookSource.ProtoReflect.Descriptor instead.
+func (*WebhookSource) Descriptor() ([]byte, []int) {
+	return file_forge_reactor_v1_reactor_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *WebhookSource) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *WebhookSource) GetForge() string {
+	if x != nil {
+		return x.Forge
+	}
+	return ""
+}
+
+func (x *WebhookSource) GetConnection() string {
+	if x != nil {
+		return x.Connection
+	}
+	return ""
+}
+
+func (x *WebhookSource) GetRepositories() []string {
+	if x != nil {
+		return x.Repositories
+	}
+	return nil
+}
+
+func (x *WebhookSource) GetManaged() bool {
+	if x != nil {
+		return x.Managed
+	}
+	return false
+}
+
+func (x *WebhookSource) GetRegistered() bool {
+	if x != nil {
+		return x.Registered
+	}
+	return false
+}
+
+func (x *WebhookSource) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *WebhookSource) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+// CreateWebhookSourceRequest describes a managed source.
+type CreateWebhookSourceRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// ID names the source; it must not be taken by a configured source.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Forge is github or forgejo.
+	Forge string `protobuf:"bytes,2,opt,name=forge,proto3" json:"forge,omitempty"`
+	// Connection is the forge-connector connection ID.
+	Connection string `protobuf:"bytes,3,opt,name=connection,proto3" json:"connection,omitempty"`
+	// Repositories are owner/name paths, at most 100.
+	Repositories []string `protobuf:"bytes,4,rep,name=repositories,proto3" json:"repositories,omitempty"`
+	// Register creates the webhook on every repository. It needs a
+	// connection, repositories, a public URL and a connector.
+	Register      bool `protobuf:"varint,5,opt,name=register,proto3" json:"register,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateWebhookSourceRequest) Reset() {
+	*x = CreateWebhookSourceRequest{}
+	mi := &file_forge_reactor_v1_reactor_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateWebhookSourceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateWebhookSourceRequest) ProtoMessage() {}
+
+func (x *CreateWebhookSourceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_forge_reactor_v1_reactor_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateWebhookSourceRequest.ProtoReflect.Descriptor instead.
+func (*CreateWebhookSourceRequest) Descriptor() ([]byte, []int) {
+	return file_forge_reactor_v1_reactor_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *CreateWebhookSourceRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *CreateWebhookSourceRequest) GetForge() string {
+	if x != nil {
+		return x.Forge
+	}
+	return ""
+}
+
+func (x *CreateWebhookSourceRequest) GetConnection() string {
+	if x != nil {
+		return x.Connection
+	}
+	return ""
+}
+
+func (x *CreateWebhookSourceRequest) GetRepositories() []string {
+	if x != nil {
+		return x.Repositories
+	}
+	return nil
+}
+
+func (x *CreateWebhookSourceRequest) GetRegister() bool {
+	if x != nil {
+		return x.Register
+	}
+	return false
+}
+
+// CreateWebhookSourceResponse returns the source and its secret.
+type CreateWebhookSourceResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Source is the stored source.
+	Source *WebhookSource `protobuf:"bytes,1,opt,name=source,proto3" json:"source,omitempty"`
+	// Secret is the webhook secret. It is not shown again.
+	Secret        string `protobuf:"bytes,2,opt,name=secret,proto3" json:"secret,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateWebhookSourceResponse) Reset() {
+	*x = CreateWebhookSourceResponse{}
+	mi := &file_forge_reactor_v1_reactor_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateWebhookSourceResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateWebhookSourceResponse) ProtoMessage() {}
+
+func (x *CreateWebhookSourceResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_forge_reactor_v1_reactor_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateWebhookSourceResponse.ProtoReflect.Descriptor instead.
+func (*CreateWebhookSourceResponse) Descriptor() ([]byte, []int) {
+	return file_forge_reactor_v1_reactor_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *CreateWebhookSourceResponse) GetSource() *WebhookSource {
+	if x != nil {
+		return x.Source
+	}
+	return nil
+}
+
+func (x *CreateWebhookSourceResponse) GetSecret() string {
+	if x != nil {
+		return x.Secret
+	}
+	return ""
+}
+
+// ListWebhookSourcesRequest lists every source.
+type ListWebhookSourcesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListWebhookSourcesRequest) Reset() {
+	*x = ListWebhookSourcesRequest{}
+	mi := &file_forge_reactor_v1_reactor_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListWebhookSourcesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListWebhookSourcesRequest) ProtoMessage() {}
+
+func (x *ListWebhookSourcesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_forge_reactor_v1_reactor_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListWebhookSourcesRequest.ProtoReflect.Descriptor instead.
+func (*ListWebhookSourcesRequest) Descriptor() ([]byte, []int) {
+	return file_forge_reactor_v1_reactor_proto_rawDescGZIP(), []int{27}
+}
+
+// ListWebhookSourcesResponse holds every source.
+type ListWebhookSourcesResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Sources are configured sources, then managed ones, each sorted by ID.
+	Sources       []*WebhookSource `protobuf:"bytes,1,rep,name=sources,proto3" json:"sources,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListWebhookSourcesResponse) Reset() {
+	*x = ListWebhookSourcesResponse{}
+	mi := &file_forge_reactor_v1_reactor_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListWebhookSourcesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListWebhookSourcesResponse) ProtoMessage() {}
+
+func (x *ListWebhookSourcesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_forge_reactor_v1_reactor_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListWebhookSourcesResponse.ProtoReflect.Descriptor instead.
+func (*ListWebhookSourcesResponse) Descriptor() ([]byte, []int) {
+	return file_forge_reactor_v1_reactor_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *ListWebhookSourcesResponse) GetSources() []*WebhookSource {
+	if x != nil {
+		return x.Sources
+	}
+	return nil
+}
+
+// RotateWebhookSecretRequest names a managed source.
+type RotateWebhookSecretRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// ID is the source ID.
+	Id            string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RotateWebhookSecretRequest) Reset() {
+	*x = RotateWebhookSecretRequest{}
+	mi := &file_forge_reactor_v1_reactor_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RotateWebhookSecretRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RotateWebhookSecretRequest) ProtoMessage() {}
+
+func (x *RotateWebhookSecretRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_forge_reactor_v1_reactor_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RotateWebhookSecretRequest.ProtoReflect.Descriptor instead.
+func (*RotateWebhookSecretRequest) Descriptor() ([]byte, []int) {
+	return file_forge_reactor_v1_reactor_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *RotateWebhookSecretRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+// RotateWebhookSecretResponse returns the new secret.
+type RotateWebhookSecretResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Source is the source.
+	Source *WebhookSource `protobuf:"bytes,1,opt,name=source,proto3" json:"source,omitempty"`
+	// Secret is the new webhook secret. It is not shown again.
+	Secret string `protobuf:"bytes,2,opt,name=secret,proto3" json:"secret,omitempty"`
+	// FailedRepositories still have the old secret on the forge. Rotate
+	// again, or update them by hand.
+	FailedRepositories []string `protobuf:"bytes,3,rep,name=failed_repositories,json=failedRepositories,proto3" json:"failed_repositories,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *RotateWebhookSecretResponse) Reset() {
+	*x = RotateWebhookSecretResponse{}
+	mi := &file_forge_reactor_v1_reactor_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RotateWebhookSecretResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RotateWebhookSecretResponse) ProtoMessage() {}
+
+func (x *RotateWebhookSecretResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_forge_reactor_v1_reactor_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RotateWebhookSecretResponse.ProtoReflect.Descriptor instead.
+func (*RotateWebhookSecretResponse) Descriptor() ([]byte, []int) {
+	return file_forge_reactor_v1_reactor_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *RotateWebhookSecretResponse) GetSource() *WebhookSource {
+	if x != nil {
+		return x.Source
+	}
+	return nil
+}
+
+func (x *RotateWebhookSecretResponse) GetSecret() string {
+	if x != nil {
+		return x.Secret
+	}
+	return ""
+}
+
+func (x *RotateWebhookSecretResponse) GetFailedRepositories() []string {
+	if x != nil {
+		return x.FailedRepositories
+	}
+	return nil
+}
+
+// DeleteWebhookSourceRequest names a managed source.
+type DeleteWebhookSourceRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// ID is the source ID.
+	Id            string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteWebhookSourceRequest) Reset() {
+	*x = DeleteWebhookSourceRequest{}
+	mi := &file_forge_reactor_v1_reactor_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteWebhookSourceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteWebhookSourceRequest) ProtoMessage() {}
+
+func (x *DeleteWebhookSourceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_forge_reactor_v1_reactor_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteWebhookSourceRequest.ProtoReflect.Descriptor instead.
+func (*DeleteWebhookSourceRequest) Descriptor() ([]byte, []int) {
+	return file_forge_reactor_v1_reactor_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *DeleteWebhookSourceRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+// DeleteWebhookSourceResponse lists webhooks left behind.
+type DeleteWebhookSourceResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// FailedRepositories still have the webhook on the forge. Remove it by
+	// hand; its deliveries now fail with not found.
+	FailedRepositories []string `protobuf:"bytes,1,rep,name=failed_repositories,json=failedRepositories,proto3" json:"failed_repositories,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *DeleteWebhookSourceResponse) Reset() {
+	*x = DeleteWebhookSourceResponse{}
+	mi := &file_forge_reactor_v1_reactor_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteWebhookSourceResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteWebhookSourceResponse) ProtoMessage() {}
+
+func (x *DeleteWebhookSourceResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_forge_reactor_v1_reactor_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteWebhookSourceResponse.ProtoReflect.Descriptor instead.
+func (*DeleteWebhookSourceResponse) Descriptor() ([]byte, []int) {
+	return file_forge_reactor_v1_reactor_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *DeleteWebhookSourceResponse) GetFailedRepositories() []string {
+	if x != nil {
+		return x.FailedRepositories
+	}
+	return nil
+}
+
 var File_forge_reactor_v1_reactor_proto protoreflect.FileDescriptor
 
 const file_forge_reactor_v1_reactor_proto_rawDesc = "" +
@@ -1699,7 +2234,45 @@ const file_forge_reactor_v1_reactor_proto_rawDesc = "" +
 	"\x14ReplayEventsResponse\x12:\n" +
 	"\n" +
 	"deliveries\x18\x01 \x03(\v2\x1a.forge.reactor.v1.DeliveryR\n" +
-	"deliveries2\xcc\t\n" +
+	"deliveries\"\x80\x02\n" +
+	"\rWebhookSource\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
+	"\x05forge\x18\x02 \x01(\tR\x05forge\x12\x1e\n" +
+	"\n" +
+	"connection\x18\x03 \x01(\tR\n" +
+	"connection\x12\"\n" +
+	"\frepositories\x18\x04 \x03(\tR\frepositories\x12\x18\n" +
+	"\amanaged\x18\x05 \x01(\bR\amanaged\x12\x1e\n" +
+	"\n" +
+	"registered\x18\x06 \x01(\bR\n" +
+	"registered\x12\x10\n" +
+	"\x03url\x18\a \x01(\tR\x03url\x129\n" +
+	"\n" +
+	"created_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"\xa2\x01\n" +
+	"\x1aCreateWebhookSourceRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
+	"\x05forge\x18\x02 \x01(\tR\x05forge\x12\x1e\n" +
+	"\n" +
+	"connection\x18\x03 \x01(\tR\n" +
+	"connection\x12\"\n" +
+	"\frepositories\x18\x04 \x03(\tR\frepositories\x12\x1a\n" +
+	"\bregister\x18\x05 \x01(\bR\bregister\"n\n" +
+	"\x1bCreateWebhookSourceResponse\x127\n" +
+	"\x06source\x18\x01 \x01(\v2\x1f.forge.reactor.v1.WebhookSourceR\x06source\x12\x16\n" +
+	"\x06secret\x18\x02 \x01(\tR\x06secret\"\x1b\n" +
+	"\x19ListWebhookSourcesRequest\"W\n" +
+	"\x1aListWebhookSourcesResponse\x129\n" +
+	"\asources\x18\x01 \x03(\v2\x1f.forge.reactor.v1.WebhookSourceR\asources\",\n" +
+	"\x1aRotateWebhookSecretRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"\x9f\x01\n" +
+	"\x1bRotateWebhookSecretResponse\x127\n" +
+	"\x06source\x18\x01 \x01(\v2\x1f.forge.reactor.v1.WebhookSourceR\x06source\x12\x16\n" +
+	"\x06secret\x18\x02 \x01(\tR\x06secret\x12/\n" +
+	"\x13failed_repositories\x18\x03 \x03(\tR\x12failedRepositories\",\n" +
+	"\x1aDeleteWebhookSourceRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"N\n" +
+	"\x1bDeleteWebhookSourceResponse\x12/\n" +
+	"\x13failed_repositories\x18\x01 \x03(\tR\x12failedRepositories2\xa8\x0e\n" +
 	"\x0eReactorService\x12t\n" +
 	"\fPublishEvent\x12%.forge.reactor.v1.PublishEventRequest\x1a&.forge.reactor.v1.PublishEventResponse\"\x15\x82\xd3\xe4\x93\x02\x0f:\x01*\"\n" +
 	"/v1/events\x12j\n" +
@@ -1712,7 +2285,11 @@ const file_forge_reactor_v1_reactor_proto_rawDesc = "" +
 	"\x11ListSubscriptions\x12*.forge.reactor.v1.ListSubscriptionsRequest\x1a+.forge.reactor.v1.ListSubscriptionsResponse\"\x19\x82\xd3\xe4\x93\x02\x13\x12\x11/v1/subscriptions\x12\x8f\x01\n" +
 	"\x12DeleteSubscription\x12+.forge.reactor.v1.DeleteSubscriptionRequest\x1a,.forge.reactor.v1.DeleteSubscriptionResponse\"\x1e\x82\xd3\xe4\x93\x02\x18*\x16/v1/subscriptions/{id}\x12{\n" +
 	"\x0eListDeliveries\x12'.forge.reactor.v1.ListDeliveriesRequest\x1a(.forge.reactor.v1.ListDeliveriesResponse\"\x16\x82\xd3\xe4\x93\x02\x10\x12\x0e/v1/deliveries\x12\x91\x01\n" +
-	"\fReplayEvents\x12%.forge.reactor.v1.ReplayEventsRequest\x1a&.forge.reactor.v1.ReplayEventsResponse\"2\x82\xd3\xe4\x93\x02,:\x01*\"'/v1/subscriptions/{subscription}:replayB=Z;github.com/r59q/forge-tools/forge-reactor/service/reactorpbb\x06proto3"
+	"\fReplayEvents\x12%.forge.reactor.v1.ReplayEventsRequest\x1a&.forge.reactor.v1.ReplayEventsResponse\"2\x82\xd3\xe4\x93\x02,:\x01*\"'/v1/subscriptions/{subscription}:replay\x12\x92\x01\n" +
+	"\x13CreateWebhookSource\x12,.forge.reactor.v1.CreateWebhookSourceRequest\x1a-.forge.reactor.v1.CreateWebhookSourceResponse\"\x1e\x82\xd3\xe4\x93\x02\x18:\x01*\"\x13/v1/webhook-sources\x12\x8c\x01\n" +
+	"\x12ListWebhookSources\x12+.forge.reactor.v1.ListWebhookSourcesRequest\x1a,.forge.reactor.v1.ListWebhookSourcesResponse\"\x1b\x82\xd3\xe4\x93\x02\x15\x12\x13/v1/webhook-sources\x12\x9e\x01\n" +
+	"\x13RotateWebhookSecret\x12,.forge.reactor.v1.RotateWebhookSecretRequest\x1a-.forge.reactor.v1.RotateWebhookSecretResponse\"*\x82\xd3\xe4\x93\x02$:\x01*\"\x1f/v1/webhook-sources/{id}:rotate\x12\x94\x01\n" +
+	"\x13DeleteWebhookSource\x12,.forge.reactor.v1.DeleteWebhookSourceRequest\x1a-.forge.reactor.v1.DeleteWebhookSourceResponse\" \x82\xd3\xe4\x93\x02\x1a*\x18/v1/webhook-sources/{id}B=Z;github.com/r59q/forge-tools/forge-reactor/service/reactorpbb\x06proto3"
 
 var (
 	file_forge_reactor_v1_reactor_proto_rawDescOnce sync.Once
@@ -1726,50 +2303,59 @@ func file_forge_reactor_v1_reactor_proto_rawDescGZIP() []byte {
 	return file_forge_reactor_v1_reactor_proto_rawDescData
 }
 
-var file_forge_reactor_v1_reactor_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
+var file_forge_reactor_v1_reactor_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
 var file_forge_reactor_v1_reactor_proto_goTypes = []any{
-	(*Event)(nil),                      // 0: forge.reactor.v1.Event
-	(*Native)(nil),                     // 1: forge.reactor.v1.Native
-	(*Filter)(nil),                     // 2: forge.reactor.v1.Filter
-	(*Subscription)(nil),               // 3: forge.reactor.v1.Subscription
-	(*Attempt)(nil),                    // 4: forge.reactor.v1.Attempt
-	(*Delivery)(nil),                   // 5: forge.reactor.v1.Delivery
-	(*PublishEventRequest)(nil),        // 6: forge.reactor.v1.PublishEventRequest
-	(*PublishEventResponse)(nil),       // 7: forge.reactor.v1.PublishEventResponse
-	(*GetEventRequest)(nil),            // 8: forge.reactor.v1.GetEventRequest
-	(*GetEventResponse)(nil),           // 9: forge.reactor.v1.GetEventResponse
-	(*ListEventsRequest)(nil),          // 10: forge.reactor.v1.ListEventsRequest
-	(*ListEventsResponse)(nil),         // 11: forge.reactor.v1.ListEventsResponse
-	(*CreateSubscriptionRequest)(nil),  // 12: forge.reactor.v1.CreateSubscriptionRequest
-	(*CreateSubscriptionResponse)(nil), // 13: forge.reactor.v1.CreateSubscriptionResponse
-	(*GetSubscriptionRequest)(nil),     // 14: forge.reactor.v1.GetSubscriptionRequest
-	(*GetSubscriptionResponse)(nil),    // 15: forge.reactor.v1.GetSubscriptionResponse
-	(*ListSubscriptionsRequest)(nil),   // 16: forge.reactor.v1.ListSubscriptionsRequest
-	(*ListSubscriptionsResponse)(nil),  // 17: forge.reactor.v1.ListSubscriptionsResponse
-	(*DeleteSubscriptionRequest)(nil),  // 18: forge.reactor.v1.DeleteSubscriptionRequest
-	(*DeleteSubscriptionResponse)(nil), // 19: forge.reactor.v1.DeleteSubscriptionResponse
-	(*ListDeliveriesRequest)(nil),      // 20: forge.reactor.v1.ListDeliveriesRequest
-	(*ListDeliveriesResponse)(nil),     // 21: forge.reactor.v1.ListDeliveriesResponse
-	(*ReplayEventsRequest)(nil),        // 22: forge.reactor.v1.ReplayEventsRequest
-	(*ReplayEventsResponse)(nil),       // 23: forge.reactor.v1.ReplayEventsResponse
-	(*timestamppb.Timestamp)(nil),      // 24: google.protobuf.Timestamp
-	(*structpb.Struct)(nil),            // 25: google.protobuf.Struct
+	(*Event)(nil),                       // 0: forge.reactor.v1.Event
+	(*Native)(nil),                      // 1: forge.reactor.v1.Native
+	(*Filter)(nil),                      // 2: forge.reactor.v1.Filter
+	(*Subscription)(nil),                // 3: forge.reactor.v1.Subscription
+	(*Attempt)(nil),                     // 4: forge.reactor.v1.Attempt
+	(*Delivery)(nil),                    // 5: forge.reactor.v1.Delivery
+	(*PublishEventRequest)(nil),         // 6: forge.reactor.v1.PublishEventRequest
+	(*PublishEventResponse)(nil),        // 7: forge.reactor.v1.PublishEventResponse
+	(*GetEventRequest)(nil),             // 8: forge.reactor.v1.GetEventRequest
+	(*GetEventResponse)(nil),            // 9: forge.reactor.v1.GetEventResponse
+	(*ListEventsRequest)(nil),           // 10: forge.reactor.v1.ListEventsRequest
+	(*ListEventsResponse)(nil),          // 11: forge.reactor.v1.ListEventsResponse
+	(*CreateSubscriptionRequest)(nil),   // 12: forge.reactor.v1.CreateSubscriptionRequest
+	(*CreateSubscriptionResponse)(nil),  // 13: forge.reactor.v1.CreateSubscriptionResponse
+	(*GetSubscriptionRequest)(nil),      // 14: forge.reactor.v1.GetSubscriptionRequest
+	(*GetSubscriptionResponse)(nil),     // 15: forge.reactor.v1.GetSubscriptionResponse
+	(*ListSubscriptionsRequest)(nil),    // 16: forge.reactor.v1.ListSubscriptionsRequest
+	(*ListSubscriptionsResponse)(nil),   // 17: forge.reactor.v1.ListSubscriptionsResponse
+	(*DeleteSubscriptionRequest)(nil),   // 18: forge.reactor.v1.DeleteSubscriptionRequest
+	(*DeleteSubscriptionResponse)(nil),  // 19: forge.reactor.v1.DeleteSubscriptionResponse
+	(*ListDeliveriesRequest)(nil),       // 20: forge.reactor.v1.ListDeliveriesRequest
+	(*ListDeliveriesResponse)(nil),      // 21: forge.reactor.v1.ListDeliveriesResponse
+	(*ReplayEventsRequest)(nil),         // 22: forge.reactor.v1.ReplayEventsRequest
+	(*ReplayEventsResponse)(nil),        // 23: forge.reactor.v1.ReplayEventsResponse
+	(*WebhookSource)(nil),               // 24: forge.reactor.v1.WebhookSource
+	(*CreateWebhookSourceRequest)(nil),  // 25: forge.reactor.v1.CreateWebhookSourceRequest
+	(*CreateWebhookSourceResponse)(nil), // 26: forge.reactor.v1.CreateWebhookSourceResponse
+	(*ListWebhookSourcesRequest)(nil),   // 27: forge.reactor.v1.ListWebhookSourcesRequest
+	(*ListWebhookSourcesResponse)(nil),  // 28: forge.reactor.v1.ListWebhookSourcesResponse
+	(*RotateWebhookSecretRequest)(nil),  // 29: forge.reactor.v1.RotateWebhookSecretRequest
+	(*RotateWebhookSecretResponse)(nil), // 30: forge.reactor.v1.RotateWebhookSecretResponse
+	(*DeleteWebhookSourceRequest)(nil),  // 31: forge.reactor.v1.DeleteWebhookSourceRequest
+	(*DeleteWebhookSourceResponse)(nil), // 32: forge.reactor.v1.DeleteWebhookSourceResponse
+	(*timestamppb.Timestamp)(nil),       // 33: google.protobuf.Timestamp
+	(*structpb.Struct)(nil),             // 34: google.protobuf.Struct
 }
 var file_forge_reactor_v1_reactor_proto_depIdxs = []int32{
-	24, // 0: forge.reactor.v1.Event.occurred_at:type_name -> google.protobuf.Timestamp
-	24, // 1: forge.reactor.v1.Event.accepted_at:type_name -> google.protobuf.Timestamp
-	25, // 2: forge.reactor.v1.Event.data:type_name -> google.protobuf.Struct
+	33, // 0: forge.reactor.v1.Event.occurred_at:type_name -> google.protobuf.Timestamp
+	33, // 1: forge.reactor.v1.Event.accepted_at:type_name -> google.protobuf.Timestamp
+	34, // 2: forge.reactor.v1.Event.data:type_name -> google.protobuf.Struct
 	1,  // 3: forge.reactor.v1.Event.native:type_name -> forge.reactor.v1.Native
-	25, // 4: forge.reactor.v1.Native.payload:type_name -> google.protobuf.Struct
+	34, // 4: forge.reactor.v1.Native.payload:type_name -> google.protobuf.Struct
 	2,  // 5: forge.reactor.v1.Subscription.filter:type_name -> forge.reactor.v1.Filter
-	24, // 6: forge.reactor.v1.Subscription.created_at:type_name -> google.protobuf.Timestamp
-	24, // 7: forge.reactor.v1.Attempt.at:type_name -> google.protobuf.Timestamp
+	33, // 6: forge.reactor.v1.Subscription.created_at:type_name -> google.protobuf.Timestamp
+	33, // 7: forge.reactor.v1.Attempt.at:type_name -> google.protobuf.Timestamp
 	4,  // 8: forge.reactor.v1.Delivery.attempts:type_name -> forge.reactor.v1.Attempt
-	24, // 9: forge.reactor.v1.Delivery.created_at:type_name -> google.protobuf.Timestamp
-	24, // 10: forge.reactor.v1.Delivery.next_attempt_at:type_name -> google.protobuf.Timestamp
-	24, // 11: forge.reactor.v1.Delivery.accepted_at:type_name -> google.protobuf.Timestamp
-	24, // 12: forge.reactor.v1.PublishEventRequest.occurred_at:type_name -> google.protobuf.Timestamp
-	25, // 13: forge.reactor.v1.PublishEventRequest.data:type_name -> google.protobuf.Struct
+	33, // 9: forge.reactor.v1.Delivery.created_at:type_name -> google.protobuf.Timestamp
+	33, // 10: forge.reactor.v1.Delivery.next_attempt_at:type_name -> google.protobuf.Timestamp
+	33, // 11: forge.reactor.v1.Delivery.accepted_at:type_name -> google.protobuf.Timestamp
+	33, // 12: forge.reactor.v1.PublishEventRequest.occurred_at:type_name -> google.protobuf.Timestamp
+	34, // 13: forge.reactor.v1.PublishEventRequest.data:type_name -> google.protobuf.Struct
 	0,  // 14: forge.reactor.v1.PublishEventResponse.event:type_name -> forge.reactor.v1.Event
 	0,  // 15: forge.reactor.v1.GetEventResponse.event:type_name -> forge.reactor.v1.Event
 	5,  // 16: forge.reactor.v1.GetEventResponse.deliveries:type_name -> forge.reactor.v1.Delivery
@@ -1779,32 +2365,44 @@ var file_forge_reactor_v1_reactor_proto_depIdxs = []int32{
 	3,  // 20: forge.reactor.v1.GetSubscriptionResponse.subscription:type_name -> forge.reactor.v1.Subscription
 	3,  // 21: forge.reactor.v1.ListSubscriptionsResponse.subscriptions:type_name -> forge.reactor.v1.Subscription
 	5,  // 22: forge.reactor.v1.ListDeliveriesResponse.deliveries:type_name -> forge.reactor.v1.Delivery
-	24, // 23: forge.reactor.v1.ReplayEventsRequest.since:type_name -> google.protobuf.Timestamp
-	24, // 24: forge.reactor.v1.ReplayEventsRequest.until:type_name -> google.protobuf.Timestamp
+	33, // 23: forge.reactor.v1.ReplayEventsRequest.since:type_name -> google.protobuf.Timestamp
+	33, // 24: forge.reactor.v1.ReplayEventsRequest.until:type_name -> google.protobuf.Timestamp
 	5,  // 25: forge.reactor.v1.ReplayEventsResponse.deliveries:type_name -> forge.reactor.v1.Delivery
-	6,  // 26: forge.reactor.v1.ReactorService.PublishEvent:input_type -> forge.reactor.v1.PublishEventRequest
-	8,  // 27: forge.reactor.v1.ReactorService.GetEvent:input_type -> forge.reactor.v1.GetEventRequest
-	10, // 28: forge.reactor.v1.ReactorService.ListEvents:input_type -> forge.reactor.v1.ListEventsRequest
-	12, // 29: forge.reactor.v1.ReactorService.CreateSubscription:input_type -> forge.reactor.v1.CreateSubscriptionRequest
-	14, // 30: forge.reactor.v1.ReactorService.GetSubscription:input_type -> forge.reactor.v1.GetSubscriptionRequest
-	16, // 31: forge.reactor.v1.ReactorService.ListSubscriptions:input_type -> forge.reactor.v1.ListSubscriptionsRequest
-	18, // 32: forge.reactor.v1.ReactorService.DeleteSubscription:input_type -> forge.reactor.v1.DeleteSubscriptionRequest
-	20, // 33: forge.reactor.v1.ReactorService.ListDeliveries:input_type -> forge.reactor.v1.ListDeliveriesRequest
-	22, // 34: forge.reactor.v1.ReactorService.ReplayEvents:input_type -> forge.reactor.v1.ReplayEventsRequest
-	7,  // 35: forge.reactor.v1.ReactorService.PublishEvent:output_type -> forge.reactor.v1.PublishEventResponse
-	9,  // 36: forge.reactor.v1.ReactorService.GetEvent:output_type -> forge.reactor.v1.GetEventResponse
-	11, // 37: forge.reactor.v1.ReactorService.ListEvents:output_type -> forge.reactor.v1.ListEventsResponse
-	13, // 38: forge.reactor.v1.ReactorService.CreateSubscription:output_type -> forge.reactor.v1.CreateSubscriptionResponse
-	15, // 39: forge.reactor.v1.ReactorService.GetSubscription:output_type -> forge.reactor.v1.GetSubscriptionResponse
-	17, // 40: forge.reactor.v1.ReactorService.ListSubscriptions:output_type -> forge.reactor.v1.ListSubscriptionsResponse
-	19, // 41: forge.reactor.v1.ReactorService.DeleteSubscription:output_type -> forge.reactor.v1.DeleteSubscriptionResponse
-	21, // 42: forge.reactor.v1.ReactorService.ListDeliveries:output_type -> forge.reactor.v1.ListDeliveriesResponse
-	23, // 43: forge.reactor.v1.ReactorService.ReplayEvents:output_type -> forge.reactor.v1.ReplayEventsResponse
-	35, // [35:44] is the sub-list for method output_type
-	26, // [26:35] is the sub-list for method input_type
-	26, // [26:26] is the sub-list for extension type_name
-	26, // [26:26] is the sub-list for extension extendee
-	0,  // [0:26] is the sub-list for field type_name
+	33, // 26: forge.reactor.v1.WebhookSource.created_at:type_name -> google.protobuf.Timestamp
+	24, // 27: forge.reactor.v1.CreateWebhookSourceResponse.source:type_name -> forge.reactor.v1.WebhookSource
+	24, // 28: forge.reactor.v1.ListWebhookSourcesResponse.sources:type_name -> forge.reactor.v1.WebhookSource
+	24, // 29: forge.reactor.v1.RotateWebhookSecretResponse.source:type_name -> forge.reactor.v1.WebhookSource
+	6,  // 30: forge.reactor.v1.ReactorService.PublishEvent:input_type -> forge.reactor.v1.PublishEventRequest
+	8,  // 31: forge.reactor.v1.ReactorService.GetEvent:input_type -> forge.reactor.v1.GetEventRequest
+	10, // 32: forge.reactor.v1.ReactorService.ListEvents:input_type -> forge.reactor.v1.ListEventsRequest
+	12, // 33: forge.reactor.v1.ReactorService.CreateSubscription:input_type -> forge.reactor.v1.CreateSubscriptionRequest
+	14, // 34: forge.reactor.v1.ReactorService.GetSubscription:input_type -> forge.reactor.v1.GetSubscriptionRequest
+	16, // 35: forge.reactor.v1.ReactorService.ListSubscriptions:input_type -> forge.reactor.v1.ListSubscriptionsRequest
+	18, // 36: forge.reactor.v1.ReactorService.DeleteSubscription:input_type -> forge.reactor.v1.DeleteSubscriptionRequest
+	20, // 37: forge.reactor.v1.ReactorService.ListDeliveries:input_type -> forge.reactor.v1.ListDeliveriesRequest
+	22, // 38: forge.reactor.v1.ReactorService.ReplayEvents:input_type -> forge.reactor.v1.ReplayEventsRequest
+	25, // 39: forge.reactor.v1.ReactorService.CreateWebhookSource:input_type -> forge.reactor.v1.CreateWebhookSourceRequest
+	27, // 40: forge.reactor.v1.ReactorService.ListWebhookSources:input_type -> forge.reactor.v1.ListWebhookSourcesRequest
+	29, // 41: forge.reactor.v1.ReactorService.RotateWebhookSecret:input_type -> forge.reactor.v1.RotateWebhookSecretRequest
+	31, // 42: forge.reactor.v1.ReactorService.DeleteWebhookSource:input_type -> forge.reactor.v1.DeleteWebhookSourceRequest
+	7,  // 43: forge.reactor.v1.ReactorService.PublishEvent:output_type -> forge.reactor.v1.PublishEventResponse
+	9,  // 44: forge.reactor.v1.ReactorService.GetEvent:output_type -> forge.reactor.v1.GetEventResponse
+	11, // 45: forge.reactor.v1.ReactorService.ListEvents:output_type -> forge.reactor.v1.ListEventsResponse
+	13, // 46: forge.reactor.v1.ReactorService.CreateSubscription:output_type -> forge.reactor.v1.CreateSubscriptionResponse
+	15, // 47: forge.reactor.v1.ReactorService.GetSubscription:output_type -> forge.reactor.v1.GetSubscriptionResponse
+	17, // 48: forge.reactor.v1.ReactorService.ListSubscriptions:output_type -> forge.reactor.v1.ListSubscriptionsResponse
+	19, // 49: forge.reactor.v1.ReactorService.DeleteSubscription:output_type -> forge.reactor.v1.DeleteSubscriptionResponse
+	21, // 50: forge.reactor.v1.ReactorService.ListDeliveries:output_type -> forge.reactor.v1.ListDeliveriesResponse
+	23, // 51: forge.reactor.v1.ReactorService.ReplayEvents:output_type -> forge.reactor.v1.ReplayEventsResponse
+	26, // 52: forge.reactor.v1.ReactorService.CreateWebhookSource:output_type -> forge.reactor.v1.CreateWebhookSourceResponse
+	28, // 53: forge.reactor.v1.ReactorService.ListWebhookSources:output_type -> forge.reactor.v1.ListWebhookSourcesResponse
+	30, // 54: forge.reactor.v1.ReactorService.RotateWebhookSecret:output_type -> forge.reactor.v1.RotateWebhookSecretResponse
+	32, // 55: forge.reactor.v1.ReactorService.DeleteWebhookSource:output_type -> forge.reactor.v1.DeleteWebhookSourceResponse
+	43, // [43:56] is the sub-list for method output_type
+	30, // [30:43] is the sub-list for method input_type
+	30, // [30:30] is the sub-list for extension type_name
+	30, // [30:30] is the sub-list for extension extendee
+	0,  // [0:30] is the sub-list for field type_name
 }
 
 func init() { file_forge_reactor_v1_reactor_proto_init() }
@@ -1818,7 +2416,7 @@ func file_forge_reactor_v1_reactor_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_forge_reactor_v1_reactor_proto_rawDesc), len(file_forge_reactor_v1_reactor_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   24,
+			NumMessages:   33,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

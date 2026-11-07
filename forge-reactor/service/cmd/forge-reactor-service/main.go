@@ -20,6 +20,7 @@ import (
 	"github.com/r59q/forge-tools/forge-reactor/library/poll"
 	"github.com/r59q/forge-tools/forge-reactor/library/rabbitmq"
 	"github.com/r59q/forge-tools/forge-reactor/library/reactor"
+	"github.com/r59q/forge-tools/forge-reactor/library/sources"
 	"github.com/r59q/forge-tools/forge-reactor/service/api"
 	"github.com/r59q/forge-tools/forge-reactor/service/config"
 	pb "github.com/r59q/forge-tools/forge-reactor/service/reactorpb"
@@ -35,6 +36,7 @@ type settings struct {
 	rabbitFile    string
 	rabbitEnv     string
 	queuePrefix   string
+	publicURL     string
 }
 
 func parse(args []string, getenv func(string) string, help io.Writer) (settings, error) {
@@ -46,6 +48,7 @@ func parse(args []string, getenv func(string) string, help io.Writer) (settings,
 		fs.StringVar(&s.rabbitEnv, "rabbitmq-url-env", env("RABBITMQ_URL_ENV", ""),
 			"RabbitMQ URL variable name (default FORGE_REACTOR_RABBITMQ_URL)")
 		fs.StringVar(&s.queuePrefix, "queue-prefix", env("QUEUE_PREFIX", rabbitmq.DefaultPrefix), "prefix of every subscription queue")
+		fs.StringVar(&s.publicURL, "public-url", env("PUBLIC_URL", ""), "external base URL that forges reach, for webhook registration")
 	}
 
 	shared, err := servicekit.Parse(args, getenv, help, servicekit.Options{
@@ -86,12 +89,13 @@ func brokerURL(ctx context.Context, s settings) (string, error) {
 	return url, nil
 }
 
-// sessions asks the connector for its connections on every poll and opens
-// the one named by ID. The connector supplies authenticated sessions, so
-// this service never handles forge credentials.
-func sessions(ctx context.Context, s settings) (poll.Sessions, error) {
+// sessions asks the connector for its connections on every call and opens
+// the one named by ID, or returns nil without a connector URL. The
+// connector supplies authenticated sessions, so this service never handles
+// forge credentials.
+func sessions(ctx context.Context, s settings) (sources.Sessions, error) {
 	if s.ConnectorURL == "" {
-		return nil, errors.New("poll targets need a connector URL: set --connector-url or FORGE_REACTOR_CONNECTOR_URL")
+		return nil, nil
 	}
 	token, err := servicekit.BearerToken(ctx, "connector", s.ConnectorTokenFile, s.ConnectorTokenEnv)
 	if err != nil {
@@ -118,18 +122,17 @@ func sessions(ctx context.Context, s settings) (poll.Sessions, error) {
 }
 
 // poller returns the configured poller, or nil without poll targets.
-func poller(ctx context.Context, s settings, r *reactor.Reactor, c config.Config, log io.Writer) (*poll.Poller, error) {
+func poller(r *reactor.Reactor, open sources.Sessions, c config.Config, log io.Writer) (*poll.Poller, error) {
 	if len(c.Targets) == 0 {
 		return nil, nil
 	}
-	open, err := sessions(ctx, s)
-	if err != nil {
-		return nil, err
+	if open == nil {
+		return nil, errors.New("poll targets need a connector URL: set --connector-url or FORGE_REACTOR_CONNECTOR_URL")
 	}
 
 	p := &poll.Poller{
 		Reactor:  r,
-		Sessions: open,
+		Sessions: poll.Sessions(open),
 		Targets:  c.Targets,
 		Interval: c.Interval,
 		OnError: func(t poll.Target, branch string, _ error) {
@@ -179,29 +182,53 @@ func run(ctx context.Context, s settings, ready func(grpcAddr, httpAddr net.Addr
 	if err != nil {
 		return errors.New("cannot load reactor state")
 	}
+	open, err := sessions(ctx, s)
+	if err != nil {
+		return err
+	}
+	src, err := webhookSources(ctx, s, store, open, cfg)
+	if err != nil {
+		return err
+	}
+	p, err := poller(r, open, cfg, os.Stderr)
+	if err != nil {
+		return err
+	}
 	broker, err := rabbitmq.New(rabbitmq.Config{URL: url, QueuePrefix: s.queuePrefix})
 	if err != nil {
 		return errors.New("invalid RabbitMQ URL")
 	}
 	defer broker.Close()
 
-	return serve(ctx, s, token, r, broker, cfg, ready)
+	return serve(ctx, s, token, r, broker, src, p, ready)
+}
+
+// webhookSources combines the configured sources with the managed ones in
+// the data directory. Managed sources register webhooks with connector
+// sessions at the public URL.
+func webhookSources(ctx context.Context, s settings, store *storage.File, open sources.Sessions, cfg config.Config) (*api.Sources, error) {
+	managed, err := sources.New(&sources.Manager{Store: store.Sources(), Sessions: open, PublicURL: s.publicURL})
+	if err != nil {
+		return nil, errors.New("public URL must be an http or https URL without query")
+	}
+	all, err := api.NewSources(ctx, cfg.Sources, managed)
+	if err != nil {
+		return nil, errors.New("invalid webhook source configuration; managed source IDs must not be configured")
+	}
+
+	return all, nil
 }
 
 // serve starts the dispatcher, poller and servers, and stops the background
 // work once the servers have shut down.
-func serve(ctx context.Context, s settings, token servicekit.Token, r *reactor.Reactor, b reactor.Broker, cfg config.Config,
+func serve(ctx context.Context, s settings, token servicekit.Token, r *reactor.Reactor, b reactor.Broker, src *api.Sources, p *poll.Poller,
 	ready func(grpcAddr, httpAddr net.Addr),
 ) error {
-	hooks, err := api.NewWebhooks(r, cfg.Sources, s.Timeout)
+	hooks, err := api.NewWebhooks(r, src, s.Timeout)
 	if err != nil {
-		return errors.New("invalid webhook source configuration")
+		return errors.New("cannot initialize webhooks")
 	}
-	p, err := poller(ctx, s, r, cfg, os.Stderr)
-	if err != nil {
-		return err
-	}
-	service, err := api.New(r, token, s.Timeout)
+	service, err := api.New(r, src, token, s.Timeout)
 	if err != nil {
 		return errors.New("cannot initialize API")
 	}

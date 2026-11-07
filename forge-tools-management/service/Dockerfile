@@ -15,6 +15,9 @@ COPY forge-actions/library/go.mod forge-actions/library/
 COPY forge-actions/service/go.mod forge-actions/service/go.sum forge-actions/service/
 COPY forge-issues/library/go.mod forge-issues/library/
 COPY forge-issues/service/go.mod forge-issues/service/go.sum forge-issues/service/
+# Only tests use the reactor library; its go.mod completes the module graph.
+COPY forge-reactor/library/go.mod forge-reactor/library/go.sum forge-reactor/library/
+COPY forge-reactor/service/go.mod forge-reactor/service/go.sum forge-reactor/service/
 COPY forge-tools-management/library/go.mod forge-tools-management/library/
 COPY forge-tools-management/service/go.mod forge-tools-management/service/go.sum forge-tools-management/service/
 WORKDIR /src/forge-tools-management/service
@@ -29,6 +32,7 @@ COPY forge-actions/library/ forge-actions/library/
 COPY forge-actions/service/ forge-actions/service/
 COPY forge-issues/library/ forge-issues/library/
 COPY forge-issues/service/ forge-issues/service/
+COPY forge-reactor/service/ forge-reactor/service/
 COPY forge-tools-management/library/ forge-tools-management/library/
 COPY forge-tools-management/service/ forge-tools-management/service/
 WORKDIR /src/forge-tools-management/service

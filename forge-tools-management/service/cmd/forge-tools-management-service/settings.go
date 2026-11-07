@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"strings"
 )
 
 // secureDefault is the default insecure setting: TLS to every backend.
@@ -15,6 +16,7 @@ type transportSettings struct {
 	repositories string
 	issues       string
 	actions      string
+	reactor      string
 	connector    string
 }
 
@@ -54,6 +56,16 @@ func (s *settings) backendFlags(fs *flag.FlagSet, env environment) *transportSet
 		"actions-insecure",
 		env("ACTIONS_INSECURE", secureDefault),
 		"use plaintext to a trusted local actions service: true or false",
+	)
+
+	fs.StringVar(&s.reactorAddress, "reactor-address", env("REACTOR_ADDRESS", ""), "optional forge-reactor gRPC host:port")
+	fs.StringVar(&s.reactorTokenFile, "reactor-token-file", env("REACTOR_TOKEN_FILE", ""), "reactor service token file")
+	fs.StringVar(&s.reactorTokenEnv, "reactor-token-env", env("REACTOR_TOKEN_ENV", ""), "reactor service token variable name")
+	fs.StringVar(
+		&values.reactor,
+		"reactor-insecure",
+		env("REACTOR_INSECURE", secureDefault),
+		"use plaintext to a trusted local reactor service: true or false",
 	)
 
 	fs.StringVar(&s.connectorAddress, "connector-address", env("CONNECTOR_ADDRESS", ""), "optional forge-connector broker gRPC host:port")
@@ -120,6 +132,9 @@ func (s *settings) configureTransports(values *transportSettings) error {
 	if s.actionsInsecure, err = insecureSetting("actions", values.actions); err != nil {
 		return err
 	}
+	if s.reactorInsecure, err = insecureSetting("reactor", values.reactor); err != nil {
+		return err
+	}
 	if s.connectorInsecure, err = insecureSetting("connector", values.connector); err != nil {
 		return err
 	}
@@ -143,32 +158,42 @@ func (s *settings) configureBackends() error {
 	if s.tokenFile == "" && s.tokenEnv == "" {
 		s.tokenEnv = "FORGE_MANAGEMENT_TOKEN"
 	}
-	if s.repositoriesTokenFile != "" && s.repositoriesTokenEnv != "" {
-		return errors.New("choose one repository service token source")
+
+	backends := []backendSetting{
+		{"repository service", "repositories", s.repositoriesAddress, &s.repositoriesTokenFile, &s.repositoriesTokenEnv, s.repositoriesInsecure},
+		{"issue service", "issues", s.issuesAddress, &s.issuesTokenFile, &s.issuesTokenEnv, s.issuesInsecure},
+		{"actions service", "actions", s.actionsAddress, &s.actionsTokenFile, &s.actionsTokenEnv, s.actionsInsecure},
+		{"reactor service", "reactor", s.reactorAddress, &s.reactorTokenFile, &s.reactorTokenEnv, s.reactorInsecure},
 	}
-	if s.repositoriesAddress == "" && (s.repositoriesTokenFile != "" || s.repositoriesTokenEnv != "" || s.repositoriesInsecure) {
-		return errors.New("repository settings require repositories-address")
+	for _, b := range backends {
+		if err := b.check(); err != nil {
+			return err
+		}
 	}
-	if s.repositoriesAddress != "" && s.repositoriesTokenFile == "" && s.repositoriesTokenEnv == "" {
-		s.repositoriesTokenEnv = "FORGE_MANAGEMENT_REPOSITORIES_TOKEN"
-	}
-	if s.issuesTokenFile != "" && s.issuesTokenEnv != "" {
-		return errors.New("choose one issue service token source")
-	}
-	if s.issuesAddress == "" && (s.issuesTokenFile != "" || s.issuesTokenEnv != "" || s.issuesInsecure) {
-		return errors.New("issue settings require issues-address")
-	}
-	if s.issuesAddress != "" && s.issuesTokenFile == "" && s.issuesTokenEnv == "" {
-		s.issuesTokenEnv = "FORGE_MANAGEMENT_ISSUES_TOKEN"
-	}
-	if s.actionsTokenFile != "" && s.actionsTokenEnv != "" {
-		return errors.New("choose one actions service token source")
-	}
-	if s.actionsAddress == "" && (s.actionsTokenFile != "" || s.actionsTokenEnv != "" || s.actionsInsecure) {
-		return errors.New("actions settings require actions-address")
-	}
-	if s.actionsAddress != "" && s.actionsTokenFile == "" && s.actionsTokenEnv == "" {
-		s.actionsTokenEnv = "FORGE_MANAGEMENT_ACTIONS_TOKEN"
+
+	return nil
+}
+
+// backendSetting is one backend service's address, token and transport.
+type backendSetting struct {
+	name, flag      string
+	address         string
+	tokenFile       *string
+	tokenEnv        *string
+	insecureEnabled bool
+}
+
+// check rejects conflicting or orphaned settings and defaults the token
+// variable to FORGE_MANAGEMENT_<FLAG>_TOKEN.
+func (b backendSetting) check() error {
+	hasToken := *b.tokenFile != "" || *b.tokenEnv != ""
+	switch {
+	case *b.tokenFile != "" && *b.tokenEnv != "":
+		return fmt.Errorf("choose one %s token source", b.name)
+	case b.address == "" && (hasToken || b.insecureEnabled):
+		return fmt.Errorf("%s settings require %s-address", b.flag, b.flag)
+	case b.address != "" && !hasToken:
+		*b.tokenEnv = "FORGE_MANAGEMENT_" + strings.ToUpper(b.flag) + "_TOKEN"
 	}
 
 	return nil

@@ -7,7 +7,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/r59q/forge-tools/forge-core/forgeapi/forgeauth"
 	"github.com/r59q/forge-tools/forge-reactor/library/reactor"
+	"github.com/r59q/forge-tools/forge-reactor/library/sources"
 )
 
 func open(t *testing.T, dir string) (*File, *reactor.Reactor) {
@@ -57,6 +59,36 @@ func TestReopenKeepsState(t *testing.T) {
 	temps, _ := filepath.Glob(filepath.Join(dir, ".reactor-*"))
 	if len(temps) != 0 {
 		t.Fatalf("temporary files left: %v", temps)
+	}
+}
+
+func TestReopenKeepsSources(t *testing.T) {
+	dir := t.TempDir()
+	ctx := context.Background()
+	f, _ := open(t, dir)
+	m, err := sources.New(&sources.Manager{Store: f.Sources()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := m.Create(ctx, sources.Request{ID: "app", Forge: forgeauth.GitHub})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	info, err := os.Stat(filepath.Join(dir, sourcesFile))
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("sources file mode: %v %v", info, err)
+	}
+
+	f, _ = open(t, dir)
+	defer f.Close()
+	m, _ = sources.New(&sources.Manager{Store: f.Sources()})
+	got, err := m.Get(ctx, "app")
+	if err != nil || got.Secret != created.Secret {
+		t.Fatalf("after reopen: %+v %v", got, err)
 	}
 }
 

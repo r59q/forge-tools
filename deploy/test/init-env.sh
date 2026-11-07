@@ -1,7 +1,8 @@
 #!/bin/sh
 # Runs on the server. Adds a random value to .env for every missing secret,
-# and never changes existing ones. Creates an empty reactor.json and the proxy
-# network if missing.
+# and never changes existing ones. With a public URL as $1, sets the
+# reactor's public URL. Creates an empty reactor.json and the proxy network if
+# missing.
 set -eu
 cd "$(dirname "$0")"
 umask 077
@@ -27,6 +28,13 @@ for name in FORGE_BROKER_ADMIN_TOKEN FORGE_MANAGEMENT_TOKEN FORGE_PROXY_TOKEN \
   FORGE_REACTOR_GITHUB_WEBHOOK_SECRET FORGE_REACTOR_FORGEJO_WEBHOOK_SECRET; do
   add "$name" "$(openssl rand -hex 32)"
 done
+
+# The reactor registers forge webhooks at this URL.
+if [ -n "${1:-}" ]; then
+  grep -v '^FORGE_REACTOR_PUBLIC_URL=' .env > .env.new || true
+  echo "FORGE_REACTOR_PUBLIC_URL=${1%/}/reactor" >> .env.new
+  mv .env.new .env
+fi
 
 # Compose would mount a missing file as a directory.
 if [ ! -e reactor.json ]; then

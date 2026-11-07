@@ -5,6 +5,7 @@ import (
 	"embed"
 	"html/template"
 	"net/http"
+	"strings"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/r59q/forge-tools/forge-core/servicekit"
@@ -14,7 +15,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-//go:embed layout.html repositories.html issues.html connections.html pipelines.html style.css
+//go:embed layout.html repositories.html issues.html connections.html pipelines.html webhooks.html style.css
 var files embed.FS
 
 // views holds the parsed web pages.
@@ -23,6 +24,7 @@ type views struct {
 	issues       *template.Template
 	connections  *template.Template
 	pipelines    *template.Template
+	webhooks     *template.Template
 }
 
 // parseViews parses the embedded pages. They never change, so a failure is a
@@ -34,6 +36,7 @@ func parseViews() views {
 	helpers := template.FuncMap{
 		"phases":  func() []string { return []string{"queued", "running", "waiting", "finished", "unknown"} },
 		"results": func() []string { return []string{"success", "failure", "cancelled", "skipped", "neutral", "unknown"} },
+		"join":    func(values []string) string { return strings.Join(values, ", ") },
 	}
 
 	return views{
@@ -41,6 +44,7 @@ func parseViews() views {
 		issues:       page("issues"),
 		connections:  page("connections"),
 		pipelines:    template.Must(template.New("pipelines").Funcs(helpers).ParseFS(files, "layout.html", "pipelines.html")),
+		webhooks:     template.Must(template.New("webhooks").Funcs(helpers).ParseFS(files, "layout.html", "webhooks.html")),
 	}
 }
 
@@ -124,6 +128,7 @@ func (s *Server) pages() http.Handler {
 		_, err := s.RemoveConnection(r.Context(), &pb.RemoveConnectionRequest{Id: r.PathValue("id")})
 		s.changed(w, r, err, "removed", nil)
 	})
+	s.webhookPages(mux)
 
 	return mux
 }

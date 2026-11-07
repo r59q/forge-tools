@@ -1,13 +1,14 @@
 # forge-tools-management service
 
-Forge connection management, and repository and issue inspection, over HTTP
-and gRPC.
+Forge connection and webhook management, and repository and issue
+inspection, over HTTP and gRPC.
 The browser UI is server-rendered HTML with CSS and plain forms; no
 JavaScript, browser storage or frontend build is needed. It uses the
 [management library](../library/), the
 [forge-connector broker admin API](../../forge-connector/broker/), the
-[forge-repositories gRPC API](../../forge-repositories/service/) and the
-[forge-issues gRPC API](../../forge-issues/service/).
+[forge-repositories gRPC API](../../forge-repositories/service/), the
+[forge-issues gRPC API](../../forge-issues/service/) and the
+[forge-reactor gRPC API](../../forge-reactor/service/).
 
 ## Build and test
 
@@ -129,6 +130,10 @@ errors. Without a token setting, nothing is registered.
 | `--issues-token-file`                 | `FORGE_MANAGEMENT_ISSUES_TOKEN_FILE`                 | none                                                                    |
 | `--issues-token-env`                  | `FORGE_MANAGEMENT_ISSUES_TOKEN_ENV`                  | `FORGE_MANAGEMENT_ISSUES_TOKEN` when connected                          |
 | `--issues-insecure`                   | `FORGE_MANAGEMENT_ISSUES_INSECURE`                   | `false`                                                                 |
+| `--reactor-address`                   | `FORGE_MANAGEMENT_REACTOR_ADDRESS`                   | none                                                                    |
+| `--reactor-token-file`                | `FORGE_MANAGEMENT_REACTOR_TOKEN_FILE`                | none                                                                    |
+| `--reactor-token-env`                 | `FORGE_MANAGEMENT_REACTOR_TOKEN_ENV`                 | `FORGE_MANAGEMENT_REACTOR_TOKEN` when connected                         |
+| `--reactor-insecure`                  | `FORGE_MANAGEMENT_REACTOR_INSECURE`                  | `false`                                                                 |
 | `--request-timeout`                   | `FORGE_MANAGEMENT_REQUEST_TIMEOUT`                   | `30s`                                                                   |
 
 Flags override environment settings. Choose one file or environment token
@@ -153,7 +158,8 @@ management operator token as equally sensitive. All operators see what the
 connected accounts can see; management grants no forge permissions.
 
 Forge tokens are write-only: they are sent to the broker and never returned,
-rendered or logged. Forms that change state reject cross-origin browser
+rendered or logged. Webhook secrets are shown once, in the response to adding
+or rotating a source; listings never include them. Forms that change state reject cross-origin browser
 requests. Successful changes redirect, and failures show fixed messages
 without upstream details. Page text is escaped by `html/template`.
 Responses are `no-store` with a restrictive Content Security Policy. The
@@ -167,20 +173,25 @@ The [proto](proto/forge/management/v1/management.proto) defines
 `forge.management.v1.ManagementService` and is the source of truth. Every RPC
 needs `Authorization: Bearer <operator token>`.
 
-| RPC                | REST endpoint                                                      |
-| ------------------ | ------------------------------------------------------------------ |
-| `ListRepositories` | `GET /v1/repositories`                                             |
-| `ListIssues`       | `GET /v1/issues?scope=&state=&source=&repository=`                 |
-| `ListConnections`  | `GET /v1/connections`                                              |
-| `AddConnection`    | `POST /v1/connections` with `{"forge","host","name","credential"}` |
-| `TestConnection`   | `POST /v1/connections/{id}/test`                                   |
-| `RotateCredential` | `POST /v1/connections/{id}/credential` with `{"credential"}`       |
-| `RemoveConnection` | `DELETE /v1/connections/{id}`                                      |
+| RPC                   | REST endpoint                                                            |
+| --------------------- | ------------------------------------------------------------------------ |
+| `ListRepositories`    | `GET /v1/repositories`                                                   |
+| `ListIssues`          | `GET /v1/issues?scope=&state=&source=&repository=`                       |
+| `ListConnections`     | `GET /v1/connections`                                                    |
+| `AddConnection`       | `POST /v1/connections` with `{"forge","host","name","credential"}`       |
+| `TestConnection`      | `POST /v1/connections/{id}/test`                                         |
+| `RotateCredential`    | `POST /v1/connections/{id}/credential` with `{"credential"}`             |
+| `RemoveConnection`    | `DELETE /v1/connections/{id}`                                            |
+| `ListWebhooks`        | `GET /v1/webhooks`                                                       |
+| `AddWebhook`          | `POST /v1/webhooks` with `{"id","connection","repositories","register"}` |
+| `RotateWebhookSecret` | `POST /v1/webhooks/{id}:rotate`                                          |
+| `RemoveWebhook`       | `DELETE /v1/webhooks/{id}`                                               |
 
 The browser routes use HTTP Basic authentication: `GET /`, `GET /issues`
 with the same query as `ListIssues`, `GET /connections`,
 `POST /connections`, and `POST /connections/{id}/test`, `/credential` and
-`/delete`. REST and gRPC ignore forwarded identity and `Grpc-Metadata-*`
+`/delete`, `GET /webhooks`, `POST /webhooks`, and
+`POST /webhooks/{id}/rotate` and `/delete`. REST and gRPC ignore forwarded identity and `Grpc-Metadata-*`
 headers. The operator token is never rendered in HTML.
 
 ```sh
@@ -248,6 +259,23 @@ go test ./...
 ```
 
 CI fails when the generated code is out of date.
+
+## Webhooks
+
+Configure `--reactor-address` / `FORGE_MANAGEMENT_REACTOR_ADDRESS` with a
+forge-reactor gRPC endpoint, and its service token with `--reactor-token-file`
+or `--reactor-token-env`. The default credential variable is
+`FORGE_MANAGEMENT_REACTOR_TOKEN`. `--reactor-insecure=true` enables plaintext
+on a trusted network; TLS is the default.
+
+The Webhooks page lists every source of the reactor. Configured sources are
+read-only. Add a source for a GitHub or Forgejo connection, optionally limited
+to repositories; the page then shows its payload URL and secret once. With
+**Register**, the reactor also creates the webhook on each repository; it
+needs `--public-url` and a connector, and the connection's token must be
+allowed to manage repository webhooks. Rotate replaces the secret on the
+reactor and on registered webhooks. Remove deletes the source and its
+registered webhooks. Repositories the forge did not update are listed.
 
 ## Pipeline browsing
 

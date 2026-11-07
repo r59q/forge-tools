@@ -64,7 +64,9 @@ func code(err error) codes.Code {
 		return codes.InvalidArgument
 	case errors.Is(err, management.ErrNotFound):
 		return codes.NotFound
-	case errors.Is(err, management.ErrCheckFailed):
+	case errors.Is(err, management.ErrExists):
+		return codes.AlreadyExists
+	case errors.Is(err, management.ErrCheckFailed), errors.Is(err, management.ErrRegistration):
 		return codes.FailedPrecondition
 	}
 

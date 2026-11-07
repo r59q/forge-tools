@@ -253,3 +253,24 @@ form.filter {
   padding: 1rem;
   border: 1px solid #bbb;
 }
+
+.secret dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: .3rem 1rem;
+}
+
+.secret dt {
+  font-weight: 600;
+}
+
+.secret dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+label.check {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+}

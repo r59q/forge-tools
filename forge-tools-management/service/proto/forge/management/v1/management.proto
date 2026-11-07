@@ -11,7 +11,7 @@ option go_package = "github.com/r59q/forge-tools/forge-tools-management/service/
 // ManagementService sets up and inspects forge-tools. Every RPC requires the
 // management operator token in Authorization: Bearer metadata. Use TLS across
 // networks. Connection RPCs fail with UNIMPLEMENTED when no connector is
-// configured.
+// configured, and webhook RPCs when no forge-reactor is.
 service ManagementService {
   // ListPipelines reads one page. GET /v1/pipelines?source=&repository=.
   rpc ListPipelines(ListPipelinesRequest) returns (ListPipelinesResponse) {
@@ -95,6 +95,32 @@ service ManagementService {
   // DELETE /v1/connections/{id}.
   rpc RemoveConnection(RemoveConnectionRequest) returns (RemoveConnectionResponse) {
     option (google.api.http) = {delete: "/v1/connections/{id}"};
+  }
+  // ListWebhooks lists forge-reactor webhook sources, without secrets.
+  // GET /v1/webhooks.
+  rpc ListWebhooks(ListWebhooksRequest) returns (ListWebhooksResponse) {
+    option (google.api.http) = {get: "/v1/webhooks"};
+  }
+  // AddWebhook creates a webhook source with a new secret and, with
+  // register, the webhook on every repository. POST /v1/webhooks.
+  rpc AddWebhook(AddWebhookRequest) returns (AddWebhookResponse) {
+    option (google.api.http) = {
+      post: "/v1/webhooks"
+      body: "*"
+    };
+  }
+  // RotateWebhookSecret gives a managed source a new secret.
+  // POST /v1/webhooks/{id}:rotate.
+  rpc RotateWebhookSecret(RotateWebhookSecretRequest) returns (RotateWebhookSecretResponse) {
+    option (google.api.http) = {
+      post: "/v1/webhooks/{id}:rotate"
+      body: "*"
+    };
+  }
+  // RemoveWebhook deletes a managed source and its registered webhooks.
+  // DELETE /v1/webhooks/{id}.
+  rpc RemoveWebhook(RemoveWebhookRequest) returns (RemoveWebhookResponse) {
+    option (google.api.http) = {delete: "/v1/webhooks/{id}"};
   }
 }
 
@@ -313,4 +339,79 @@ message ReadJobLogRequest {
 // ReadJobLogResponse contains the log; REST returns it bare.
 message ReadJobLogResponse {
   forge.actions.v1.Log log = 1;
+}
+
+// Webhook is a forge-reactor webhook source, without its secret.
+message Webhook {
+  // id names the source; forges deliver to /webhooks/{id}.
+  string id = 1;
+  // forge is github or forgejo.
+  string forge = 2;
+  // connection is the forge-connector connection its events carry.
+  string connection = 3;
+  // repositories, if set, are the only owner/name paths accepted.
+  repeated string repositories = 4;
+  // managed is false for sources from forge-reactor's configuration file.
+  bool managed = 5;
+  // registered reports webhooks forge-reactor created on the forge.
+  bool registered = 6;
+  // url is the payload URL, if forge-reactor has a public URL.
+  string url = 7;
+  // created_at is when a managed source was created.
+  google.protobuf.Timestamp created_at = 8;
+}
+
+// ListWebhooksRequest lists every webhook source.
+message ListWebhooksRequest {}
+
+// ListWebhooksResponse distinguishes an absent capability from an empty list.
+message ListWebhooksResponse {
+  // configured is false when management has no forge-reactor.
+  bool configured = 1;
+  // webhooks are configured sources, then managed ones.
+  repeated Webhook webhooks = 2;
+}
+
+// AddWebhookRequest describes a webhook source.
+message AddWebhookRequest {
+  // id names the source.
+  string id = 1;
+  // connection is a forge-connector connection ID. It supplies the forge.
+  string connection = 2;
+  // repositories are owner/name paths.
+  repeated string repositories = 3;
+  // register creates the webhook on every repository.
+  bool register = 4;
+  // forge is github or forgejo; needed only without a connection.
+  string forge = 5;
+}
+
+// AddWebhookResponse returns the source and its secret, shown once.
+message AddWebhookResponse {
+  Webhook webhook = 1;
+  string secret = 2;
+}
+
+// RotateWebhookSecretRequest names a managed source.
+message RotateWebhookSecretRequest {
+  string id = 1;
+}
+
+// RotateWebhookSecretResponse returns the new secret, shown once.
+message RotateWebhookSecretResponse {
+  Webhook webhook = 1;
+  string secret = 2;
+  // failed_repositories still have the old secret on the forge.
+  repeated string failed_repositories = 3;
+}
+
+// RemoveWebhookRequest names a managed source.
+message RemoveWebhookRequest {
+  string id = 1;
+}
+
+// RemoveWebhookResponse lists webhooks left on the forge.
+message RemoveWebhookResponse {
+  // failed_repositories still have the webhook; remove it by hand.
+  repeated string failed_repositories = 1;
 }

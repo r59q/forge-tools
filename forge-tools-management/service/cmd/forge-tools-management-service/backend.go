@@ -55,6 +55,13 @@ func (s settings) backends(ctx context.Context, operator forgeauth.Credentials) 
 	}
 
 	closers = append(closers, closePipelines)
+	webhookManager, closeWebhooks, err := s.webhookManager(ctx, operator)
+	if err != nil {
+		closeAll()
+		return management.Config{}, nil, err
+	}
+
+	closers = append(closers, closeWebhooks)
 
 	// Leave unset backends nil, not typed nil pointers.
 	var config management.Config
@@ -66,6 +73,9 @@ func (s settings) backends(ctx context.Context, operator forgeauth.Credentials) 
 	}
 	if pipelineReader != nil {
 		config.Pipelines = pipelineReader
+	}
+	if webhookManager != nil {
+		config.Webhooks = webhookManager
 	}
 
 	return config, closeAll, nil

@@ -14,6 +14,8 @@ on:
       - forge-issues/library/**
       - forge-actions/library/**
       - forge-actions/service/**
+      - forge-reactor/library/**
+      - forge-reactor/service/**
       - forge-core/forgeapi/**
       - forge-core/servicekit/**
       - examples/fullstack/**
@@ -34,6 +36,8 @@ on:
       - forge-issues/library/**
       - forge-actions/library/**
       - forge-actions/service/**
+      - forge-reactor/library/**
+      - forge-reactor/service/**
       - forge-core/forgeapi/**
       - forge-core/servicekit/**
       - examples/fullstack/**
@@ -71,6 +75,10 @@ jobs:
           FORGE_EXPLORER_TOKEN: example-explorer-token
           FORGE_PIPEPRINT_TOKEN: example-pipeprint-token
           FORGE_ACTIONS_CONNECTOR_TOKEN: example-actions-connector-token
+          FORGE_REACTOR_TOKEN: example-reactor-token
+          FORGE_REACTOR_CONNECTOR_TOKEN: example-reactor-connector-token
+          FORGE_REACTOR_RABBITMQ_PASSWORD: example-rabbitmq-password
+          FORGE_REACTOR_WEBHOOK_SECRET: example-webhook-secret
         run: docker compose -f examples/fullstack/compose.yaml config --quiet
 
   test:

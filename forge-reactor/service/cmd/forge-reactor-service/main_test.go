@@ -26,9 +26,13 @@ func TestParse(t *testing.T) {
 		t.Fatal(s, err)
 	}
 
-	env := map[string]string{"FORGE_REACTOR_DATA_DIR": "/data", "FORGE_REACTOR_RABBITMQ_URL_FILE": "/run/url", "FORGE_REACTOR_CONFIG": "/etc/r.json"}
+	env := map[string]string{
+		"FORGE_REACTOR_DATA_DIR": "/data", "FORGE_REACTOR_RABBITMQ_URL_FILE": "/run/url", "FORGE_REACTOR_CONFIG": "/etc/r.json",
+		"FORGE_REACTOR_PUBLIC_URL": "https://example.org/reactor",
+	}
 	s, err = parse(nil, func(k string) string { return env[k] }, io.Discard)
-	if err != nil || s.dataDirectory != "/data" || s.rabbitFile != "/run/url" || s.rabbitEnv != "" || s.configFile != "/etc/r.json" {
+	if err != nil || s.dataDirectory != "/data" || s.rabbitFile != "/run/url" || s.rabbitEnv != "" || s.configFile != "/etc/r.json" ||
+		s.publicURL != "https://example.org/reactor" {
 		t.Fatal(s, err)
 	}
 
@@ -61,6 +65,7 @@ func TestStartupErrors(t *testing.T) {
 		"bad broker URL":    func(s *settings) { s.rabbitEnv = "REACTOR_TEST_TOKEN" },
 		"missing config":    func(s *settings) { s.configFile = filepath.Join(dir, "missing.json") },
 		"polls, no connect": func(s *settings) { s.configFile = polls },
+		"bad public URL":    func(s *settings) { s.publicURL = "example.org" },
 	} {
 		s := base
 		change(&s)
@@ -154,6 +159,10 @@ func TestRestartKeepsEvents(t *testing.T) {
 	if code != http.StatusAccepted || accepted["event"] == nil {
 		t.Fatalf("webhook: %d %v", code, accepted)
 	}
+	code, managed := svc.request(http.MethodPost, "/v1/webhook-sources", authed, `{"id":"app","forge":"github"}`)
+	if code != http.StatusOK || managed["secret"] == nil {
+		t.Fatalf("managed source: %d %v", code, managed)
+	}
 	if code, _ := svc.request(http.MethodGet, "/v1/events", nil, ""); code != http.StatusUnauthorized {
 		t.Fatalf("unauthenticated list: %d", code)
 	}
@@ -168,5 +177,12 @@ func TestRestartKeepsEvents(t *testing.T) {
 	}
 	if code, again := svc.request(http.MethodPost, "/webhooks/gh", hook, body); code != http.StatusAccepted || again["duplicate"] != true {
 		t.Fatalf("redelivered webhook: %d %v", code, again)
+	}
+
+	m = hmac.New(sha256.New, []byte(managed["secret"].(string)))
+	m.Write([]byte(body))
+	hook.Set("X-Hub-Signature-256", "sha256="+hex.EncodeToString(m.Sum(nil)))
+	if code, got := svc.request(http.MethodPost, "/webhooks/app", hook, body); code != http.StatusAccepted || got["event"] == nil {
+		t.Fatalf("managed source after restart: %d %v", code, got)
 	}
 }

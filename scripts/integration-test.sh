@@ -72,6 +72,13 @@ trap cleanup EXIT
 echo "$conn" | jq -e '.status == "ok"' >/dev/null || fail "new connection is not ok"
 echo "ok: add connection"
 
+# Managed webhook sources need a GitHub or Forgejo connection.
+if [ "$forge" != gitlab ]; then
+  FORGE_WEBHOOKS_TEST_TOKEN=$token FORGE_WEBHOOKS_TEST_CONNECTION=$id \
+    FORGE_WEBHOOKS_TEST_FORGE=$forge FORGE_WEBHOOKS_TEST_REPOSITORY=$repo \
+    sh "$(dirname "$0")/webhooks-integration-test.sh"
+fi
+
 api -X POST "$url/v1/connections/$id/test" -d '{}' | jq -e '.status == "ok"' >/dev/null ||
   fail "test connection"
 echo "ok: test connection"

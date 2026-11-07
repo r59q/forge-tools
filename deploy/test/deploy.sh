@@ -3,7 +3,7 @@
 #
 # Usage: DEPLOY_SSH=user@host DEPLOY_URL=https://test.example.com deploy/test/deploy.sh
 #   DEPLOY_SSH  SSH destination of the server
-#   DEPLOY_URL  public URL that reaches nginx on port 6080
+#   DEPLOY_URL  public URL of the TLS proxy in front of nginx
 #   DEPLOY_DIR  folder on the server, relative to home; default services/forgetools
 #
 # These optional tokens add forge connections, if missing:

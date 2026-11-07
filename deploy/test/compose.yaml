@@ -3,15 +3,20 @@
 name: forge-tools-test
 
 services:
-  # Serves each service's REST API at /<service>/, on loopback for the
-  # server's own TLS proxy.
+  # Serves each service's REST API at /<service>/ on port 6080. The TLS proxy
+  # reaches it as forgetools:6080 on the proxy network; the host port is for
+  # SSH tunnels.
   nginx:
     image: nginx:1.30-alpine@sha256:583b7f2fce1cdb8da5ad5c39ebd3c33b98b87d493190e548bdee1fa8c619c311
     restart: unless-stopped
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      default:
+      proxy:
+        aliases: [forgetools]
     ports:
-      - "${FORGE_HTTP_PUBLISH:-127.0.0.1:6080}:8080"
+      - "${FORGE_HTTP_PUBLISH:-127.0.0.1:6080}:6080"
 
   # Stores forge connections and their encrypted tokens.
   broker:
@@ -169,6 +174,12 @@ services:
     volumes:
       - reactor-data:/data
       - ./reactor.json:/config/reactor.json:ro
+
+# Shared with the TLS proxy; init-env.sh creates it if missing.
+networks:
+  proxy:
+    name: ${FORGE_PROXY_NETWORK:-proxy}
+    external: true
 
 volumes:
   broker-data:

@@ -2,8 +2,27 @@
 
 Runs the published `ghcr.io/r59q/*:latest` images on the test server with
 Docker Compose: every service except the explorer, plus RabbitMQ for the
-reactor. nginx serves each REST API at `/<service>/` on `127.0.0.1:6080`,
-where the server's TLS proxy for `ENVIRONMENT_URL_TEST` forwards to.
+reactor. nginx serves each REST API at `/<service>/` on port 6080, behind
+the server's TLS proxy for `ENVIRONMENT_URL_TEST`.
+
+## TLS proxy
+
+nginx joins the Docker network `proxy` as `forgetools`; the deploy creates
+the network if missing. Add Nginx Proxy Manager to it, in its compose file:
+
+```yaml
+services:
+  app:
+    networks: [default, proxy]
+
+networks:
+  proxy:
+    external: true
+```
+
+Then forward the proxy host of `ENVIRONMENT_URL_TEST` to
+`http://forgetools:6080`. To use an existing network instead, such as Nginx
+Proxy Manager's own, set `FORGE_PROXY_NETWORK` in the server's `.env`.
 
 ## Deploy
 
@@ -28,7 +47,7 @@ on manual runs. It joins the server's WireGuard network, then runs
 | `WG_IP_ADDR`            | Server address in WireGuard.          |
 | `SSH_USER_TEST`         | SSH user; it needs Docker access.     |
 | `SSH_PRIVATE_KEY_TEST`  | SSH key of that user.                 |
-| `ENVIRONMENT_URL_TEST`  | Public URL of port 6080.              |
+| `ENVIRONMENT_URL_TEST`  | Public URL of the TLS proxy.          |
 | `*_TEST_REPO_PAT`       | Tokens of the test connections.       |
 | `FJ_TEST_REPO_DOMAIN`   | Forgejo host of the test connection.  |
 
@@ -80,6 +99,7 @@ Set these in the server's `.env` if the defaults clash:
 
 | Variable                    | Default           |
 | --------------------------- | ----------------- |
+| `FORGE_PROXY_NETWORK`       | `proxy`           |
 | `FORGE_HTTP_PUBLISH`        | `127.0.0.1:6080`  |
 | `FORGE_AMQP_PUBLISH`        | `127.0.0.1:5672`  |
 | `FORGE_RABBITMQ_UI_PUBLISH` | `127.0.0.1:15672` |

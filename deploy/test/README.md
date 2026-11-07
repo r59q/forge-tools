@@ -13,7 +13,7 @@ on manual runs. It joins the server's WireGuard network, then runs
 [deploy.sh](deploy.sh) over SSH. The script:
 
 1. copies `compose.yaml`, `nginx.conf` and `init-env.sh` to
-   `~/forge-tools-test` on the server;
+   `~/services/forgetools` on the server;
 2. adds missing secrets to `.env` there, pulls the images and starts them;
 3. adds `github`, `gitlab` and `forgejo` connections from the test PATs, if
    missing;
@@ -37,9 +37,9 @@ from your own machine with `DEPLOY_SSH` and `DEPLOY_URL`; see its header.
 
 ## Use
 
-Service tokens are generated in `~/forge-tools-test/.env` on the server. The
-workflow reads only the management token, masked in its logs. Send them as
-`Authorization: Bearer <token>`:
+Service tokens are generated in `~/services/forgetools/.env` on the server.
+The workflow reads only the management token, masked in its logs. Send them
+as `Authorization: Bearer <token>`:
 
 | Path             | Token                      |
 | ---------------- | -------------------------- |
@@ -87,6 +87,6 @@ Set these in the server's `.env` if the defaults clash:
 
 ## Reset
 
-On the server, `docker compose down -v` in `~/forge-tools-test` deletes all
+On the server, `docker compose down -v` in `~/services/forgetools` deletes all
 data, including connections and stored tokens. Keep `.env` to keep the
 service tokens; the next deploy recreates the rest.

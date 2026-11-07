@@ -4,7 +4,7 @@
 # Usage: DEPLOY_SSH=user@host DEPLOY_URL=https://test.example.com deploy/test/deploy.sh
 #   DEPLOY_SSH  SSH destination of the server
 #   DEPLOY_URL  public URL that reaches nginx on port 6080
-#   DEPLOY_DIR  folder on the server, relative to home; default forge-tools-test
+#   DEPLOY_DIR  folder on the server, relative to home; default services/forgetools
 #
 # These optional tokens add forge connections, if missing:
 #   TEST_GITHUB_TOKEN        adds connection "github" for github.com
@@ -18,7 +18,7 @@ set -eu
 cd "$(dirname "$0")"
 : "${DEPLOY_SSH:?set DEPLOY_SSH}"
 : "${DEPLOY_URL:?set DEPLOY_URL}"
-dir=${DEPLOY_DIR:-forge-tools-test}
+dir=${DEPLOY_DIR:-services/forgetools}
 url=${DEPLOY_URL%/}
 
 fail() {

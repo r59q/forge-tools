@@ -78,9 +78,14 @@ curl -H "Authorization: Bearer $FORGE_REACTOR_TOKEN" \
   "$ENVIRONMENT_URL_TEST/reactor/v1/subscriptions"
 ```
 
-Only REST is exposed; the management web interface does not work under its
-prefix, but its `/management/v1/` API does. gRPC, the broker, the proxy and
-RabbitMQ stay on the server.
+Only REST is exposed. gRPC, the broker, the proxy and RabbitMQ stay on the
+server.
+
+### Management
+
+Open `<ENVIRONMENT_URL_TEST>/management/` and sign in as `operator` with
+`FORGE_MANAGEMENT_TOKEN`. nginx rewrites the interface's links to that
+prefix.
 
 ### Reactor
 

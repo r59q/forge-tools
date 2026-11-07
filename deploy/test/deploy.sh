@@ -106,9 +106,10 @@ configure_reactor() {
 
 # check_routes expects 401 without a token from each service behind nginx.
 check_routes() {
-  for route in repositories/v1/sources issues/v1/sources actions/v1/sources \
-    checkouts/v1/checkouts code/v1/sources changes/v1/sources review/v1/reviews \
-    pipeprint/v1/pipeprint/formats reactor/v1/subscriptions; do
+  for route in management/ repositories/v1/sources issues/v1/sources \
+    actions/v1/sources checkouts/v1/checkouts code/v1/sources \
+    changes/v1/sources review/v1/reviews pipeprint/v1/pipeprint/formats \
+    reactor/v1/subscriptions; do
     status=$(status "$url/$route")
     [ "$status" = 401 ] || fail "GET /$route answered $status, want 401"
   done

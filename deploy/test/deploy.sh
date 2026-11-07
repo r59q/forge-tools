@@ -109,9 +109,19 @@ check_routes() {
   for route in repositories/v1/sources issues/v1/sources actions/v1/sources \
     checkouts/v1/checkouts code/v1/sources changes/v1/sources review/v1/reviews \
     pipeprint/v1/pipeprint/formats reactor/v1/subscriptions; do
-    status=$(curl -sS -o /dev/null -w '%{http_code}' "$url/$route")
+    status=$(status "$url/$route")
     [ "$status" = 401 ] || fail "GET /$route answered $status, want 401"
   done
+}
+
+# status prints the HTTP status of a GET, or 000 and curl's error.
+status() {
+  curl -sS -o /dev/null -w '%{http_code}' "$1" 2>&1 || true
+}
+
+wait_for_nginx() {
+  wait_for curl -fsS "$url/healthz" && return
+  fail "GET $url/healthz answered $(status "$url/healthz"); a 502 means the TLS proxy cannot reach forgetools:6080"
 }
 
 upload
@@ -120,7 +130,7 @@ token=$(secret FORGE_MANAGEMENT_TOKEN)
 mask "$token"
 [ -n "$token" ] || fail "no FORGE_MANAGEMENT_TOKEN on the server"
 
-wait_for curl -fsS "$url/healthz" || fail "nginx is not reachable at $url"
+wait_for_nginx
 wait_for api "$url/management/v1/connections" || fail "management did not start"
 connect_forges
 configure_reactor

@@ -31,7 +31,7 @@ service image is published from `master`, after changes to this folder, and
 on manual runs. It joins the server's WireGuard network, then runs
 [deploy.sh](deploy.sh) over SSH. The script:
 
-1. copies `compose.yaml`, `nginx.conf` and `init-env.sh` to
+1. copies `compose.yaml`, `nginx/` and `init-env.sh` to
    `~/services/forgetools` on the server;
 2. adds missing secrets to `.env` there, pulls the images and starts them;
 3. adds `github`, `gitlab` and `forgejo` connections from the test PATs, if

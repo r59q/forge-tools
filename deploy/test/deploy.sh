@@ -53,12 +53,22 @@ wait_for() {
 
 upload() {
   ssh "$DEPLOY_SSH" "mkdir -p $dir"
-  tar -cf - compose.yaml nginx.conf init-env.sh | remote "tar -xf -"
+  tar -cf - compose.yaml nginx init-env.sh | remote "tar -xf -"
 }
 
 start() {
   remote "./init-env.sh && docker compose pull --quiet &&
     docker compose up -d --remove-orphans --wait --wait-timeout 300"
+}
+
+# nginx_config prints a checksum of the server's nginx config.
+nginx_config() {
+  remote "cat nginx/*.conf | cksum" 2>/dev/null || true
+}
+
+# A reload would apply a new config only after a moment, so recreate nginx.
+recreate_nginx() {
+  remote "docker compose up -d --force-recreate --wait nginx"
 }
 
 api() {
@@ -125,8 +135,11 @@ wait_for_nginx() {
   fail "GET $url/healthz answered $(status "$url/healthz"); a 502 means the TLS proxy cannot reach forgetools:6080"
 }
 
+old_nginx=$(nginx_config)
 upload
 start
+[ "$(nginx_config)" = "$old_nginx" ] || recreate_nginx
+
 token=$(secret FORGE_MANAGEMENT_TOKEN)
 mask "$token"
 [ -n "$token" ] || fail "no FORGE_MANAGEMENT_TOKEN on the server"

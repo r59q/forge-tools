@@ -92,7 +92,7 @@ jobs:
         run: deploy/test/deploy.sh
       - name: Show logs
         if: failure()
-        run: ssh test 'cd forge-tools-test && docker compose logs --tail 200'
+        run: ssh test 'cd services/forgetools && docker compose logs --tail 200'
       - name: Disconnect WireGuard
         if: always()
         run: sudo wg-quick down wg0 || true

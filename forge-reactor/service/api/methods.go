@@ -15,7 +15,7 @@ func (s *Server) PublishEvent(ctx context.Context, req *pb.PublishEventRequest) 
 		if forge != "" && forge != forgeauth.GitHub && forge != forgeauth.Forgejo {
 			return nil, reactor.ErrInvalid
 		}
-		data, err := fromStruct(req.GetData())
+		data, err := pb.JSONFromStruct(req.GetData())
 		if err != nil {
 			return nil, err
 		}
@@ -32,7 +32,7 @@ func (s *Server) PublishEvent(ctx context.Context, req *pb.PublishEventRequest) 
 		if err != nil {
 			return nil, err
 		}
-		out, err := toEvent(e)
+		out, err := pb.FromEvent(e)
 		if err != nil {
 			return nil, err
 		}
@@ -48,12 +48,12 @@ func (s *Server) GetEvent(ctx context.Context, req *pb.GetEventRequest) (*pb.Get
 		if err != nil {
 			return nil, err
 		}
-		out, err := toEvent(e)
+		out, err := pb.FromEvent(e)
 		if err != nil {
 			return nil, err
 		}
 
-		return &pb.GetEventResponse{Event: out, Deliveries: toDeliveries(deliveries)}, nil
+		return &pb.GetEventResponse{Event: out, Deliveries: pb.FromDeliveries(deliveries)}, nil
 	})
 }
 
@@ -66,6 +66,7 @@ func (s *Server) ListEvents(ctx context.Context, req *pb.ListEventsRequest) (*pb
 				Connections:  req.GetConnections(),
 				Repositories: req.GetRepositories(),
 				Origins:      req.GetOrigins(),
+				Sources:      req.GetSources(),
 			}),
 			Limit:     int(req.GetPageSize()),
 			PageToken: req.GetPageToken(),
@@ -76,7 +77,7 @@ func (s *Server) ListEvents(ctx context.Context, req *pb.ListEventsRequest) (*pb
 
 		out := &pb.ListEventsResponse{NextPageToken: next}
 		for _, e := range events {
-			pe, err := toEvent(e)
+			pe, err := pb.FromEvent(e)
 			if err != nil {
 				return nil, err
 			}
@@ -159,7 +160,7 @@ func (s *Server) ListDeliveries(ctx context.Context, req *pb.ListDeliveriesReque
 			return nil, err
 		}
 
-		return &pb.ListDeliveriesResponse{Deliveries: toDeliveries(deliveries), NextPageToken: next}, nil
+		return &pb.ListDeliveriesResponse{Deliveries: pb.FromDeliveries(deliveries), NextPageToken: next}, nil
 	})
 }
 
@@ -176,6 +177,6 @@ func (s *Server) ReplayEvents(ctx context.Context, req *pb.ReplayEventsRequest) 
 			return nil, err
 		}
 
-		return &pb.ReplayEventsResponse{Deliveries: toDeliveries(deliveries)}, nil
+		return &pb.ReplayEventsResponse{Deliveries: pb.FromDeliveries(deliveries)}, nil
 	})
 }

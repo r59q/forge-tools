@@ -7,6 +7,7 @@ require (
 	github.com/r59q/forge-tools/forge-connector/library v0.0.0
 	github.com/r59q/forge-tools/forge-core/forgeapi v0.0.0
 	github.com/r59q/forge-tools/forge-issues/library v0.0.0
+	github.com/r59q/forge-tools/forge-reactor/library v0.0.0
 	github.com/r59q/forge-tools/forge-repositories/library v0.0.0
 )
 
@@ -19,3 +20,5 @@ replace github.com/r59q/forge-tools/forge-connector/library => ../../forge-conne
 replace github.com/r59q/forge-tools/forge-issues/library => ../../forge-issues/library
 
 replace github.com/r59q/forge-tools/forge-actions/library => ../../forge-actions/library
+
+replace github.com/r59q/forge-tools/forge-reactor/library => ../../forge-reactor/library

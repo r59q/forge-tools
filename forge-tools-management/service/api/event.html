@@ -1,0 +1,77 @@
+{{define "title"}}Event{{end}}
+{{define "content"}}
+  <div class="heading">
+    <h1>Event</h1>
+    <a href="/events">All events</a>
+  </div>
+
+  {{if .Problem}}
+    <section role="alert">
+      <h2>Event unavailable</h2>
+      <p>{{.Problem}}</p>
+    </section>
+  {{else}}
+    {{with .Event}}
+      <section>
+        <h2>{{.Type}}</h2>
+        <dl class="fields">
+          <dt>ID</dt><dd><code>{{.Id}}</code></dd>
+          <dt>Origin</dt><dd>{{.Origin}}</dd>
+          {{if .Source}}<dt>Source</dt><dd><a href="/events?source={{.Source}}">{{.Source}}</a></dd>{{end}}
+          {{if .Forge}}<dt>Forge</dt><dd>{{.Forge}}{{if .Connection}} · {{.Connection}}{{end}}</dd>{{end}}
+          {{if .Repository}}<dt>Repository</dt><dd>{{.Repository}}</dd>{{end}}
+          {{if .Subject}}<dt>Subject</dt><dd>{{.Subject}}</dd>{{end}}
+          {{if .OccurredAt}}<dt>Occurred</dt><dd>{{.OccurredAt.AsTime.Format "2006-01-02 15:04:05 MST"}}</dd>{{end}}
+          {{if .AcceptedAt}}<dt>Received</dt><dd>{{.AcceptedAt.AsTime.Format "2006-01-02 15:04:05 MST"}}</dd>{{end}}
+          {{with .Native}}<dt>Native event</dt><dd>{{.Event}} · delivery <code>{{.Delivery}}</code></dd>{{end}}
+        </dl>
+      </section>
+    {{end}}
+
+    {{if .Data}}
+      <section>
+        <h2>Data</h2>
+        <pre class="job-log">{{.Data}}</pre>
+      </section>
+    {{end}}
+    {{if .Payload}}
+      <section>
+        <details>
+          <summary>Native payload</summary>
+          <pre class="job-log">{{.Payload}}</pre>
+        </details>
+      </section>
+    {{end}}
+
+    {{if .Deliveries}}
+      <div class="table">
+        <table>
+          <caption>{{len .Deliveries}} deliveries to subscriptions</caption>
+          <thead>
+            <tr>
+              <th scope="col">Subscription</th>
+              <th scope="col">Status</th>
+              <th scope="col">Attempts</th>
+              <th scope="col">Handed to RabbitMQ</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Deliveries}}
+              <tr>
+                <td>{{.Subscription}}{{if .Replay}}<p class="id">replay</p>{{end}}</td>
+                <td><span class="status{{if eq .Status "broker_accepted"}} status-ok{{end}}">{{.Status}}</span></td>
+                <td>{{len .Attempts}}{{with lastError .Attempts}}<p>{{.}}</p>{{end}}</td>
+                <td>{{if .AcceptedAt}}{{.AcceptedAt.AsTime.Format "2006-01-02 15:04:05 MST"}}{{else}}—{{end}}</td>
+              </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    {{else}}
+      <section>
+        <h2>No deliveries</h2>
+        <p>No subscription matched this event.</p>
+      </section>
+    {{end}}
+  {{end}}
+{{end}}

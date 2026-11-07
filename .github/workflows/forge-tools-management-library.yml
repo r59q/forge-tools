@@ -10,6 +10,7 @@ on:
       - forge-repositories/library/**
       - forge-issues/library/**
       - forge-actions/library/**
+      - forge-reactor/library/**
       - forge-core/forgeapi/**
       - .github/workflows/forge-tools-management-library.yml
       - .github/workflows/reusable-go.yml
@@ -21,6 +22,7 @@ on:
       - forge-repositories/library/**
       - forge-issues/library/**
       - forge-actions/library/**
+      - forge-reactor/library/**
       - forge-core/forgeapi/**
       - .github/workflows/forge-tools-management-library.yml
       - .github/workflows/reusable-go.yml

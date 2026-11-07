@@ -12,14 +12,15 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// remoteWebhooks manages webhook sources through the forge-reactor API.
-type remoteWebhooks struct {
+// remoteReactor manages webhook sources and reads events through the
+// forge-reactor API.
+type remoteReactor struct {
 	client          pb.ReactorServiceClient
 	token, operator forgeauth.Credentials
 }
 
-// webhookManager connects to forge-reactor, or returns nil if unset.
-func (s settings) webhookManager(ctx context.Context, operator forgeauth.Credentials) (*remoteWebhooks, func(), error) {
+// reactorClient connects to forge-reactor, or returns nil if unset.
+func (s settings) reactorClient(ctx context.Context, operator forgeauth.Credentials) (*remoteReactor, func(), error) {
 	if s.reactorAddress == "" {
 		return nil, func() {}, nil
 	}
@@ -37,13 +38,13 @@ func (s settings) webhookManager(ctx context.Context, operator forgeauth.Credent
 		return nil, nil, errors.New("cannot initialize reactor connection")
 	}
 
-	manager := &remoteWebhooks{client: pb.NewReactorServiceClient(conn), token: token, operator: operator}
+	manager := &remoteReactor{client: pb.NewReactorServiceClient(conn), token: token, operator: operator}
 
 	return manager, func() { _ = conn.Close() }, nil
 }
 
 // context adds the reactor service token, reread for rotation.
-func (r *remoteWebhooks) context(ctx context.Context) (context.Context, error) {
+func (r *remoteReactor) context(ctx context.Context) (context.Context, error) {
 	token, err := secondToken(ctx, "reactor service", r.token, r.operator)
 	if err != nil {
 		return nil, err
@@ -69,7 +70,7 @@ func webhookBackendError(err error) error {
 }
 
 // ListWebhooks lists every source.
-func (r *remoteWebhooks) ListWebhooks(ctx context.Context) ([]management.WebhookSource, error) {
+func (r *remoteReactor) ListWebhooks(ctx context.Context) ([]management.WebhookSource, error) {
 	ctx, err := r.context(ctx)
 	if err != nil {
 		return nil, err
@@ -89,7 +90,7 @@ func (r *remoteWebhooks) ListWebhooks(ctx context.Context) ([]management.Webhook
 }
 
 // CreateWebhook creates a managed source.
-func (r *remoteWebhooks) CreateWebhook(ctx context.Context, w management.NewWebhook) (management.WebhookSecret, error) {
+func (r *remoteReactor) CreateWebhook(ctx context.Context, w management.NewWebhook) (management.WebhookSecret, error) {
 	ctx, err := r.context(ctx)
 	if err != nil {
 		return management.WebhookSecret{}, err
@@ -110,7 +111,7 @@ func (r *remoteWebhooks) CreateWebhook(ctx context.Context, w management.NewWebh
 }
 
 // RotateWebhook gives a managed source a new secret.
-func (r *remoteWebhooks) RotateWebhook(ctx context.Context, id string) (management.WebhookSecret, error) {
+func (r *remoteReactor) RotateWebhook(ctx context.Context, id string) (management.WebhookSecret, error) {
 	ctx, err := r.context(ctx)
 	if err != nil {
 		return management.WebhookSecret{}, err
@@ -129,7 +130,7 @@ func (r *remoteWebhooks) RotateWebhook(ctx context.Context, id string) (manageme
 }
 
 // DeleteWebhook removes a managed source.
-func (r *remoteWebhooks) DeleteWebhook(ctx context.Context, id string) ([]string, error) {
+func (r *remoteReactor) DeleteWebhook(ctx context.Context, id string) ([]string, error) {
 	ctx, err := r.context(ctx)
 	if err != nil {
 		return nil, err

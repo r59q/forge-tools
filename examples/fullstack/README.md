@@ -184,7 +184,8 @@ generates each secret and shows it once. To have it create the webhook on the
 forge, set `FORGE_REACTOR_PUBLIC_URL` in `.env` to the reactor's address as
 forges reach it, such as `https://example.org/reactor`, and use a connection
 whose token may manage repository webhooks. `reactor-data` keeps these
-sources and their secrets.
+sources and their secrets. The **Events** page shows what the reactor
+received.
 
 ```sh
 jq -n '{id: "deploy", filter: {types: ["forge.branch.updated"]}}' |

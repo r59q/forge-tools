@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net"
 	"strings"
@@ -22,7 +23,7 @@ import (
 )
 
 // startReactor serves the real forge-reactor API with in-memory state.
-func startReactor(t *testing.T) string {
+func startReactor(t *testing.T) (string, *reactor.Reactor) {
 	t.Helper()
 	r, err := reactor.New(reactor.Config{Store: &reactor.JSONStore{}})
 	if err != nil {
@@ -50,7 +51,7 @@ func startReactor(t *testing.T) string {
 	go func() { _ = g.Serve(l) }()
 	t.Cleanup(g.Stop)
 
-	return l.Addr().String()
+	return l.Addr().String(), r
 }
 
 func managementClient(t *testing.T, address net.Addr) (pb.ManagementServiceClient, context.Context) {
@@ -68,10 +69,11 @@ func managementClient(t *testing.T, address net.Addr) (pb.ManagementServiceClien
 
 func TestRunWithReactor(t *testing.T) {
 	t.Setenv("MANAGEMENT_REACTOR_TEST_TOKEN", "reactor-synthetic")
+	address, r := startReactor(t)
 	s, err := parse(
 		[]string{
 			"--token-file=" + writeToken(t, "operator-synthetic"), "--http-listen=127.0.0.1:0", "--grpc-listen=127.0.0.1:0",
-			"--reactor-address=" + startReactor(t), "--reactor-insecure=true", "--reactor-token-env=MANAGEMENT_REACTOR_TEST_TOKEN",
+			"--reactor-address=" + address, "--reactor-insecure=true", "--reactor-token-env=MANAGEMENT_REACTOR_TEST_TOKEN",
 		},
 		func(string) string { return "" },
 		io.Discard,
@@ -109,6 +111,25 @@ func TestRunWithReactor(t *testing.T) {
 	}
 	if list, err := client.ListWebhooks(ctx, &pb.ListWebhooksRequest{}); err != nil || !list.GetConfigured() || len(list.GetWebhooks()) != 0 {
 		t.Fatalf("list = %v, %v", list, err)
+	}
+
+	e, _, err := r.Accept(context.Background(), reactor.Input{Key: "k", Event: reactor.Event{
+		Type: reactor.TypeBranchUpdated, Origin: reactor.OriginWebhook, Source: "app", Repository: "team/app",
+		Data: json.RawMessage(`{"branch":"main"}`),
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, err := client.ListEvents(ctx, &pb.ListEventsRequest{Source: "app"})
+	if err != nil || len(events.GetEvents()) != 1 || events.GetEvents()[0].GetId() != e.ID {
+		t.Fatalf("events = %v, %v", events, err)
+	}
+	got, err := client.GetEvent(ctx, &pb.GetEventRequest{Id: e.ID})
+	if err != nil || got.GetEvent().GetData().GetFields()["branch"].GetStringValue() != "main" {
+		t.Fatalf("event = %v, %v", got, err)
+	}
+	if code, body := httpGet(t, a[1], "/events/"+e.ID, true); code != 200 || !strings.Contains(body, "team/app") {
+		t.Fatalf("event page: %d %s", code, body)
 	}
 
 	t.Setenv("MANAGEMENT_REACTOR_TEST_TOKEN", "wrong-synthetic")

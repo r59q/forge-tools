@@ -35,6 +35,8 @@ const (
 	ManagementService_AddWebhook_FullMethodName          = "/forge.management.v1.ManagementService/AddWebhook"
 	ManagementService_RotateWebhookSecret_FullMethodName = "/forge.management.v1.ManagementService/RotateWebhookSecret"
 	ManagementService_RemoveWebhook_FullMethodName       = "/forge.management.v1.ManagementService/RemoveWebhook"
+	ManagementService_ListEvents_FullMethodName          = "/forge.management.v1.ManagementService/ListEvents"
+	ManagementService_GetEvent_FullMethodName            = "/forge.management.v1.ManagementService/GetEvent"
 )
 
 // ManagementServiceClient is the client API for ManagementService service.
@@ -44,7 +46,7 @@ const (
 // ManagementService sets up and inspects forge-tools. Every RPC requires the
 // management operator token in Authorization: Bearer metadata. Use TLS across
 // networks. Connection RPCs fail with UNIMPLEMENTED when no connector is
-// configured, and webhook RPCs when no forge-reactor is.
+// configured, and webhook and event RPCs when no forge-reactor is.
 type ManagementServiceClient interface {
 	// ListPipelines reads one page. GET /v1/pipelines?source=&repository=.
 	ListPipelines(ctx context.Context, in *ListPipelinesRequest, opts ...grpc.CallOption) (*ListPipelinesResponse, error)
@@ -95,6 +97,11 @@ type ManagementServiceClient interface {
 	// RemoveWebhook deletes a managed source and its registered webhooks.
 	// DELETE /v1/webhooks/{id}.
 	RemoveWebhook(ctx context.Context, in *RemoveWebhookRequest, opts ...grpc.CallOption) (*RemoveWebhookResponse, error)
+	// ListEvents reads one page of forge-reactor events, newest first.
+	// GET /v1/events?source=&type=&repository=&page_token=.
+	ListEvents(ctx context.Context, in *ListEventsRequest, opts ...grpc.CallOption) (*ListEventsResponse, error)
+	// GetEvent reads one event and its deliveries. GET /v1/events/{id}.
+	GetEvent(ctx context.Context, in *GetEventRequest, opts ...grpc.CallOption) (*GetEventResponse, error)
 }
 
 type managementServiceClient struct {
@@ -265,6 +272,26 @@ func (c *managementServiceClient) RemoveWebhook(ctx context.Context, in *RemoveW
 	return out, nil
 }
 
+func (c *managementServiceClient) ListEvents(ctx context.Context, in *ListEventsRequest, opts ...grpc.CallOption) (*ListEventsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListEventsResponse)
+	err := c.cc.Invoke(ctx, ManagementService_ListEvents_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *managementServiceClient) GetEvent(ctx context.Context, in *GetEventRequest, opts ...grpc.CallOption) (*GetEventResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetEventResponse)
+	err := c.cc.Invoke(ctx, ManagementService_GetEvent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ManagementServiceServer is the server API for ManagementService service.
 // All implementations must embed UnimplementedManagementServiceServer
 // for forward compatibility.
@@ -272,7 +299,7 @@ func (c *managementServiceClient) RemoveWebhook(ctx context.Context, in *RemoveW
 // ManagementService sets up and inspects forge-tools. Every RPC requires the
 // management operator token in Authorization: Bearer metadata. Use TLS across
 // networks. Connection RPCs fail with UNIMPLEMENTED when no connector is
-// configured, and webhook RPCs when no forge-reactor is.
+// configured, and webhook and event RPCs when no forge-reactor is.
 type ManagementServiceServer interface {
 	// ListPipelines reads one page. GET /v1/pipelines?source=&repository=.
 	ListPipelines(context.Context, *ListPipelinesRequest) (*ListPipelinesResponse, error)
@@ -323,6 +350,11 @@ type ManagementServiceServer interface {
 	// RemoveWebhook deletes a managed source and its registered webhooks.
 	// DELETE /v1/webhooks/{id}.
 	RemoveWebhook(context.Context, *RemoveWebhookRequest) (*RemoveWebhookResponse, error)
+	// ListEvents reads one page of forge-reactor events, newest first.
+	// GET /v1/events?source=&type=&repository=&page_token=.
+	ListEvents(context.Context, *ListEventsRequest) (*ListEventsResponse, error)
+	// GetEvent reads one event and its deliveries. GET /v1/events/{id}.
+	GetEvent(context.Context, *GetEventRequest) (*GetEventResponse, error)
 	mustEmbedUnimplementedManagementServiceServer()
 }
 
@@ -380,6 +412,12 @@ func (UnimplementedManagementServiceServer) RotateWebhookSecret(context.Context,
 }
 func (UnimplementedManagementServiceServer) RemoveWebhook(context.Context, *RemoveWebhookRequest) (*RemoveWebhookResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveWebhook not implemented")
+}
+func (UnimplementedManagementServiceServer) ListEvents(context.Context, *ListEventsRequest) (*ListEventsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListEvents not implemented")
+}
+func (UnimplementedManagementServiceServer) GetEvent(context.Context, *GetEventRequest) (*GetEventResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetEvent not implemented")
 }
 func (UnimplementedManagementServiceServer) mustEmbedUnimplementedManagementServiceServer() {}
 func (UnimplementedManagementServiceServer) testEmbeddedByValue()                           {}
@@ -690,6 +728,42 @@ func _ManagementService_RemoveWebhook_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ManagementService_ListEvents_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListEventsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagementServiceServer).ListEvents(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ManagementService_ListEvents_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagementServiceServer).ListEvents(ctx, req.(*ListEventsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ManagementService_GetEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetEventRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagementServiceServer).GetEvent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ManagementService_GetEvent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagementServiceServer).GetEvent(ctx, req.(*GetEventRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ManagementService_ServiceDesc is the grpc.ServiceDesc for ManagementService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -760,6 +834,14 @@ var ManagementService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RemoveWebhook",
 			Handler:    _ManagementService_RemoveWebhook_Handler,
+		},
+		{
+			MethodName: "ListEvents",
+			Handler:    _ManagementService_ListEvents_Handler,
+		},
+		{
+			MethodName: "GetEvent",
+			Handler:    _ManagementService_GetEvent_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

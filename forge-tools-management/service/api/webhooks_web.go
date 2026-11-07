@@ -28,6 +28,7 @@ type webhooksData struct {
 	Secret      *webhookSecret
 	Leftover    []string
 	Form        *pb.AddWebhookRequest
+	LastEvents  map[string]string
 }
 
 // webhookProblem explains a failed webhook change without upstream details.
@@ -138,6 +139,7 @@ func (s *Server) webhooks(w http.ResponseWriter, r *http.Request, code int, data
 	}
 
 	data.Listing, data.Failed = listing, err != nil
+	data.LastEvents = s.lastEvents(ctx, listing.GetWebhooks())
 	render(w, r, code, s.views.webhooks, struct {
 		Page string
 		webhooksData

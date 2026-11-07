@@ -14,6 +14,7 @@ import (
 
 	"github.com/r59q/forge-tools/forge-core/forgeapi/forgeauth"
 	"github.com/r59q/forge-tools/forge-reactor/library/reactor"
+	"github.com/r59q/forge-tools/forge-reactor/library/sources"
 	"github.com/r59q/forge-tools/forge-reactor/library/webhook"
 )
 
@@ -38,12 +39,16 @@ func (failing) Token(context.Context) (string, error) { return "", errors.New("u
 func hooks(t *testing.T) (*Webhooks, *reactor.Reactor) {
 	t.Helper()
 	r := newReactor(t)
-	h, err := NewWebhooks(r, []Source{
+	src, err := NewSources(context.Background(), []Source{
 		{Source: webhook.Source{ID: "gh", Forge: forgeauth.GitHub, Connection: "github"}, Secret: forgeauth.StaticToken("gh-secret")},
 		{Source: webhook.Source{ID: "fj", Forge: forgeauth.Forgejo, Connection: "forgejo", Repositories: []string{"team/app"}},
 			Secret: forgeauth.StaticToken("fj-secret")},
 		{Source: webhook.Source{ID: "broken", Forge: forgeauth.GitHub}, Secret: failing{}},
-	}, time.Second)
+	}, manager(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, err := NewWebhooks(r, src, time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,19 +85,30 @@ func deliver(h http.Handler, method, path string, header http.Header, body strin
 	return rec
 }
 
-func TestNewWebhooks(t *testing.T) {
-	r := newReactor(t)
+func TestNewSources(t *testing.T) {
 	secret := forgeauth.StaticToken("s")
-	for name, sources := range map[string][]Source{
+	for name, configured := range map[string][]Source{
 		"duplicate": {{Source: webhook.Source{ID: "a", Forge: forgeauth.GitHub}, Secret: secret},
 			{Source: webhook.Source{ID: "a", Forge: forgeauth.Forgejo}, Secret: secret}},
 		"bad id":    {{Source: webhook.Source{ID: "A/B", Forge: forgeauth.GitHub}, Secret: secret}},
 		"no secret": {{Source: webhook.Source{ID: "a", Forge: forgeauth.GitHub}}},
 		"gitlab":    {{Source: webhook.Source{ID: "a", Forge: forgeauth.GitLab}, Secret: secret}},
 	} {
-		if _, err := NewWebhooks(r, sources, time.Second); !errors.Is(err, ErrInvalid) {
+		if _, err := NewSources(context.Background(), configured, manager(t)); !errors.Is(err, ErrInvalid) {
 			t.Errorf("%s: %v", name, err)
 		}
+	}
+
+	m := manager(t)
+	if _, err := m.Create(context.Background(), sources.Request{ID: "a", Forge: forgeauth.GitHub}); err != nil {
+		t.Fatal(err)
+	}
+	taken := []Source{{Source: webhook.Source{ID: "a", Forge: forgeauth.GitHub}, Secret: secret}}
+	if _, err := NewSources(context.Background(), taken, m); !errors.Is(err, ErrInvalid) {
+		t.Errorf("managed ID configured: %v", err)
+	}
+	if _, err := NewWebhooks(newReactor(t), nil, time.Second); !errors.Is(err, ErrInvalid) {
+		t.Errorf("no sources: %v", err)
 	}
 }
 

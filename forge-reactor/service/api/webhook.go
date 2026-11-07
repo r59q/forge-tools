@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/r59q/forge-tools/forge-core/forgeapi/forgeauth"
 	"github.com/r59q/forge-tools/forge-reactor/library/reactor"
 	"github.com/r59q/forge-tools/forge-reactor/library/webhook"
 )
@@ -17,21 +16,12 @@ import (
 // MaxWebhookBody caps webhook bodies; larger deliveries get 413 and no event.
 const MaxWebhookBody = 2 << 20
 
-// Source is a trusted webhook source. Its secret is read for every delivery,
-// so rotation needs no restart.
-type Source struct {
-	// Source configures verification; its Secret field is ignored.
-	webhook.Source
-	// Secret supplies the webhook secret.
-	Secret forgeauth.Credentials
-}
-
 // Webhooks receives native deliveries at POST /webhooks/{source}. It does
 // not use the service token: each delivery is authenticated by its
 // signature over the raw body.
 type Webhooks struct {
 	reactor *reactor.Reactor
-	sources map[string]Source
+	sources *Sources
 	timeout time.Duration
 }
 
@@ -42,21 +32,13 @@ type webhookReply struct {
 	Ignored   string `json:"ignored,omitempty"`
 }
 
-// NewWebhooks returns a handler for sources. Source IDs must be unique.
-func NewWebhooks(r *reactor.Reactor, sources []Source, timeout time.Duration) (*Webhooks, error) {
-	if r == nil || timeout <= 0 {
+// NewWebhooks returns a handler for sources.
+func NewWebhooks(r *reactor.Reactor, sources *Sources, timeout time.Duration) (*Webhooks, error) {
+	if r == nil || sources == nil || timeout <= 0 {
 		return nil, ErrInvalid
 	}
-	h := &Webhooks{reactor: r, sources: map[string]Source{}, timeout: timeout}
-	for _, s := range sources {
-		if _, dup := h.sources[s.ID]; dup || !reactor.ValidID(s.ID) || s.Secret == nil ||
-			(s.Forge != forgeauth.GitHub && s.Forge != forgeauth.Forgejo) {
-			return nil, ErrInvalid
-		}
-		h.sources[s.ID] = s
-	}
 
-	return h, nil
+	return &Webhooks{reactor: r, sources: sources, timeout: timeout}, nil
 }
 
 // ServeHTTP verifies, normalizes and accepts one delivery. It answers 202
@@ -68,10 +50,12 @@ func NewWebhooks(r *reactor.Reactor, sources []Source, timeout time.Duration) (*
 func (h *Webhooks) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	ctx, cancel := context.WithTimeout(req.Context(), h.timeout)
+	defer cancel()
 	id, _ := strings.CutPrefix(req.URL.Path, "/webhooks/")
-	src, ok := h.sources[id]
+	src, err := h.sources.lookup(ctx, id)
 	switch {
-	case !ok:
+	case errors.Is(err, reactor.ErrNotFound):
 		http.NotFound(w, req)
 
 		return
@@ -80,10 +64,12 @@ func (h *Webhooks) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		reply(w, http.StatusMethodNotAllowed)
 
 		return
+	case err != nil:
+		reply(w, http.StatusInternalServerError)
+
+		return
 	}
 
-	ctx, cancel := context.WithTimeout(req.Context(), h.timeout)
-	defer cancel()
 	body, err := io.ReadAll(http.MaxBytesReader(w, req.Body, MaxWebhookBody))
 	if err != nil {
 		var tooLarge *http.MaxBytesError
@@ -108,15 +94,8 @@ func (h *Webhooks) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 }
 
 // accept parses and stores one delivery and returns the reply and status.
-func (h *Webhooks) accept(ctx context.Context, src Source, header http.Header, body []byte) (webhookReply, int) {
-	secret, err := src.Secret.Token(ctx)
-	if err != nil || secret == "" {
-		return webhookReply{}, http.StatusInternalServerError
-	}
-	parsed := src.Source
-	parsed.Secret = []byte(secret)
-
-	res, err := webhook.Parse(parsed, header, body)
+func (h *Webhooks) accept(ctx context.Context, src webhook.Source, header http.Header, body []byte) (webhookReply, int) {
+	res, err := webhook.Parse(src, header, body)
 	switch {
 	case errors.Is(err, webhook.ErrSignature):
 		return webhookReply{}, http.StatusUnauthorized

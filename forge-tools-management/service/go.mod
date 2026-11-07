@@ -12,6 +12,8 @@ require (
 	github.com/r59q/forge-tools/forge-core/servicekit v0.0.0
 	github.com/r59q/forge-tools/forge-issues/library v0.0.0
 	github.com/r59q/forge-tools/forge-issues/service v0.0.0
+	github.com/r59q/forge-tools/forge-reactor/library v0.0.0
+	github.com/r59q/forge-tools/forge-reactor/service v0.0.0
 	github.com/r59q/forge-tools/forge-repositories/library v0.0.0
 	github.com/r59q/forge-tools/forge-repositories/service v0.0.0
 	github.com/r59q/forge-tools/forge-tools-management/library v0.0.0
@@ -48,3 +50,7 @@ replace github.com/r59q/forge-tools/forge-actions/library => ../../forge-actions
 replace github.com/r59q/forge-tools/forge-actions/service => ../../forge-actions/service
 
 replace github.com/r59q/forge-tools/forge-core/servicekit => ../../forge-core/servicekit
+
+replace github.com/r59q/forge-tools/forge-reactor/service => ../../forge-reactor/service
+
+replace github.com/r59q/forge-tools/forge-reactor/library => ../../forge-reactor/library

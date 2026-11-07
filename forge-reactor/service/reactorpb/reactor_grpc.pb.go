@@ -19,15 +19,19 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ReactorService_PublishEvent_FullMethodName       = "/forge.reactor.v1.ReactorService/PublishEvent"
-	ReactorService_GetEvent_FullMethodName           = "/forge.reactor.v1.ReactorService/GetEvent"
-	ReactorService_ListEvents_FullMethodName         = "/forge.reactor.v1.ReactorService/ListEvents"
-	ReactorService_CreateSubscription_FullMethodName = "/forge.reactor.v1.ReactorService/CreateSubscription"
-	ReactorService_GetSubscription_FullMethodName    = "/forge.reactor.v1.ReactorService/GetSubscription"
-	ReactorService_ListSubscriptions_FullMethodName  = "/forge.reactor.v1.ReactorService/ListSubscriptions"
-	ReactorService_DeleteSubscription_FullMethodName = "/forge.reactor.v1.ReactorService/DeleteSubscription"
-	ReactorService_ListDeliveries_FullMethodName     = "/forge.reactor.v1.ReactorService/ListDeliveries"
-	ReactorService_ReplayEvents_FullMethodName       = "/forge.reactor.v1.ReactorService/ReplayEvents"
+	ReactorService_PublishEvent_FullMethodName        = "/forge.reactor.v1.ReactorService/PublishEvent"
+	ReactorService_GetEvent_FullMethodName            = "/forge.reactor.v1.ReactorService/GetEvent"
+	ReactorService_ListEvents_FullMethodName          = "/forge.reactor.v1.ReactorService/ListEvents"
+	ReactorService_CreateSubscription_FullMethodName  = "/forge.reactor.v1.ReactorService/CreateSubscription"
+	ReactorService_GetSubscription_FullMethodName     = "/forge.reactor.v1.ReactorService/GetSubscription"
+	ReactorService_ListSubscriptions_FullMethodName   = "/forge.reactor.v1.ReactorService/ListSubscriptions"
+	ReactorService_DeleteSubscription_FullMethodName  = "/forge.reactor.v1.ReactorService/DeleteSubscription"
+	ReactorService_ListDeliveries_FullMethodName      = "/forge.reactor.v1.ReactorService/ListDeliveries"
+	ReactorService_ReplayEvents_FullMethodName        = "/forge.reactor.v1.ReactorService/ReplayEvents"
+	ReactorService_CreateWebhookSource_FullMethodName = "/forge.reactor.v1.ReactorService/CreateWebhookSource"
+	ReactorService_ListWebhookSources_FullMethodName  = "/forge.reactor.v1.ReactorService/ListWebhookSources"
+	ReactorService_RotateWebhookSecret_FullMethodName = "/forge.reactor.v1.ReactorService/RotateWebhookSecret"
+	ReactorService_DeleteWebhookSource_FullMethodName = "/forge.reactor.v1.ReactorService/DeleteWebhookSource"
 )
 
 // ReactorServiceClient is the client API for ReactorService service.
@@ -60,6 +64,20 @@ type ReactorServiceClient interface {
 	// ReplayEvents delivers retained events to one subscription again, keeping
 	// their IDs. It creates new deliveries, never new events.
 	ReplayEvents(ctx context.Context, in *ReplayEventsRequest, opts ...grpc.CallOption) (*ReplayEventsResponse, error)
+	// CreateWebhookSource adds a managed webhook source with a new secret.
+	// With register, it also creates the webhook on every repository through
+	// forge-connector. The secret is returned only here and by
+	// RotateWebhookSecret.
+	CreateWebhookSource(ctx context.Context, in *CreateWebhookSourceRequest, opts ...grpc.CallOption) (*CreateWebhookSourceResponse, error)
+	// ListWebhookSources lists configured and managed sources, without
+	// secrets.
+	ListWebhookSources(ctx context.Context, in *ListWebhookSourcesRequest, opts ...grpc.CallOption) (*ListWebhookSourcesResponse, error)
+	// RotateWebhookSecret gives a managed source a new secret and sends it to
+	// the source's registered webhooks.
+	RotateWebhookSecret(ctx context.Context, in *RotateWebhookSecretRequest, opts ...grpc.CallOption) (*RotateWebhookSecretResponse, error)
+	// DeleteWebhookSource removes a managed source and its registered
+	// webhooks.
+	DeleteWebhookSource(ctx context.Context, in *DeleteWebhookSourceRequest, opts ...grpc.CallOption) (*DeleteWebhookSourceResponse, error)
 }
 
 type reactorServiceClient struct {
@@ -160,6 +178,46 @@ func (c *reactorServiceClient) ReplayEvents(ctx context.Context, in *ReplayEvent
 	return out, nil
 }
 
+func (c *reactorServiceClient) CreateWebhookSource(ctx context.Context, in *CreateWebhookSourceRequest, opts ...grpc.CallOption) (*CreateWebhookSourceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateWebhookSourceResponse)
+	err := c.cc.Invoke(ctx, ReactorService_CreateWebhookSource_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *reactorServiceClient) ListWebhookSources(ctx context.Context, in *ListWebhookSourcesRequest, opts ...grpc.CallOption) (*ListWebhookSourcesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListWebhookSourcesResponse)
+	err := c.cc.Invoke(ctx, ReactorService_ListWebhookSources_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *reactorServiceClient) RotateWebhookSecret(ctx context.Context, in *RotateWebhookSecretRequest, opts ...grpc.CallOption) (*RotateWebhookSecretResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RotateWebhookSecretResponse)
+	err := c.cc.Invoke(ctx, ReactorService_RotateWebhookSecret_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *reactorServiceClient) DeleteWebhookSource(ctx context.Context, in *DeleteWebhookSourceRequest, opts ...grpc.CallOption) (*DeleteWebhookSourceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteWebhookSourceResponse)
+	err := c.cc.Invoke(ctx, ReactorService_DeleteWebhookSource_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ReactorServiceServer is the server API for ReactorService service.
 // All implementations must embed UnimplementedReactorServiceServer
 // for forward compatibility.
@@ -190,6 +248,20 @@ type ReactorServiceServer interface {
 	// ReplayEvents delivers retained events to one subscription again, keeping
 	// their IDs. It creates new deliveries, never new events.
 	ReplayEvents(context.Context, *ReplayEventsRequest) (*ReplayEventsResponse, error)
+	// CreateWebhookSource adds a managed webhook source with a new secret.
+	// With register, it also creates the webhook on every repository through
+	// forge-connector. The secret is returned only here and by
+	// RotateWebhookSecret.
+	CreateWebhookSource(context.Context, *CreateWebhookSourceRequest) (*CreateWebhookSourceResponse, error)
+	// ListWebhookSources lists configured and managed sources, without
+	// secrets.
+	ListWebhookSources(context.Context, *ListWebhookSourcesRequest) (*ListWebhookSourcesResponse, error)
+	// RotateWebhookSecret gives a managed source a new secret and sends it to
+	// the source's registered webhooks.
+	RotateWebhookSecret(context.Context, *RotateWebhookSecretRequest) (*RotateWebhookSecretResponse, error)
+	// DeleteWebhookSource removes a managed source and its registered
+	// webhooks.
+	DeleteWebhookSource(context.Context, *DeleteWebhookSourceRequest) (*DeleteWebhookSourceResponse, error)
 	mustEmbedUnimplementedReactorServiceServer()
 }
 
@@ -226,6 +298,18 @@ func (UnimplementedReactorServiceServer) ListDeliveries(context.Context, *ListDe
 }
 func (UnimplementedReactorServiceServer) ReplayEvents(context.Context, *ReplayEventsRequest) (*ReplayEventsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReplayEvents not implemented")
+}
+func (UnimplementedReactorServiceServer) CreateWebhookSource(context.Context, *CreateWebhookSourceRequest) (*CreateWebhookSourceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateWebhookSource not implemented")
+}
+func (UnimplementedReactorServiceServer) ListWebhookSources(context.Context, *ListWebhookSourcesRequest) (*ListWebhookSourcesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListWebhookSources not implemented")
+}
+func (UnimplementedReactorServiceServer) RotateWebhookSecret(context.Context, *RotateWebhookSecretRequest) (*RotateWebhookSecretResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RotateWebhookSecret not implemented")
+}
+func (UnimplementedReactorServiceServer) DeleteWebhookSource(context.Context, *DeleteWebhookSourceRequest) (*DeleteWebhookSourceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteWebhookSource not implemented")
 }
 func (UnimplementedReactorServiceServer) mustEmbedUnimplementedReactorServiceServer() {}
 func (UnimplementedReactorServiceServer) testEmbeddedByValue()                        {}
@@ -410,6 +494,78 @@ func _ReactorService_ReplayEvents_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ReactorService_CreateWebhookSource_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateWebhookSourceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ReactorServiceServer).CreateWebhookSource(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ReactorService_CreateWebhookSource_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ReactorServiceServer).CreateWebhookSource(ctx, req.(*CreateWebhookSourceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ReactorService_ListWebhookSources_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListWebhookSourcesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ReactorServiceServer).ListWebhookSources(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ReactorService_ListWebhookSources_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ReactorServiceServer).ListWebhookSources(ctx, req.(*ListWebhookSourcesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ReactorService_RotateWebhookSecret_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RotateWebhookSecretRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ReactorServiceServer).RotateWebhookSecret(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ReactorService_RotateWebhookSecret_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ReactorServiceServer).RotateWebhookSecret(ctx, req.(*RotateWebhookSecretRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ReactorService_DeleteWebhookSource_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteWebhookSourceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ReactorServiceServer).DeleteWebhookSource(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ReactorService_DeleteWebhookSource_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ReactorServiceServer).DeleteWebhookSource(ctx, req.(*DeleteWebhookSourceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ReactorService_ServiceDesc is the grpc.ServiceDesc for ReactorService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -452,6 +608,22 @@ var ReactorService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReplayEvents",
 			Handler:    _ReactorService_ReplayEvents_Handler,
+		},
+		{
+			MethodName: "CreateWebhookSource",
+			Handler:    _ReactorService_CreateWebhookSource_Handler,
+		},
+		{
+			MethodName: "ListWebhookSources",
+			Handler:    _ReactorService_ListWebhookSources_Handler,
+		},
+		{
+			MethodName: "RotateWebhookSecret",
+			Handler:    _ReactorService_RotateWebhookSecret_Handler,
+		},
+		{
+			MethodName: "DeleteWebhookSource",
+			Handler:    _ReactorService_DeleteWebhookSource_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

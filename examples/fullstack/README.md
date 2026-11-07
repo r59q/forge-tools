@@ -47,8 +47,8 @@ updating this example. It never changes existing values.
 | `FORGE_EXPLORER_TOKEN`              | Authenticates local explorer REST/gRPC callers.                   |
 | `FORGE_ACTIONS_TOKEN`                | Authenticates actions REST/gRPC callers and management.          |
 | `FORGE_PIPEPRINT_TOKEN`              | Authenticates pipeprint REST/gRPC callers.                       |
-| `FORGE_REACTOR_TOKEN`                | Authenticates reactor REST/gRPC callers.                         |
-| `FORGE_REACTOR_CONNECTOR_TOKEN`      | Lets the reactor poll branches through the proxy.                |
+| `FORGE_REACTOR_TOKEN`                | Authenticates reactor REST/gRPC callers and management.          |
+| `FORGE_REACTOR_CONNECTOR_TOKEN`      | Lets the reactor poll branches and register webhooks.            |
 | `FORGE_REACTOR_RABBITMQ_PASSWORD`    | RabbitMQ password of user `reactor`, for the reactor and you.    |
 | `FORGE_REACTOR_WEBHOOK_SECRET`       | Signs webhooks for the example source in `reactor.json`.         |
 
@@ -179,6 +179,13 @@ container. Set each webhook `connection` and poll `connection` to a
 connection ID from management; polls read Forgejo branches through the proxy.
 Forges reach webhooks at `POST /webhooks/<source>`, so expose only that path.
 
+Add more webhook sources on the **Webhooks** page in management. The reactor
+generates each secret and shows it once. To have it create the webhook on the
+forge, set `FORGE_REACTOR_PUBLIC_URL` in `.env` to the reactor's address as
+forges reach it, such as `https://example.org/reactor`, and use a connection
+whose token may manage repository webhooks. `reactor-data` keeps these
+sources and their secrets.
+
 ```sh
 jq -n '{id: "deploy", filter: {types: ["forge.branch.updated"]}}' |
   curl -fsS -H "Authorization: Bearer $FORGE_REACTOR_TOKEN" \
@@ -189,7 +196,8 @@ Consume the queue with any AMQP 0-9-1 client at
 `amqp://reactor:<FORGE_REACTOR_RABBITMQ_PASSWORD>@127.0.0.1:5672/`. The
 RabbitMQ management interface is at `http://127.0.0.1:15672`, signed in as
 `reactor`. The `rabbitmq-data` volume keeps queues and messages, and
-`reactor-data` keeps subscriptions, delivery history and poll baselines.
+`reactor-data` keeps subscriptions, delivery history, poll baselines and
+managed webhook sources.
 
 RabbitMQ sets the password only when `rabbitmq-data` is created. To rotate it,
 change `.env`, then run:

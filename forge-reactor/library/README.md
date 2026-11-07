@@ -11,6 +11,7 @@ for the `rabbitmq` package only.
 | `reactor`  | Event envelope, subscriptions, fan-out, dedup, history, replay, dispatcher. |
 | `webhook`  | GitHub and Forgejo signature checks and normalization. No I/O, no state.    |
 | `poll`     | Forgejo branch-head polling through sessions the caller supplies.           |
+| `sources`  | Managed webhook sources: generated secrets and forge webhook registration.  |
 | `rabbitmq` | The production `reactor.Broker`: quorum queues and publisher confirms.     |
 
 `reactor` knows nothing about RabbitMQ. A broker is three calls:
@@ -41,6 +42,13 @@ res, err := webhook.Parse(webhook.Source{ID: "forgejo", Forge: forgeauth.Forgejo
 if err == nil && res.Input != nil {
 	event, duplicate, err := r.Accept(ctx, *res.Input)
 }
+
+// Managed sources: a generated secret, and the webhook created on the forge.
+m, err := sources.New(&sources.Manager{Store: &sources.MemoryStore{}, Sessions: open, PublicURL: "https://example.org/reactor"})
+src, err := m.Create(ctx, sources.Request{
+	ID: "app", Forge: forgeauth.GitHub, Connection: "gh", Repositories: []string{"team/app"}, Register: true,
+})
+res, err = webhook.Parse(src.Webhook(), req.Header, body)
 
 // Polling, with sessions from forge-connector.
 p := &poll.Poller{Reactor: r, Sessions: sessions, Targets: targets}

@@ -14,6 +14,7 @@ func TestBackendTransportFlagPrecedence(t *testing.T) {
 		{"repositories", "REPOSITORIES", func(s settings) bool { return s.repositoriesInsecure }},
 		{"issues", "ISSUES", func(s settings) bool { return s.issuesInsecure }},
 		{"actions", "ACTIONS", func(s settings) bool { return s.actionsInsecure }},
+		{"reactor", "REACTOR", func(s settings) bool { return s.reactorInsecure }},
 		{"connector", "CONNECTOR", func(s settings) bool { return s.connectorInsecure }},
 	}
 

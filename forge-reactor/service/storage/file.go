@@ -1,4 +1,4 @@
-// Package storage keeps reactor state durably in a local directory on Unix
+// Package storage keeps reactor state and managed webhook sources durably in a local directory on Unix
 // systems.
 package storage
 
@@ -12,13 +12,19 @@ import (
 	"syscall"
 
 	"github.com/r59q/forge-tools/forge-reactor/library/reactor"
+	"github.com/r59q/forge-tools/forge-reactor/library/sources"
 )
 
 // ErrLocked means another process holds the data directory.
 var ErrLocked = errors.New("storage: data directory is in use")
 
-// stateFile holds the state inside the directory.
-const stateFile = "reactor.json"
+// Files inside the directory.
+const (
+	// stateFile holds the reactor state.
+	stateFile = "reactor.json"
+	// sourcesFile holds managed webhook sources and their secrets.
+	sourcesFile = "sources.json"
+)
 
 // File is one atomic JSON document in a private directory. One process owns
 // the directory at a time, holding an advisory flock until Close. Use a local
@@ -28,6 +34,7 @@ type File struct {
 	directory string
 	lock      *os.File
 	store     *reactor.JSONStore
+	sources   *sources.MemoryStore
 }
 
 type envelope struct {
@@ -60,11 +67,7 @@ func Open(directory string) (*File, error) {
 	}
 
 	f := &File{directory: directory, lock: lock}
-	data, err := f.load()
-	if err == nil {
-		f.store, err = reactor.NewJSONStore(data, f.save)
-	}
-	if err != nil {
+	if err := f.open(); err != nil {
 		_ = f.Close()
 
 		return nil, err
@@ -73,8 +76,31 @@ func Open(directory string) (*File, error) {
 	return f, nil
 }
 
+// open loads both documents.
+func (f *File) open() error {
+	data, err := f.load(stateFile)
+	if err != nil {
+		return err
+	}
+	f.store, err = reactor.NewJSONStore(data, f.saver(stateFile))
+	if err != nil {
+		return err
+	}
+
+	data, err = f.load(sourcesFile)
+	if err != nil {
+		return err
+	}
+	f.sources, err = sources.NewMemoryStore(data, f.saver(sourcesFile))
+
+	return err
+}
+
 // Store returns the reactor store backed by the directory.
 func (f *File) Store() *reactor.JSONStore { return f.store }
+
+// Sources returns the managed webhook source store backed by the directory.
+func (f *File) Sources() *sources.MemoryStore { return f.sources }
 
 // Close releases the directory.
 func (f *File) Close() error {
@@ -83,9 +109,9 @@ func (f *File) Close() error {
 	return f.lock.Close()
 }
 
-// load reads the stored state encoding, or nil when there is none.
-func (f *File) load() (json.RawMessage, error) {
-	b, err := os.ReadFile(filepath.Join(f.directory, stateFile))
+// load reads a stored encoding, or nil when there is none.
+func (f *File) load(name string) (json.RawMessage, error) {
+	b, err := os.ReadFile(filepath.Join(f.directory, name)) //nolint:gosec // a fixed name in the operator's data directory.
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
 	}
@@ -104,10 +130,15 @@ func (f *File) load() (json.RawMessage, error) {
 	return e.State, nil
 }
 
-// save replaces the document using fsync and rename. A directory-sync error
+// saver returns a save function for the named document.
+func (f *File) saver(name string) func(context.Context, []byte) error {
+	return func(ctx context.Context, data []byte) error { return f.save(ctx, name, data) }
+}
+
+// save replaces a document using fsync and rename. A directory-sync error
 // after rename is ambiguous, so the reactor treats it as a failed commit and
 // may repeat work, never lose it.
-func (f *File) save(ctx context.Context, data []byte) error {
+func (f *File) save(ctx context.Context, name string, data []byte) error {
 	b, err := json.Marshal(envelope{Version: 1, State: data})
 	if err != nil {
 		return err
@@ -131,7 +162,7 @@ func (f *File) save(ctx context.Context, data []byte) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if err := os.Rename(temp.Name(), filepath.Join(f.directory, stateFile)); err != nil {
+	if err := os.Rename(temp.Name(), filepath.Join(f.directory, name)); err != nil {
 		return err
 	}
 

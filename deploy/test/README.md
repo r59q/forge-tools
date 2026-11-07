@@ -33,7 +33,8 @@ on manual runs. It joins the server's WireGuard network, then runs
 
 1. copies `compose.yaml`, `nginx/` and `init-env.sh` to
    `~/services/forgetools` on the server;
-2. adds missing secrets to `.env` there, pulls the images and starts them;
+2. adds missing secrets and the reactor's public URL to `.env` there, pulls
+   the images and starts them;
 3. adds `github`, `gitlab` and `forgejo` connections from the test PATs, if
    missing;
 4. writes `reactor.json` with webhook sources for `github` and `forgejo` and
@@ -89,7 +90,13 @@ prefix.
 
 ### Reactor
 
-Point forge webhooks at `<ENVIRONMENT_URL_TEST>/reactor/webhooks/github` or
+Add webhook sources on the **Webhooks** page in management. The reactor
+generates each secret and, if asked, creates the webhook on the forge at
+`<ENVIRONMENT_URL_TEST>/reactor/webhooks/<id>`. The connection's token must
+be allowed to manage repository webhooks.
+
+The configured sources stay too: point forge webhooks at
+`<ENVIRONMENT_URL_TEST>/reactor/webhooks/github` or
 `/reactor/webhooks/forgejo`, signed with `FORGE_REACTOR_GITHUB_WEBHOOK_SECRET`
 or `FORGE_REACTOR_FORGEJO_WEBHOOK_SECRET`. Consume queues through an SSH
 tunnel to RabbitMQ, as user `reactor` with `FORGE_REACTOR_RABBITMQ_PASSWORD`:

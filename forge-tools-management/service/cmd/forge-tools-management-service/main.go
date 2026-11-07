@@ -1,6 +1,6 @@
 // Command forge-tools-management-service serves management over HTTP and
-// gRPC, optionally connected to forge-connector, forge-repositories and
-// forge-issues and forge-actions.
+// gRPC, optionally connected to forge-connector, forge-repositories,
+// forge-issues, forge-actions and forge-reactor.
 package main
 
 import (
@@ -36,6 +36,10 @@ type settings struct {
 	actionsTokenFile         string
 	actionsTokenEnv          string
 	actionsInsecure          bool
+	reactorAddress           string
+	reactorTokenFile         string
+	reactorTokenEnv          string
+	reactorInsecure          bool
 	connectorAddress         string
 	connectorTokenFile       string
 	connectorTokenEnv        string

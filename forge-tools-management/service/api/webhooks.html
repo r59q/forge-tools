@@ -1,0 +1,146 @@
+{{define "title"}}Webhooks{{end}}
+{{define "content"}}
+  <div class="heading">
+    <h1>Webhooks</h1>
+    <a href="/webhooks">Refresh</a>
+  </div>
+
+  <p>Forge webhooks received by forge-reactor. Each source has its own secret, shown once.</p>
+
+  {{if .Notice}}
+    <section role="status" class="notice">
+      <p>{{.Notice}}</p>
+    </section>
+  {{end}}
+  {{if .Problem}}
+    <section role="alert">
+      <h2>Change failed</h2>
+      <p>{{.Problem}}</p>
+    </section>
+  {{end}}
+  {{with .Secret}}
+    <section role="status" class="notice secret">
+      <h2>{{if .Rotated}}Secret replaced{{else}}Webhook source added{{end}}</h2>
+      <p>Copy the secret now. It is not shown again.</p>
+      <dl>
+        {{if .Webhook.Url}}
+          <dt>Payload URL</dt>
+          <dd><code>{{.Webhook.Url}}</code></dd>
+        {{end}}
+        <dt>Content type</dt>
+        <dd><code>application/json</code></dd>
+        <dt>Secret</dt>
+        <dd><code>{{.Secret}}</code></dd>
+        <dt>Events</dt>
+        <dd>Pushes and pull requests</dd>
+      </dl>
+      {{if .Webhook.Registered}}
+        <p>forge-reactor {{if .Rotated}}updated{{else}}created{{end}} the webhook on {{join .Webhook.Repositories}}.</p>
+      {{else}}
+        <p>Add a webhook with these settings in the forge's repository or organization settings.</p>
+      {{end}}
+      {{if .Failed}}
+        <p class="status">These repositories still have the old secret: {{join .Failed}}. Rotate again, or update them on the forge.</p>
+      {{end}}
+    </section>
+  {{end}}
+  {{if .Leftover}}
+    <section role="alert">
+      <h2>Webhook source removed</h2>
+      <p>The forge webhook could not be removed from {{join .Leftover}}. Remove it on the forge; its deliveries now get not found.</p>
+    </section>
+  {{end}}
+
+  {{if .Failed}}
+    <section role="alert">
+      <h2>Webhook listing failed</h2>
+      <p>forge-reactor could not be reached. Check that it is running, then refresh.</p>
+    </section>
+  {{else if not .Listing.Configured}}
+    <section>
+      <h2>No forge-reactor configured</h2>
+      <p>Set a reactor address and token in the management startup settings to manage webhooks.</p>
+    </section>
+  {{else}}
+    {{template "webhook-table" .}}
+    {{template "webhook-form" .}}
+  {{end}}
+{{end}}
+
+{{define "webhook-table"}}
+  {{if .Listing.Webhooks}}
+    <div class="table">
+      <table>
+        <caption>{{len .Listing.Webhooks}} webhook sources</caption>
+        <thead>
+          <tr>
+            <th scope="col">Source</th>
+            <th scope="col">Forge</th>
+            <th scope="col">Repositories</th>
+            <th scope="col">Setup</th>
+            <th scope="col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Listing.Webhooks}}
+            <tr>
+              <td>
+                <strong>{{.Id}}</strong>
+                {{if .Url}}<p class="id">{{.Url}}</p>{{end}}
+              </td>
+              <td>{{.Forge}}{{if .Connection}}<p class="id">{{.Connection}}</p>{{end}}</td>
+              <td>{{if .Repositories}}{{join .Repositories}}{{else}}Any{{end}}</td>
+              <td>
+                {{if not .Managed}}Configuration file{{else if .Registered}}Registered on the forge{{else}}Added by hand{{end}}
+              </td>
+              <td class="actions">
+                {{if .Managed}}
+                  <form method="post" action="/webhooks/{{.Id}}/rotate"><button>Rotate secret</button></form>
+                  <form method="post" action="/webhooks/{{.Id}}/delete"><button class="danger">Remove</button></form>
+                {{else}}
+                  <span class="hint">Change it in reactor.json</span>
+                {{end}}
+              </td>
+            </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  {{else}}
+    <section>
+      <h2>No webhook sources yet</h2>
+      <p>Add one below, then point the forge at its payload URL.</p>
+    </section>
+  {{end}}
+{{end}}
+
+{{define "webhook-form"}}
+  <section>
+    <h2>Add a webhook source</h2>
+    {{if .Connections}}
+      <form method="post" action="/webhooks" class="add">
+        <label>ID <span class="hint">Lowercase letters, digits, - and _. Forges deliver to /webhooks/ID.</span>
+          <input name="id" value="{{.Form.Id}}" required pattern="[a-z0-9][a-z0-9_\-]{0,62}" autocomplete="off">
+        </label>
+        <label>Connection <span class="hint">Events carry this connection. GitHub and Forgejo only.</span>
+          <select name="connection">
+            {{range .Connections}}
+              <option value="{{.Id}}"{{if eq .Id $.Form.Connection}} selected{{end}}>{{if .Name}}{{.Name}}{{else}}{{.Login}}{{end}} ({{.Forge}})</option>
+            {{end}}
+          </select>
+        </label>
+        <label>Repositories <span class="hint">owner/name, separated by commas. Empty accepts any repository.</span>
+          <input name="repositories" value="{{join .Form.Repositories}}" placeholder="team/app, team/lib" autocomplete="off">
+        </label>
+        <label class="check">
+          <input type="checkbox" name="register"{{if .Form.Register}} checked{{end}}>
+          Register the webhook on these repositories
+          <span class="hint">Needs repositories, and a token that may manage their webhooks.</span>
+        </label>
+        <button>Add webhook source</button>
+      </form>
+    {{else}}
+      <p>Add a GitHub or Forgejo connection on the <a href="/connections">Connections</a> page first.</p>
+    {{end}}
+  </section>
+{{end}}

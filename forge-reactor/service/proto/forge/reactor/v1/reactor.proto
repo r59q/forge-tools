@@ -64,6 +64,34 @@ service ReactorService {
       body: "*"
     };
   }
+  // CreateWebhookSource adds a managed webhook source with a new secret.
+  // With register, it also creates the webhook on every repository through
+  // forge-connector. The secret is returned only here and by
+  // RotateWebhookSecret.
+  rpc CreateWebhookSource(CreateWebhookSourceRequest) returns (CreateWebhookSourceResponse) {
+    option (google.api.http) = {
+      post: "/v1/webhook-sources"
+      body: "*"
+    };
+  }
+  // ListWebhookSources lists configured and managed sources, without
+  // secrets.
+  rpc ListWebhookSources(ListWebhookSourcesRequest) returns (ListWebhookSourcesResponse) {
+    option (google.api.http) = {get: "/v1/webhook-sources"};
+  }
+  // RotateWebhookSecret gives a managed source a new secret and sends it to
+  // the source's registered webhooks.
+  rpc RotateWebhookSecret(RotateWebhookSecretRequest) returns (RotateWebhookSecretResponse) {
+    option (google.api.http) = {
+      post: "/v1/webhook-sources/{id}:rotate"
+      body: "*"
+    };
+  }
+  // DeleteWebhookSource removes a managed source and its registered
+  // webhooks.
+  rpc DeleteWebhookSource(DeleteWebhookSourceRequest) returns (DeleteWebhookSourceResponse) {
+    option (google.api.http) = {delete: "/v1/webhook-sources/{id}"};
+  }
 }
 
 // Event is the envelope every consumer receives. On the queue it is JSON
@@ -310,4 +338,87 @@ message ReplayEventsRequest {
 message ReplayEventsResponse {
   // Deliveries are the new deliveries, in acceptance order of their events.
   repeated Delivery deliveries = 1;
+}
+
+// WebhookSource receives native webhooks at /webhooks/{id}.
+message WebhookSource {
+  // ID names the source.
+  string id = 1;
+  // Forge is github or forgejo.
+  string forge = 2;
+  // Connection is the forge-connector connection ID its events carry.
+  string connection = 3;
+  // Repositories, if set, are the only owner/name paths accepted.
+  repeated string repositories = 4;
+  // Managed is false for sources from the configuration file, which the
+  // API cannot change.
+  bool managed = 5;
+  // Registered reports webhooks that forge-reactor created on the forge.
+  bool registered = 6;
+  // URL is the payload URL, if forge-reactor has a public URL.
+  string url = 7;
+  // CreatedAt is when a managed source was created.
+  google.protobuf.Timestamp created_at = 8;
+}
+
+// CreateWebhookSourceRequest describes a managed source.
+message CreateWebhookSourceRequest {
+  // ID names the source; it must not be taken by a configured source.
+  string id = 1;
+  // Forge is github or forgejo.
+  string forge = 2;
+  // Connection is the forge-connector connection ID.
+  string connection = 3;
+  // Repositories are owner/name paths, at most 100.
+  repeated string repositories = 4;
+  // Register creates the webhook on every repository. It needs a
+  // connection, repositories, a public URL and a connector.
+  bool register = 5;
+}
+
+// CreateWebhookSourceResponse returns the source and its secret.
+message CreateWebhookSourceResponse {
+  // Source is the stored source.
+  WebhookSource source = 1;
+  // Secret is the webhook secret. It is not shown again.
+  string secret = 2;
+}
+
+// ListWebhookSourcesRequest lists every source.
+message ListWebhookSourcesRequest {}
+
+// ListWebhookSourcesResponse holds every source.
+message ListWebhookSourcesResponse {
+  // Sources are configured sources, then managed ones, each sorted by ID.
+  repeated WebhookSource sources = 1;
+}
+
+// RotateWebhookSecretRequest names a managed source.
+message RotateWebhookSecretRequest {
+  // ID is the source ID.
+  string id = 1;
+}
+
+// RotateWebhookSecretResponse returns the new secret.
+message RotateWebhookSecretResponse {
+  // Source is the source.
+  WebhookSource source = 1;
+  // Secret is the new webhook secret. It is not shown again.
+  string secret = 2;
+  // FailedRepositories still have the old secret on the forge. Rotate
+  // again, or update them by hand.
+  repeated string failed_repositories = 3;
+}
+
+// DeleteWebhookSourceRequest names a managed source.
+message DeleteWebhookSourceRequest {
+  // ID is the source ID.
+  string id = 1;
+}
+
+// DeleteWebhookSourceResponse lists webhooks left behind.
+message DeleteWebhookSourceResponse {
+  // FailedRepositories still have the webhook on the forge. Remove it by
+  // hand; its deliveries now fail with not found.
+  repeated string failed_repositories = 1;
 }

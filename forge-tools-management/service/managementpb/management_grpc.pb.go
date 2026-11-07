@@ -19,18 +19,22 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ManagementService_ListPipelines_FullMethodName    = "/forge.management.v1.ManagementService/ListPipelines"
-	ManagementService_GetPipeline_FullMethodName      = "/forge.management.v1.ManagementService/GetPipeline"
-	ManagementService_ListJobs_FullMethodName         = "/forge.management.v1.ManagementService/ListJobs"
-	ManagementService_GetJob_FullMethodName           = "/forge.management.v1.ManagementService/GetJob"
-	ManagementService_ReadJobLog_FullMethodName       = "/forge.management.v1.ManagementService/ReadJobLog"
-	ManagementService_ListRepositories_FullMethodName = "/forge.management.v1.ManagementService/ListRepositories"
-	ManagementService_ListIssues_FullMethodName       = "/forge.management.v1.ManagementService/ListIssues"
-	ManagementService_ListConnections_FullMethodName  = "/forge.management.v1.ManagementService/ListConnections"
-	ManagementService_AddConnection_FullMethodName    = "/forge.management.v1.ManagementService/AddConnection"
-	ManagementService_TestConnection_FullMethodName   = "/forge.management.v1.ManagementService/TestConnection"
-	ManagementService_RotateCredential_FullMethodName = "/forge.management.v1.ManagementService/RotateCredential"
-	ManagementService_RemoveConnection_FullMethodName = "/forge.management.v1.ManagementService/RemoveConnection"
+	ManagementService_ListPipelines_FullMethodName       = "/forge.management.v1.ManagementService/ListPipelines"
+	ManagementService_GetPipeline_FullMethodName         = "/forge.management.v1.ManagementService/GetPipeline"
+	ManagementService_ListJobs_FullMethodName            = "/forge.management.v1.ManagementService/ListJobs"
+	ManagementService_GetJob_FullMethodName              = "/forge.management.v1.ManagementService/GetJob"
+	ManagementService_ReadJobLog_FullMethodName          = "/forge.management.v1.ManagementService/ReadJobLog"
+	ManagementService_ListRepositories_FullMethodName    = "/forge.management.v1.ManagementService/ListRepositories"
+	ManagementService_ListIssues_FullMethodName          = "/forge.management.v1.ManagementService/ListIssues"
+	ManagementService_ListConnections_FullMethodName     = "/forge.management.v1.ManagementService/ListConnections"
+	ManagementService_AddConnection_FullMethodName       = "/forge.management.v1.ManagementService/AddConnection"
+	ManagementService_TestConnection_FullMethodName      = "/forge.management.v1.ManagementService/TestConnection"
+	ManagementService_RotateCredential_FullMethodName    = "/forge.management.v1.ManagementService/RotateCredential"
+	ManagementService_RemoveConnection_FullMethodName    = "/forge.management.v1.ManagementService/RemoveConnection"
+	ManagementService_ListWebhooks_FullMethodName        = "/forge.management.v1.ManagementService/ListWebhooks"
+	ManagementService_AddWebhook_FullMethodName          = "/forge.management.v1.ManagementService/AddWebhook"
+	ManagementService_RotateWebhookSecret_FullMethodName = "/forge.management.v1.ManagementService/RotateWebhookSecret"
+	ManagementService_RemoveWebhook_FullMethodName       = "/forge.management.v1.ManagementService/RemoveWebhook"
 )
 
 // ManagementServiceClient is the client API for ManagementService service.
@@ -40,7 +44,7 @@ const (
 // ManagementService sets up and inspects forge-tools. Every RPC requires the
 // management operator token in Authorization: Bearer metadata. Use TLS across
 // networks. Connection RPCs fail with UNIMPLEMENTED when no connector is
-// configured.
+// configured, and webhook RPCs when no forge-reactor is.
 type ManagementServiceClient interface {
 	// ListPipelines reads one page. GET /v1/pipelines?source=&repository=.
 	ListPipelines(ctx context.Context, in *ListPipelinesRequest, opts ...grpc.CallOption) (*ListPipelinesResponse, error)
@@ -79,6 +83,18 @@ type ManagementServiceClient interface {
 	// RemoveConnection deletes a connection and its credential.
 	// DELETE /v1/connections/{id}.
 	RemoveConnection(ctx context.Context, in *RemoveConnectionRequest, opts ...grpc.CallOption) (*RemoveConnectionResponse, error)
+	// ListWebhooks lists forge-reactor webhook sources, without secrets.
+	// GET /v1/webhooks.
+	ListWebhooks(ctx context.Context, in *ListWebhooksRequest, opts ...grpc.CallOption) (*ListWebhooksResponse, error)
+	// AddWebhook creates a webhook source with a new secret and, with
+	// register, the webhook on every repository. POST /v1/webhooks.
+	AddWebhook(ctx context.Context, in *AddWebhookRequest, opts ...grpc.CallOption) (*AddWebhookResponse, error)
+	// RotateWebhookSecret gives a managed source a new secret.
+	// POST /v1/webhooks/{id}:rotate.
+	RotateWebhookSecret(ctx context.Context, in *RotateWebhookSecretRequest, opts ...grpc.CallOption) (*RotateWebhookSecretResponse, error)
+	// RemoveWebhook deletes a managed source and its registered webhooks.
+	// DELETE /v1/webhooks/{id}.
+	RemoveWebhook(ctx context.Context, in *RemoveWebhookRequest, opts ...grpc.CallOption) (*RemoveWebhookResponse, error)
 }
 
 type managementServiceClient struct {
@@ -209,6 +225,46 @@ func (c *managementServiceClient) RemoveConnection(ctx context.Context, in *Remo
 	return out, nil
 }
 
+func (c *managementServiceClient) ListWebhooks(ctx context.Context, in *ListWebhooksRequest, opts ...grpc.CallOption) (*ListWebhooksResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListWebhooksResponse)
+	err := c.cc.Invoke(ctx, ManagementService_ListWebhooks_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *managementServiceClient) AddWebhook(ctx context.Context, in *AddWebhookRequest, opts ...grpc.CallOption) (*AddWebhookResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AddWebhookResponse)
+	err := c.cc.Invoke(ctx, ManagementService_AddWebhook_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *managementServiceClient) RotateWebhookSecret(ctx context.Context, in *RotateWebhookSecretRequest, opts ...grpc.CallOption) (*RotateWebhookSecretResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RotateWebhookSecretResponse)
+	err := c.cc.Invoke(ctx, ManagementService_RotateWebhookSecret_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *managementServiceClient) RemoveWebhook(ctx context.Context, in *RemoveWebhookRequest, opts ...grpc.CallOption) (*RemoveWebhookResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RemoveWebhookResponse)
+	err := c.cc.Invoke(ctx, ManagementService_RemoveWebhook_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ManagementServiceServer is the server API for ManagementService service.
 // All implementations must embed UnimplementedManagementServiceServer
 // for forward compatibility.
@@ -216,7 +272,7 @@ func (c *managementServiceClient) RemoveConnection(ctx context.Context, in *Remo
 // ManagementService sets up and inspects forge-tools. Every RPC requires the
 // management operator token in Authorization: Bearer metadata. Use TLS across
 // networks. Connection RPCs fail with UNIMPLEMENTED when no connector is
-// configured.
+// configured, and webhook RPCs when no forge-reactor is.
 type ManagementServiceServer interface {
 	// ListPipelines reads one page. GET /v1/pipelines?source=&repository=.
 	ListPipelines(context.Context, *ListPipelinesRequest) (*ListPipelinesResponse, error)
@@ -255,6 +311,18 @@ type ManagementServiceServer interface {
 	// RemoveConnection deletes a connection and its credential.
 	// DELETE /v1/connections/{id}.
 	RemoveConnection(context.Context, *RemoveConnectionRequest) (*RemoveConnectionResponse, error)
+	// ListWebhooks lists forge-reactor webhook sources, without secrets.
+	// GET /v1/webhooks.
+	ListWebhooks(context.Context, *ListWebhooksRequest) (*ListWebhooksResponse, error)
+	// AddWebhook creates a webhook source with a new secret and, with
+	// register, the webhook on every repository. POST /v1/webhooks.
+	AddWebhook(context.Context, *AddWebhookRequest) (*AddWebhookResponse, error)
+	// RotateWebhookSecret gives a managed source a new secret.
+	// POST /v1/webhooks/{id}:rotate.
+	RotateWebhookSecret(context.Context, *RotateWebhookSecretRequest) (*RotateWebhookSecretResponse, error)
+	// RemoveWebhook deletes a managed source and its registered webhooks.
+	// DELETE /v1/webhooks/{id}.
+	RemoveWebhook(context.Context, *RemoveWebhookRequest) (*RemoveWebhookResponse, error)
 	mustEmbedUnimplementedManagementServiceServer()
 }
 
@@ -300,6 +368,18 @@ func (UnimplementedManagementServiceServer) RotateCredential(context.Context, *R
 }
 func (UnimplementedManagementServiceServer) RemoveConnection(context.Context, *RemoveConnectionRequest) (*RemoveConnectionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveConnection not implemented")
+}
+func (UnimplementedManagementServiceServer) ListWebhooks(context.Context, *ListWebhooksRequest) (*ListWebhooksResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListWebhooks not implemented")
+}
+func (UnimplementedManagementServiceServer) AddWebhook(context.Context, *AddWebhookRequest) (*AddWebhookResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AddWebhook not implemented")
+}
+func (UnimplementedManagementServiceServer) RotateWebhookSecret(context.Context, *RotateWebhookSecretRequest) (*RotateWebhookSecretResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RotateWebhookSecret not implemented")
+}
+func (UnimplementedManagementServiceServer) RemoveWebhook(context.Context, *RemoveWebhookRequest) (*RemoveWebhookResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RemoveWebhook not implemented")
 }
 func (UnimplementedManagementServiceServer) mustEmbedUnimplementedManagementServiceServer() {}
 func (UnimplementedManagementServiceServer) testEmbeddedByValue()                           {}
@@ -538,6 +618,78 @@ func _ManagementService_RemoveConnection_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ManagementService_ListWebhooks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListWebhooksRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagementServiceServer).ListWebhooks(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ManagementService_ListWebhooks_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagementServiceServer).ListWebhooks(ctx, req.(*ListWebhooksRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ManagementService_AddWebhook_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddWebhookRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagementServiceServer).AddWebhook(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ManagementService_AddWebhook_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagementServiceServer).AddWebhook(ctx, req.(*AddWebhookRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ManagementService_RotateWebhookSecret_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RotateWebhookSecretRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagementServiceServer).RotateWebhookSecret(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ManagementService_RotateWebhookSecret_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagementServiceServer).RotateWebhookSecret(ctx, req.(*RotateWebhookSecretRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ManagementService_RemoveWebhook_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveWebhookRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagementServiceServer).RemoveWebhook(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ManagementService_RemoveWebhook_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagementServiceServer).RemoveWebhook(ctx, req.(*RemoveWebhookRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ManagementService_ServiceDesc is the grpc.ServiceDesc for ManagementService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -592,6 +744,22 @@ var ManagementService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RemoveConnection",
 			Handler:    _ManagementService_RemoveConnection_Handler,
+		},
+		{
+			MethodName: "ListWebhooks",
+			Handler:    _ManagementService_ListWebhooks_Handler,
+		},
+		{
+			MethodName: "AddWebhook",
+			Handler:    _ManagementService_AddWebhook_Handler,
+		},
+		{
+			MethodName: "RotateWebhookSecret",
+			Handler:    _ManagementService_RotateWebhookSecret_Handler,
+		},
+		{
+			MethodName: "RemoveWebhook",
+			Handler:    _ManagementService_RemoveWebhook_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -35,7 +35,7 @@ at startup. Choose one source per secret.
 | Flag                     | Environment suffix     | Default                                  |
 | ------------------------ | ---------------------- | ---------------------------------------- |
 | `--data-dir`             | `DATA_DIR`             | `./reactor-data`                         |
-| `--config`               | `CONFIG`               | none: no webhooks or polls               |
+| `--config`               | `CONFIG`               | none: no configured webhooks or polls    |
 | `--rabbitmq-url-file`    | `RABBITMQ_URL_FILE`    | none                                     |
 | `--rabbitmq-url-env`     | `RABBITMQ_URL_ENV`     | variable `FORGE_REACTOR_RABBITMQ_URL`    |
 | `--queue-prefix`         | `QUEUE_PREFIX`         | `forge-reactor.`                         |
@@ -43,20 +43,22 @@ at startup. Choose one source per secret.
 | `--grpc-listen`          | `GRPC_LISTEN`          | `127.0.0.1:9103`                         |
 | `--token-file`           | `TOKEN_FILE`           | none                                     |
 | `--token-env`            | `TOKEN_ENV`            | variable `FORGE_REACTOR_TOKEN`           |
-| `--connector-url`        | `CONNECTOR_URL`        | none; required for polls                 |
+| `--connector-url`        | `CONNECTOR_URL`        | none; required for polls and registering |
 | `--connector-token-file` | `CONNECTOR_TOKEN_FILE` | none                                     |
 | `--connector-token-env`  | `CONNECTOR_TOKEN_ENV`  | variable `FORGE_REACTOR_CONNECTOR_TOKEN` |
+| `--public-url`           | `PUBLIC_URL`           | none; required for registering webhooks  |
 | `--request-timeout`      | `REQUEST_TIMEOUT`      | `30s`                                    |
 
 The RabbitMQ user needs configure, write and read permission on queues
 starting with the prefix. Subscribers need only read on their own queue.
 The service declares and deletes queues as subscriptions come and go.
 
-The data directory holds `reactor.json` and a lock. Every change is written
+The data directory holds `reactor.json`, `sources.json` and a lock. Every change is written
 to a private temporary file, fsynced and renamed. Use a local filesystem
 supporting flock; one service owns the directory, and a second fails to start.
 Back the directory up; it holds subscriptions, pending deliveries, poll
-baselines and the deduplication window.
+baselines, the deduplication window and managed webhook sources with their
+secrets.
 
 ### Configuration
 
@@ -90,7 +92,7 @@ forge responses, and retried on the next round.
 
 ## Webhooks
 
-Point the forge at `POST /webhooks/{id}` on the HTTP listener, with
+Sources come from the configuration file or from the API. Point the forge at `POST /webhooks/{id}` on the HTTP listener, with
 content type `application/json` and the source's secret. GitHub must sign with
 `X-Hub-Signature-256`; Forgejo with `X-Forgejo-Signature`. Webhooks are not
 authenticated by the service token: the signature over the raw body is the
@@ -118,17 +120,21 @@ ignored is listed in the [tool README](../README.md#events).
 Every request requires `Authorization: Bearer <service token>` (gRPC metadata
 for gRPC). Responses are not cached.
 
-| RPC                  | REST endpoint                                   |
-| -------------------- | ----------------------------------------------- |
-| `PublishEvent`       | `POST /v1/events`                               |
-| `GetEvent`           | `GET /v1/events/{id}`                           |
-| `ListEvents`         | `GET /v1/events?types=…&origins=…&pageSize=…`   |
-| `CreateSubscription` | `POST /v1/subscriptions`                        |
-| `GetSubscription`    | `GET /v1/subscriptions/{id}`                    |
-| `ListSubscriptions`  | `GET /v1/subscriptions`                         |
-| `DeleteSubscription` | `DELETE /v1/subscriptions/{id}`                 |
-| `ListDeliveries`     | `GET /v1/deliveries?subscription=…&status=…`    |
-| `ReplayEvents`       | `POST /v1/subscriptions/{subscription}:replay`  |
+| RPC                   | REST endpoint                                  |
+| --------------------- | ---------------------------------------------- |
+| `PublishEvent`        | `POST /v1/events`                              |
+| `GetEvent`            | `GET /v1/events/{id}`                          |
+| `ListEvents`          | `GET /v1/events?types=…&origins=…&pageSize=…`  |
+| `CreateSubscription`  | `POST /v1/subscriptions`                       |
+| `GetSubscription`     | `GET /v1/subscriptions/{id}`                   |
+| `ListSubscriptions`   | `GET /v1/subscriptions`                        |
+| `DeleteSubscription`  | `DELETE /v1/subscriptions/{id}`                |
+| `ListDeliveries`      | `GET /v1/deliveries?subscription=…&status=…`   |
+| `ReplayEvents`        | `POST /v1/subscriptions/{subscription}:replay` |
+| `CreateWebhookSource` | `POST /v1/webhook-sources`                     |
+| `ListWebhookSources`  | `GET /v1/webhook-sources`                      |
+| `RotateWebhookSecret` | `POST /v1/webhook-sources/{id}:rotate`         |
+| `DeleteWebhookSource` | `DELETE /v1/webhook-sources/{id}`              |
 
 Create a subscription, then consume `forge-reactor.<id>` from RabbitMQ:
 
@@ -155,6 +161,29 @@ Replay retained events to one subscription by ID or by acceptance period:
 {"since":"2026-01-02T00:00:00Z","until":"2026-01-03T00:00:00Z"}
 ```
 
+### Managed webhook sources
+
+Create a webhook source at runtime. The reactor generates its secret and
+returns it only from create and rotate; listings never include it. IDs used
+in the configuration file are refused, and configured sources are listed as
+`managed: false`.
+
+```json
+{"id":"app","forge":"github","connection":"gh","repositories":["team/app"],"register":true}
+```
+
+With `register`, the reactor also creates the webhook on every repository,
+for pushes and pull requests, at `<public-url>/webhooks/<id>`. It uses a
+forge-connector session for the connection, so the connection's token must
+be allowed to manage repository webhooks. If any repository fails, the hooks
+already made and the source are removed again, and the call fails with
+`FAILED_PRECONDITION`; so does a missing public URL or connector.
+
+Rotating sends the new secret to every registered webhook, and deleting
+removes them. Repositories where that failed are returned in
+`failedRepositories`: after a rotation they still have the old secret, so
+rotate again; after a delete, remove the webhook on the forge by hand.
+
 Delivery statuses are `pending`, `broker_accepted`, `failed` and `cancelled`.
 Each delivery lists its hand-off attempts. Consumer processing is tracked only
 by RabbitMQ.
@@ -163,11 +192,13 @@ by RabbitMQ.
 doubles over REST and gRPC. RabbitMQ messages carry the stored JSON exactly.
 
 Errors expose a status class, never raw input: invalid arguments, filters or
-page tokens → `INVALID_ARGUMENT`/400; unknown events or subscriptions →
-`NOT_FOUND`/404; an existing subscription ID → `ALREADY_EXISTS`/409; replay
-periods before retained history → `OUT_OF_RANGE`/400; a full delivery backlog →
-`UNAVAILABLE`/503; missing or wrong service token → `UNAUTHENTICATED`/401;
-storage failure → `INTERNAL`/500.
+page tokens → `INVALID_ARGUMENT`/400; unknown events, subscriptions or
+sources → `NOT_FOUND`/404; an existing subscription or source ID →
+`ALREADY_EXISTS`/409; failed or unconfigured webhook registration →
+`FAILED_PRECONDITION`/400; replay periods before retained history →
+`OUT_OF_RANGE`/400; a full delivery backlog → `UNAVAILABLE`/503; missing or
+wrong service token → `UNAUTHENTICATED`/401; storage failure →
+`INTERNAL`/500.
 
 REST request bodies are capped at 1 MiB. SIGINT/SIGTERM stop the poller and
 dispatcher and drain the servers for five seconds. Listeners use plaintext; use

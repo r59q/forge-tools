@@ -1,7 +1,8 @@
 // Package management sets up and inspects forge-tools. It manages
-// forge-connector connections and lists repositories through
-// forge-repositories, issues through forge-issues and pipelines through
-// forge-actions, without widening the visibility of their credentials.
+// forge-connector connections and forge-reactor webhook sources, and lists
+// repositories through forge-repositories, issues through forge-issues and
+// pipelines through forge-actions, without widening the visibility of their
+// credentials.
 package management
 
 import (
@@ -48,6 +49,8 @@ type Config struct {
 	Pipelines PipelineReader
 	// Connector manages forge connections, such as a broker admin client.
 	Connector ConnectorAdmin
+	// Webhooks manages forge-reactor webhook sources.
+	Webhooks WebhookManager
 }
 
 // Client manages the configured capabilities. It is safe for concurrent use
@@ -57,6 +60,7 @@ type Client struct {
 	issues       IssueReader
 	pipelines    PipelineReader
 	connector    ConnectorAdmin
+	webhooks     WebhookManager
 }
 
 // New constructs a client for the configured capabilities.
@@ -66,6 +70,7 @@ func New(config Config) *Client {
 		issues:       config.Issues,
 		connector:    config.Connector,
 		pipelines:    config.Pipelines,
+		webhooks:     config.Webhooks,
 	}
 }
 

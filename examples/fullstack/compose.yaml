@@ -136,6 +136,8 @@ services:
       FORGE_REACTOR_CONFIG: /config/reactor.json
       # Named by secretEnv in reactor.json.
       FORGE_REACTOR_WEBHOOK_SECRET: ${FORGE_REACTOR_WEBHOOK_SECRET:?set in .env}
+      # Where forges reach the reactor; needed to register webhooks.
+      FORGE_REACTOR_PUBLIC_URL: ${FORGE_REACTOR_PUBLIC_URL:-}
     volumes:
       - reactor-data:/data
       - ${FORGE_REACTOR_CONFIG_FILE:-./reactor.json}:/config/reactor.json:ro
@@ -170,6 +172,9 @@ services:
       FORGE_MANAGEMENT_ISSUES_INSECURE: "true"
       FORGE_MANAGEMENT_ISSUES_TOKEN: ${FORGE_ISSUES_TOKEN:?set in .env}
       FORGE_MANAGEMENT_REACTOR_CONNECTOR_TOKEN: ${FORGE_REACTOR_CONNECTOR_TOKEN:?set in .env}
+      FORGE_MANAGEMENT_REACTOR_ADDRESS: reactor:9090
+      FORGE_MANAGEMENT_REACTOR_INSECURE: "true"
+      FORGE_MANAGEMENT_REACTOR_TOKEN: ${FORGE_REACTOR_TOKEN:?set in .env}
     ports:
       - "127.0.0.1:8083:8080"
       - "127.0.0.1:9093:9090"

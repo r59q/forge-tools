@@ -11,12 +11,13 @@ import (
 	"github.com/r59q/forge-tools/forge-core/forgeapi/forgeauth"
 	"github.com/r59q/forge-tools/forge-core/servicekit"
 	"github.com/r59q/forge-tools/forge-reactor/library/reactor"
+	"github.com/r59q/forge-tools/forge-reactor/library/sources"
 	pb "github.com/r59q/forge-tools/forge-reactor/service/reactorpb"
 	"google.golang.org/grpc/codes"
 )
 
-// ErrInvalid means New was given no reactor or token, or a nonpositive
-// timeout.
+// ErrInvalid means New was given no reactor, sources or token, or a
+// nonpositive timeout.
 var ErrInvalid = errors.New("api: invalid configuration")
 
 // Server authenticates every RPC, including direct grpc-gateway dispatch.
@@ -25,18 +26,20 @@ var ErrInvalid = errors.New("api: invalid configuration")
 type Server struct {
 	pb.UnimplementedReactorServiceServer
 	reactor *reactor.Reactor
+	sources *Sources
 	token   forgeauth.Credentials
 	timeout time.Duration
 }
 
-// New returns a server over r. Callers must present the token from token as
-// Authorization: Bearer. Each RPC runs for at most timeout.
-func New(r *reactor.Reactor, token forgeauth.Credentials, timeout time.Duration) (*Server, error) {
-	if r == nil || token == nil || timeout <= 0 {
+// New returns a server over r and its webhook sources. Callers must present
+// the token from token as Authorization: Bearer. Each RPC runs for at most
+// timeout.
+func New(r *reactor.Reactor, sources *Sources, token forgeauth.Credentials, timeout time.Duration) (*Server, error) {
+	if r == nil || sources == nil || token == nil || timeout <= 0 {
 		return nil, ErrInvalid
 	}
 
-	return &Server{reactor: r, token: token, timeout: timeout}, nil
+	return &Server{reactor: r, sources: sources, token: token, timeout: timeout}, nil
 }
 
 // REST returns the generated routes behind servicekit.Secure. Only
@@ -69,8 +72,9 @@ func call[T any](s *Server, ctx context.Context, fn func(context.Context, *react
 	}, fn)
 }
 
-// code maps context and reactor errors to a status code. A full delivery
-// backlog is Unavailable, so callers retry later.
+// code maps context, reactor and source errors to a status code. A full
+// delivery backlog is Unavailable, so callers retry later. Registration that
+// is not configured or that the forge refused is FailedPrecondition.
 func code(err error) codes.Code {
 	switch {
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
@@ -85,6 +89,8 @@ func code(err error) codes.Code {
 		return codes.OutOfRange
 	case errors.Is(err, reactor.ErrBusy):
 		return codes.Unavailable
+	case errors.Is(err, sources.ErrNotConfigured), errors.Is(err, sources.ErrRegistration):
+		return codes.FailedPrecondition
 	}
 
 	return codes.Internal

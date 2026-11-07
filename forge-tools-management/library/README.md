@@ -55,6 +55,16 @@ real broker against fake forges; no services or live credentials are needed.
 This is a library; run the [service](../service/) for REST, gRPC and the web
 interface.
 
+## Webhooks
+
+Set `Config.Webhooks` to a `WebhookManager`, such as a forge-reactor
+adapter. `ListWebhooks` returns every source and a configured flag.
+`AddWebhook` takes the forge from the named connection when a connector is
+configured, and returns the generated secret. `RotateWebhook` returns a new
+secret, and `RemoveWebhook` the repositories whose forge webhook remained.
+Errors are `ErrInvalid`, `ErrNotFound`, `ErrExists`, `ErrRegistration`,
+`ErrNotConfigured` or `ErrUnavailable`.
+
 ## Pipelines
 
 Set `Config.Pipelines` to an `actions.Client` or `PipelineReader` adapter.

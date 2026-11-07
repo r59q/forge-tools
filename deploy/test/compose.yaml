@@ -1,0 +1,178 @@
+# The test environment: every service from its published image, without the
+# explorer. nginx serves the REST APIs on port 6080; see README.md.
+name: forge-tools-test
+
+services:
+  # Serves each service's REST API at /<service>/, on loopback for the
+  # server's own TLS proxy.
+  nginx:
+    image: nginx:1.30-alpine@sha256:583b7f2fce1cdb8da5ad5c39ebd3c33b98b87d493190e548bdee1fa8c619c311
+    restart: unless-stopped
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "${FORGE_HTTP_PUBLISH:-127.0.0.1:6080}:8080"
+
+  # Stores forge connections and their encrypted tokens.
+  broker:
+    image: ghcr.io/r59q/forge-connector-broker:${FORGE_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      FORGE_BROKER_KEY: ${FORGE_BROKER_KEY:?set in .env}
+      FORGE_BROKER_ADMIN_TOKEN: ${FORGE_BROKER_ADMIN_TOKEN:?set in .env}
+    volumes:
+      - broker-data:/data
+
+  # Calls forges for the other services, with tokens from the broker.
+  proxy:
+    image: ghcr.io/r59q/forge-connector-proxy:${FORGE_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      FORGE_PROXY_BROKER_ADDR: broker:9090
+      FORGE_PROXY_TOKEN: ${FORGE_PROXY_TOKEN:?set in .env}
+      FORGE_PROXY_DOWNLOAD_HOSTS: "*.blob.core.windows.net,*.actions.githubusercontent.com"
+      # forge-code pushes its writes through the proxy.
+      FORGE_PROXY_ALLOW_GIT_PUSH: "true"
+
+  # Manages connections and registers the broker clients below at startup.
+  management:
+    image: ghcr.io/r59q/forge-tools-management-service:${FORGE_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      FORGE_MANAGEMENT_TOKEN: ${FORGE_MANAGEMENT_TOKEN:?set in .env}
+      FORGE_MANAGEMENT_CONNECTOR_ADDRESS: broker:9090
+      FORGE_MANAGEMENT_CONNECTOR_INSECURE: "true"
+      FORGE_MANAGEMENT_CONNECTOR_ADMIN_TOKEN: ${FORGE_BROKER_ADMIN_TOKEN:?set in .env}
+      FORGE_MANAGEMENT_PROXY_TOKEN: ${FORGE_PROXY_TOKEN:?set in .env}
+      FORGE_MANAGEMENT_REPOSITORIES_CONNECTOR_TOKEN: ${FORGE_REPOSITORIES_CONNECTOR_TOKEN:?set in .env}
+      FORGE_MANAGEMENT_ISSUES_CONNECTOR_TOKEN: ${FORGE_ISSUES_CONNECTOR_TOKEN:?set in .env}
+      FORGE_MANAGEMENT_CHECKOUTS_CONNECTOR_TOKEN: ${FORGE_CHECKOUTS_CONNECTOR_TOKEN:?set in .env}
+      FORGE_MANAGEMENT_ACTIONS_CONNECTOR_TOKEN: ${FORGE_ACTIONS_CONNECTOR_TOKEN:?set in .env}
+      FORGE_MANAGEMENT_REACTOR_CONNECTOR_TOKEN: ${FORGE_REACTOR_CONNECTOR_TOKEN:?set in .env}
+      FORGE_MANAGEMENT_CODE_CONNECTOR_TOKEN: ${FORGE_CODE_CONNECTOR_TOKEN:?set in .env}
+      FORGE_MANAGEMENT_CHANGES_CONNECTOR_TOKEN: ${FORGE_CHANGES_CONNECTOR_TOKEN:?set in .env}
+      FORGE_MANAGEMENT_REVIEW_CONNECTOR_TOKEN: ${FORGE_REVIEW_CONNECTOR_TOKEN:?set in .env}
+      FORGE_MANAGEMENT_REPOSITORIES_ADDRESS: repositories:9090
+      FORGE_MANAGEMENT_REPOSITORIES_INSECURE: "true"
+      FORGE_MANAGEMENT_REPOSITORIES_TOKEN: ${FORGE_REPOSITORIES_TOKEN:?set in .env}
+      FORGE_MANAGEMENT_ISSUES_ADDRESS: issues:9090
+      FORGE_MANAGEMENT_ISSUES_INSECURE: "true"
+      FORGE_MANAGEMENT_ISSUES_TOKEN: ${FORGE_ISSUES_TOKEN:?set in .env}
+      FORGE_MANAGEMENT_ACTIONS_ADDRESS: actions:9090
+      FORGE_MANAGEMENT_ACTIONS_INSECURE: "true"
+      FORGE_MANAGEMENT_ACTIONS_TOKEN: ${FORGE_ACTIONS_TOKEN:?set in .env}
+
+  repositories:
+    image: ghcr.io/r59q/forge-repositories-service:${FORGE_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      FORGE_REPOSITORIES_TOKEN: ${FORGE_REPOSITORIES_TOKEN:?set in .env}
+      FORGE_REPOSITORIES_CONNECTOR_URL: http://proxy:8081
+      FORGE_REPOSITORIES_CONNECTOR_TOKEN: ${FORGE_REPOSITORIES_CONNECTOR_TOKEN:?set in .env}
+
+  issues:
+    image: ghcr.io/r59q/forge-issues-service:${FORGE_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      FORGE_ISSUES_TOKEN: ${FORGE_ISSUES_TOKEN:?set in .env}
+      FORGE_ISSUES_CONNECTOR_URL: http://proxy:8081
+      FORGE_ISSUES_CONNECTOR_TOKEN: ${FORGE_ISSUES_CONNECTOR_TOKEN:?set in .env}
+
+  actions:
+    image: ghcr.io/r59q/forge-actions-service:${FORGE_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      FORGE_ACTIONS_TOKEN: ${FORGE_ACTIONS_TOKEN:?set in .env}
+      FORGE_ACTIONS_CONNECTOR_URL: http://proxy:8081
+      FORGE_ACTIONS_CONNECTOR_TOKEN: ${FORGE_ACTIONS_CONNECTOR_TOKEN:?set in .env}
+
+  checkouts:
+    image: ghcr.io/r59q/forge-checkouts-service:${FORGE_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      FORGE_CHECKOUTS_TOKEN: ${FORGE_CHECKOUTS_TOKEN:?set in .env}
+      FORGE_CHECKOUTS_CONNECTOR_URL: http://proxy:8081
+      FORGE_CHECKOUTS_CONNECTOR_TOKEN: ${FORGE_CHECKOUTS_CONNECTOR_TOKEN:?set in .env}
+    volumes:
+      - checkouts-data:/data
+
+  code:
+    image: ghcr.io/r59q/forge-code-service:${FORGE_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      FORGE_CODE_TOKEN: ${FORGE_CODE_TOKEN:?set in .env}
+      FORGE_CODE_CONNECTOR_URL: http://proxy:8081
+      FORGE_CODE_CONNECTOR_TOKEN: ${FORGE_CODE_CONNECTOR_TOKEN:?set in .env}
+
+  changes:
+    image: ghcr.io/r59q/forge-changes-service:${FORGE_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      FORGE_CHANGES_TOKEN: ${FORGE_CHANGES_TOKEN:?set in .env}
+      FORGE_CHANGES_CONNECTOR_URL: http://proxy:8081
+      FORGE_CHANGES_CONNECTOR_TOKEN: ${FORGE_CHANGES_CONNECTOR_TOKEN:?set in .env}
+
+  review:
+    image: ghcr.io/r59q/forge-review-service:${FORGE_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      FORGE_REVIEW_TOKEN: ${FORGE_REVIEW_TOKEN:?set in .env}
+      FORGE_REVIEW_CONNECTOR_URL: http://proxy:8081
+      FORGE_REVIEW_CONNECTOR_TOKEN: ${FORGE_REVIEW_CONNECTOR_TOKEN:?set in .env}
+    volumes:
+      - review-data:/data
+
+  pipeprint:
+    image: ghcr.io/r59q/forge-pipeprint-service:${FORGE_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      FORGE_PIPEPRINT_TOKEN: ${FORGE_PIPEPRINT_TOKEN:?set in .env}
+
+  # Queues reactor deliveries. Only reachable from the server itself; see
+  # README.md. The fixed hostname keeps its data across recreation.
+  rabbitmq:
+    image: rabbitmq:4-management@sha256:af6f50d38098d8bd52fef7f3fa85015dd8b2bf6def58e995bf584ae9ba0f6407
+    hostname: rabbitmq
+    restart: unless-stopped
+    environment:
+      # Applied only when the volume is new.
+      RABBITMQ_DEFAULT_USER: reactor
+      RABBITMQ_DEFAULT_PASS: ${FORGE_REACTOR_RABBITMQ_PASSWORD:?set in .env}
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    ports:
+      - "${FORGE_AMQP_PUBLISH:-127.0.0.1:5672}:5672"
+      - "${FORGE_RABBITMQ_UI_PUBLISH:-127.0.0.1:15672}:15672"
+
+  # Turns webhooks, branch polls and published events into RabbitMQ
+  # deliveries. deploy.sh writes reactor.json from the connections.
+  reactor:
+    image: ghcr.io/r59q/forge-reactor-service:${FORGE_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      FORGE_REACTOR_TOKEN: ${FORGE_REACTOR_TOKEN:?set in .env}
+      FORGE_REACTOR_RABBITMQ_URL: amqp://reactor:${FORGE_REACTOR_RABBITMQ_PASSWORD:?set in .env}@rabbitmq:5672/
+      FORGE_REACTOR_CONNECTOR_URL: http://proxy:8081
+      FORGE_REACTOR_CONNECTOR_TOKEN: ${FORGE_REACTOR_CONNECTOR_TOKEN:?set in .env}
+      FORGE_REACTOR_CONFIG: /config/reactor.json
+      # Named by secretEnv in reactor.json.
+      FORGE_REACTOR_GITHUB_WEBHOOK_SECRET: ${FORGE_REACTOR_GITHUB_WEBHOOK_SECRET:?set in .env}
+      FORGE_REACTOR_FORGEJO_WEBHOOK_SECRET: ${FORGE_REACTOR_FORGEJO_WEBHOOK_SECRET:?set in .env}
+    volumes:
+      - reactor-data:/data
+      - ./reactor.json:/config/reactor.json:ro
+
+volumes:
+  broker-data:
+  checkouts-data:
+  review-data:
+  rabbitmq-data:
+  reactor-data:

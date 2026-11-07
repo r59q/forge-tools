@@ -20,6 +20,8 @@ public.
 - `scripts/`: development scripts, e.g. `scripts/fullstack.sh` to start,
   stop and clear the full-stack example, and `scripts/integration-test.sh`
   to test it against a forge.
+- `deploy/`: deployments of the published images, e.g. `deploy/test/` for
+  the test environment.
 - Root config files, such as `.editorconfig`, are shared by all projects.
 
 ## Tools

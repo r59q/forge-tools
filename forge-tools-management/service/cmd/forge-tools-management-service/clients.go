@@ -19,6 +19,8 @@ type serviceClient struct {
 	name           string
 	canIssueTokens bool
 	file, env      string
+	// defaultEnv is the variable read when no token source is set.
+	defaultEnv string
 	// optional marks the default environment source, skipped when unset.
 	optional bool
 	token    forgeauth.StaticToken

@@ -1,0 +1,98 @@
+name: deploy-test
+
+# Deploys the published service images to the test environment, over
+# WireGuard and SSH; see deploy/test/README.md. Runs after a service image is
+# published from master, and when the deployment changes. It needs secrets,
+# so it never runs on pull requests.
+on:
+  workflow_run:
+    workflows:
+      - forge-connector-broker
+      - forge-connector-proxy
+      - forge-tools-management-service
+      - forge-repositories-service
+      - forge-issues-service
+      - forge-actions-service
+      - forge-checkouts-service
+      - forge-code-service
+      - forge-changes-service
+      - forge-review-service
+      - forge-pipeprint-service
+      - forge-reactor-service
+    types: [completed]
+    branches: [master]
+  push:
+    branches: [master]
+    paths:
+      - deploy/test/**
+      - .github/workflows/deploy-test.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One deploy at a time; a newer pending run replaces an older one.
+concurrency:
+  group: deploy-test
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # workflow_run also follows pull request runs, even from forks. Deploy
+    # only after successful pushes to this repository.
+    if: >-
+      github.event_name != 'workflow_run' || (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Connect to WireGuard
+        env:
+          WG_CONFIG: ${{ secrets.WG_CONFIG }}
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q wireguard-tools
+          # DNS lines need resolvconf, and the server is reached by IP.
+          printf '%s\n' "$WG_CONFIG" | sed '/^[[:space:]]*DNS[[:space:]]*=/d' |
+            sudo sh -c 'umask 077 && cat > /etc/wireguard/wg0.conf'
+          sudo wg-quick up wg0
+      - name: Configure SSH
+        env:
+          SSH_HOST: ${{ secrets.WG_IP_ADDR }}
+          SSH_USER: ${{ secrets.SSH_USER_TEST }}
+          SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY_TEST }}
+        # WireGuard authenticates the server, so its host key is trusted on
+        # first use.
+        run: |
+          mkdir -p -m 700 ~/.ssh
+          (umask 077 && printf '%s\n' "$SSH_KEY" > ~/.ssh/test_key)
+          cat >> ~/.ssh/config <<EOF
+          Host test
+            HostName $SSH_HOST
+            User $SSH_USER
+            IdentityFile ~/.ssh/test_key
+            IdentitiesOnly yes
+            StrictHostKeyChecking accept-new
+            ConnectTimeout 30
+          EOF
+      - name: Deploy
+        env:
+          DEPLOY_SSH: test
+          DEPLOY_URL: ${{ secrets.ENVIRONMENT_URL_TEST }}
+          TEST_GITHUB_TOKEN: ${{ secrets.GH_TEST_REPO_PAT }}
+          TEST_GITLAB_TOKEN: ${{ secrets.GL_TEST_REPO_PAT }}
+          TEST_FORGEJO_TOKEN: ${{ secrets.FJ_TEST_REPO_PAT }}
+          TEST_FORGEJO_HOST: ${{ secrets.FJ_TEST_REPO_DOMAIN }}
+          TEST_FORGEJO_REPOSITORY: gitmyagent/test-repo
+        run: deploy/test/deploy.sh
+      - name: Show logs
+        if: failure()
+        run: ssh test 'cd forge-tools-test && docker compose logs --tail 200'
+      - name: Disconnect WireGuard
+        if: always()
+        run: sudo wg-quick down wg0 || true

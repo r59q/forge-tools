@@ -82,6 +82,11 @@ apply right away, without restarts.
 For a GitHub token, open *Settings → Developer settings → Personal access
 tokens*. GitLab and Forgejo have personal access tokens in user settings.
 
+To skip the manual steps, set `GITHUB_TOKEN` or `FORGEJO_TOKEN` before
+`scripts/fullstack.sh start`. It adds connections named `github` and
+`forgejo` if they are missing. Set `FORGEJO_HOSTNAME` for a Forgejo other than
+`codeberg.org`. This needs `curl` and `jq`.
+
 ## Notes
 
 - Management, checkouts, actions, explorer, pipeprint, the reactor and RabbitMQ are reachable from the host, on `127.0.0.1`. The other

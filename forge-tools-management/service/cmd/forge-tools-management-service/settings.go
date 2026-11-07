@@ -82,12 +82,16 @@ func clientFlags(fs *flag.FlagSet, env environment) []serviceClient {
 		{"forge-checkouts", "checkouts-connector", "CHECKOUTS_CONNECTOR", false},
 		{"forge-actions", "actions-connector", "ACTIONS_CONNECTOR", false},
 		{"forge-reactor", "reactor-connector", "REACTOR_CONNECTOR", false},
+		{"forge-code", "code-connector", "CODE_CONNECTOR", false},
+		{"forge-changes", "changes-connector", "CHANGES_CONNECTOR", false},
+		{"forge-review", "review-connector", "REVIEW_CONNECTOR", false},
 	}
 	clients := make([]serviceClient, len(definitions))
 	for i, definition := range definitions {
 		client := &clients[i]
 		client.name = definition.name
 		client.canIssueTokens = definition.canIssueTokens
+		client.defaultEnv = "FORGE_MANAGEMENT_" + definition.envPrefix + "_TOKEN"
 		fs.StringVar(
 			&client.file,
 			definition.flagPrefix+"-token-file",
@@ -103,25 +107,6 @@ func clientFlags(fs *flag.FlagSet, env environment) []serviceClient {
 	}
 
 	return clients
-}
-
-func clientDefaultEnv(name string) string {
-	switch name {
-	case "forge-connector-proxy":
-		return "FORGE_MANAGEMENT_PROXY_TOKEN"
-	case "forge-repositories":
-		return "FORGE_MANAGEMENT_REPOSITORIES_CONNECTOR_TOKEN"
-	case "forge-issues":
-		return "FORGE_MANAGEMENT_ISSUES_CONNECTOR_TOKEN"
-	case "forge-checkouts":
-		return "FORGE_MANAGEMENT_CHECKOUTS_CONNECTOR_TOKEN"
-	case "forge-actions":
-		return "FORGE_MANAGEMENT_ACTIONS_CONNECTOR_TOKEN"
-	case "forge-reactor":
-		return "FORGE_MANAGEMENT_REACTOR_CONNECTOR_TOKEN"
-	default:
-		return ""
-	}
 }
 
 func (s *settings) configureTransports(values *transportSettings) error {
@@ -215,7 +200,7 @@ func (s *settings) configureClients(clients []serviceClient) error {
 			return fmt.Errorf("choose one %s client token source", c.name)
 		}
 		if c.file == "" && c.env == "" {
-			c.env, c.optional = clientDefaultEnv(c.name), true
+			c.env, c.optional = c.defaultEnv, true
 		}
 	}
 

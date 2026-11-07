@@ -65,7 +65,7 @@ func TestSettings(t *testing.T) {
 	}
 
 	s, err = parse([]string{"--connector-address=broker:9090", "--connector-insecure=true", "--proxy-token-file=/p"}, getenv, io.Discard)
-	if err != nil || s.connectorTokenEnv != "FORGE_MANAGEMENT_CONNECTOR_ADMIN_TOKEN" || !s.connectorInsecure || len(s.clients) != 6 {
+	if err != nil || s.connectorTokenEnv != "FORGE_MANAGEMENT_CONNECTOR_ADMIN_TOKEN" || !s.connectorInsecure || len(s.clients) != 9 {
 		t.Fatalf("connector settings: %+v %v", s, err)
 	}
 	if p, r, i := s.clients[0], s.clients[1], s.clients[2]; p.file != "/p" ||
@@ -80,6 +80,13 @@ func TestSettings(t *testing.T) {
 	if x := s.clients[5]; x.name != "forge-reactor" ||
 		x.env != "FORGE_MANAGEMENT_REACTOR_CONNECTOR_TOKEN" || !x.optional || x.canIssueTokens {
 		t.Fatalf("reactor client: %+v", x)
+	}
+	for i, name := range []string{"CODE", "CHANGES", "REVIEW"} {
+		c := s.clients[6+i]
+		if c.name != "forge-"+strings.ToLower(name) ||
+			c.env != "FORGE_MANAGEMENT_"+name+"_CONNECTOR_TOKEN" || !c.optional || c.canIssueTokens {
+			t.Fatalf("%s client: %+v", c.name, c)
+		}
 	}
 
 	s, err = parse([]string{"--connector-address=broker:9090", "--checkouts-connector-token-file=/w"}, getenv, io.Discard)
@@ -100,6 +107,8 @@ func TestSettings(t *testing.T) {
 		{"--checkouts-connector-token-env=T"},
 		{"--reactor-connector-token-env=T"},
 		{"--connector-address=x", "--reactor-connector-token-file=t", "--reactor-connector-token-env=T"},
+		{"--code-connector-token-env=T"},
+		{"--connector-address=x", "--review-connector-token-file=t", "--review-connector-token-env=T"},
 		{"--connector-address=x", "--checkouts-connector-token-file=t", "--checkouts-connector-token-env=T"},
 	} {
 		if _, err := parse(args, getenv, io.Discard); err == nil {

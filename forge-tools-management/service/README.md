@@ -81,6 +81,9 @@ connection, including ones added later:
 | `--checkouts-connector-token-*`    | `forge-checkouts`                               |
 | `--actions-connector-token-*`      | `forge-actions`                                 |
 | `--reactor-connector-token-*`      | `forge-reactor`                                 |
+| `--code-connector-token-*`         | `forge-code`                                    |
+| `--changes-connector-token-*`      | `forge-changes`                                 |
+| `--review-connector-token-*`       | `forge-review`                                  |
 
 If the broker does not yet accept a token, management replaces the client of
 that name with one using the token, so changing a token and restarting
@@ -116,6 +119,12 @@ errors. Without a token setting, nothing is registered.
 | `--checkouts-connector-token-env`     | `FORGE_MANAGEMENT_CHECKOUTS_CONNECTOR_TOKEN_ENV`     | `FORGE_MANAGEMENT_CHECKOUTS_CONNECTOR_TOKEN`, if set, when connected    |
 | `--reactor-connector-token-file`      | `FORGE_MANAGEMENT_REACTOR_CONNECTOR_TOKEN_FILE`      | none                                                                    |
 | `--reactor-connector-token-env`       | `FORGE_MANAGEMENT_REACTOR_CONNECTOR_TOKEN_ENV`       | `FORGE_MANAGEMENT_REACTOR_CONNECTOR_TOKEN`, if set, when connected      |
+| `--code-connector-token-file`         | `FORGE_MANAGEMENT_CODE_CONNECTOR_TOKEN_FILE`         | none                                                                    |
+| `--code-connector-token-env`          | `FORGE_MANAGEMENT_CODE_CONNECTOR_TOKEN_ENV`          | `FORGE_MANAGEMENT_CODE_CONNECTOR_TOKEN`, if set, when connected         |
+| `--changes-connector-token-file`      | `FORGE_MANAGEMENT_CHANGES_CONNECTOR_TOKEN_FILE`      | none                                                                    |
+| `--changes-connector-token-env`       | `FORGE_MANAGEMENT_CHANGES_CONNECTOR_TOKEN_ENV`       | `FORGE_MANAGEMENT_CHANGES_CONNECTOR_TOKEN`, if set, when connected      |
+| `--review-connector-token-file`       | `FORGE_MANAGEMENT_REVIEW_CONNECTOR_TOKEN_FILE`       | none                                                                    |
+| `--review-connector-token-env`        | `FORGE_MANAGEMENT_REVIEW_CONNECTOR_TOKEN_ENV`        | `FORGE_MANAGEMENT_REVIEW_CONNECTOR_TOKEN`, if set, when connected       |
 | `--issues-address`                    | `FORGE_MANAGEMENT_ISSUES_ADDRESS`                    | none                                                                    |
 | `--issues-token-file`                 | `FORGE_MANAGEMENT_ISSUES_TOKEN_FILE`                 | none                                                                    |
 | `--issues-token-env`                  | `FORGE_MANAGEMENT_ISSUES_TOKEN_ENV`                  | `FORGE_MANAGEMENT_ISSUES_TOKEN` when connected                          |

@@ -1,6 +1,7 @@
 #!/bin/sh
 # Runs on the server. Adds a random value to .env for every missing secret,
-# and never changes existing ones. Creates an empty reactor.json if missing.
+# and never changes existing ones. Creates an empty reactor.json and the proxy
+# network if missing.
 set -eu
 cd "$(dirname "$0")"
 umask 077
@@ -29,6 +30,12 @@ done
 
 # Compose would mount a missing file as a directory.
 if [ ! -e reactor.json ]; then
-  umask 022
-  echo '{"webhooks": [], "polls": []}' > reactor.json
+  (umask 022 && echo '{"webhooks": [], "polls": []}' > reactor.json)
+fi
+
+# The network nginx shares with the TLS proxy.
+network=$(sed -n 's/^FORGE_PROXY_NETWORK=//p' .env)
+network=${network:-proxy}
+if ! docker network inspect "$network" >/dev/null 2>&1; then
+  docker network create "$network" >/dev/null
 fi

@@ -39,9 +39,15 @@ type Checkout struct {
 	State      string     `json:"state"`
 	CreatedAt  time.Time  `json:"created_at"`
 	Location   string     `json:"location"`
+	Mode       string     `json:"mode"`
 }
 
 const (
+	// Worktree shares Git metadata with the source and requires trusted writers.
+	Worktree = "worktree"
+	// Isolated keeps writable Git metadata separate from the managed cache.
+	Isolated = "isolated"
+
 	// Creating marks a checkout being prepared.
 	Creating = "creating"
 	// Ready marks a successfully prepared checkout.
@@ -55,9 +61,11 @@ const (
 )
 
 // Input selects a repository and branch, tag or commit. Empty Reference means HEAD.
+// Mode defaults to Worktree. Isolated requires a connected repository.
 type Input struct {
 	Repository Repository
 	Reference  string
+	Mode       string
 }
 
 // File reports index and working-tree status using Git's porcelain status codes.

@@ -1,6 +1,6 @@
 # forge-checkouts library
 
-Manages independent working copies using Git worktrees on Unix. Requires Go 1.27
+Manages Git worktrees and isolated repositories on Unix. Requires Go 1.27
 and Git on `PATH`. From this directory:
 
 ```sh
@@ -38,6 +38,22 @@ the current branch if a consumer attached one, and Git porcelain file statuses.
 each. Untracked/ignored contents are excluded from patches but listed in status.
 Submodules and Git LFS content are not downloaded automatically.
 
+`Input.Mode` and `Checkout.Mode` are `worktree` (the default) or `isolated`.
+Worktrees share refs, config and objects with their source and require trusted
+writers. Isolated copies have their own `.git`, refs, index, config, hooks and new
+objects. Plain Git commit, rebase, stash, bisect, log and blame work in the copy.
+Its object alternates borrow from the managed cache. Isolated mode rejects local
+sources with `ErrInvalid`: their owners may prune objects at any time, and this
+tool must not pin refs in caller-owned repositories.
+
+For an isolated connected copy, set `Mode: checkouts.Isolated` alongside
+`Repository{Source: "connection-id", Path: "owner/repo"}`. The cache holds
+`refs/checkouts/<id>` at the initial revision until removal, including for failed
+copies. Creation records its intent before pinning and creates files only after
+the pin and revision are saved. Restart reconciles pins with records, removing
+orphan refs and restoring missing pins before serving operations. Future cache
+cleanup must preserve these refs and serialize with creation/removal.
+
 `List`, `Get` and `Retain` operate on saved metadata. States are `creating`,
 `ready`, `retained`, `removing` and `failed`. There is no expiry: even ordinary
 ready checkouts remain until explicitly removed. `Remove` refuses staged,
@@ -68,6 +84,8 @@ creations/removals become `failed` on restart. Partial files remain available fo
 inspection and explicit removal; a failed creation is never marked ready.
 
 - `copies/<id>` contains tool-owned worktrees. Only these are removed.
+- In isolated mode, `copies/<id>` instead contains a repository with its own `.git`.
+- `shadows/` holds disposable, host-owned Git directories used for isolated reads.
 - `repositories/<hash>` contains tool-owned connected bare caches, reused by
   source ID and repository path. Caches remain after checkout removal.
 - Local repositories stay caller-owned. Their canonical common Git directory is
@@ -75,7 +93,23 @@ inspection and explicit removal; a failed creation is never marked ready.
   branches, checkouts and working files remain untouched.
 
 Back up metadata and files together. Keep existing local repositories, their
-configuration and the data directory trusted. Worktrees share objects and local
-branches; they provide neither process isolation nor a multi-tenant boundary.
+configuration and the data directory trusted. Neither mode runs or sandboxes
+processes. Untrusted processes may write only their isolated copy; enforce this
+with OS isolation. Keep caches read-only and reachable at their original paths
+for Git alternates, and keep metadata and shadows inaccessible to those processes.
+
+Host `Inspect`, `ReadDiff` and removal checks use a fresh shadow Git directory
+with trusted config and an explicit work tree. HEAD, refs and index are copied as
+data. Copy-local objects are snapshotted into a private alternate alongside the
+cache, avoiding untrusted object symlinks and alternate paths. This adds I/O
+proportional to objects created in the copy. Filters, config includes, hooks and
+`core.worktree` from the copy are never used. Submodule contents are not inspected
+in isolated mode, since nested repositories have untrusted config too. Stop
+writers before inspecting for a consistent snapshot, and always before removal.
+
+Never run host Git from an isolated copy, including for pushes. Move commits into
+a trusted repository first. Commit transfer and push are outside this library.
+Git inside the sandbox may use the copy's config; host operations must use the
+manager's shadow. No ownership checks are disabled.
 
 [MIT](../../LICENSE)

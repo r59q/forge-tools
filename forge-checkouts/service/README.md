@@ -44,14 +44,15 @@ token files/variables are reread for rotation. Choose one source per token.
 | `--connector-token-env`  | `CONNECTOR_TOKEN_ENV`  | variable `FORGE_CHECKOUTS_CONNECTOR_TOKEN` |
 | `--request-timeout`      | `REQUEST_TIMEOUT`      | `5m`                                       |
 
-The data directory holds `checkouts.json`, process locks, worktrees in `copies/`
-and connected bare caches in `repositories/`. Metadata updates use private files,
+The data directory holds `checkouts.json`, process locks, copies in `copies/`,
+connected bare caches in `repositories/` and disposable Git shadows in `shadows/`.
+Metadata updates use private files,
 fsync and atomic rename. Use a local filesystem supporting flock; one service
 owns the directory. Restart preserves IDs, locations, retention and revisions.
 Interrupted operations become failed and keep their files. Keep this directory
 private and back it up together with its files; moving it is not supported.
 
-Removal deletes the selected worktree and registration only. Existing local
+Removal deletes the selected copy and its registration or pruning pin. Existing local
 repositories remain caller-owned; managed caches remain for reuse. Do not delete
 the data directory while local worktrees are registered: remove those checkouts
 through the API first. Local paths refer to the service host/container, and
@@ -88,8 +89,33 @@ Or from a connector connection:
 {"repository":{"source":"connection-id","path":"owner/repo"},"reference":"v1.0"}
 ```
 
+For a copy writable by an untrusted process, add `"mode":"isolated"` to the
+connected request. Both REST and gRPC accept `worktree` (default) or `isolated`
+and return the selected mode. Existing records without a mode become `worktree`.
+Isolated local sources are rejected: the caller owns their objects and may prune
+them independently.
+
+Worktrees share Git metadata and require trusted writers. Isolated copies own
+their `.git`, refs, index, config, hooks and new objects; ordinary Git commands
+work inside them. Alternates borrow objects from the managed cache, protected by
+`refs/checkouts/<id>` at the initial commit until removal, including failed copies.
+Creation journals the record before pinning; restart reconciles records and pins.
+Future cache cleanup must preserve these refs and serialize with checkout changes.
+
+The service reads isolated copies through host-owned shadows with trusted config.
+HEAD, refs, index and copy-local objects are snapshotted as data; config includes,
+filters, hooks, alternate paths and `core.worktree` from the copy are never used.
+This costs I/O proportional to new objects. Nested submodule contents are ignored
+in isolated status/diff. Stop writers for a consistent inspection snapshot.
+
+This service does not run or sandbox processes. Enforce OS isolation so an
+untrusted process can write only its own copy. The cache must stay read-only and
+reachable for alternates; keep metadata and shadows inaccessible. Never run host
+Git from an isolated copy, even for a push. Move commits into a trusted repository
+first; transfer and push are outside this API. Git ownership checks remain enabled.
+
 Creation returns a stable ID, repository identity, requested reference, resolved
-commit, lifecycle state, RFC 3339 creation time and absolute location. Checkouts
+commit, mode, lifecycle state, RFC 3339 creation time and absolute location. Checkouts
 start detached. Status reports current revision/branch and paths with separate
 Git porcelain `index` and `worktree` codes; `??` means untracked, `!!` ignored.
 Diff returns `staged` and `unstaged` bytes, base64 in JSON, each capped at 8 MiB.

@@ -21,6 +21,7 @@ func checkout(w checkouts.Checkout) *pb.Checkout {
 		State:     w.State,
 		CreatedAt: timestamppb.New(w.CreatedAt),
 		Location:  w.Location,
+		Mode:      w.Mode,
 	}
 }
 
@@ -32,7 +33,7 @@ func (s *Server) CreateCheckout(ctx context.Context, r *pb.CreateCheckoutRequest
 			LocalPath: repo.GetLocalPath(),
 			Source:    repo.GetSource(),
 			Path:      repo.GetPath(),
-		}, Reference: r.GetReference()})
+		}, Reference: r.GetReference(), Mode: r.GetMode()})
 		if err != nil {
 			return nil, err
 		}

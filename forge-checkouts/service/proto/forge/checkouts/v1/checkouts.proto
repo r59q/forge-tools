@@ -66,6 +66,8 @@ message Repository {
 message CreateCheckoutRequest {
   Repository repository = 1;
   string reference = 2;
+  // Mode is worktree (default) or isolated. Isolated requires a connected source.
+  string mode = 3;
 }
 // Checkout records the initial resolved revision; Status reports current HEAD.
 // State is creating, ready, retained, removing or failed. Location is host-local.
@@ -77,6 +79,8 @@ message Checkout {
   string state = 5;
   google.protobuf.Timestamp created_at = 6;
   string location = 7;
+  // Mode is worktree or isolated.
+  string mode = 8;
 }
 // CreateCheckoutResponse carries the created checkout.
 message CreateCheckoutResponse {

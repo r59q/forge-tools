@@ -2,6 +2,7 @@
 package testrepo
 
 import (
+	"net/http/cgi" //nolint:gosec // Test fixture uses Go 1.27; Httpoxy affected Go before 1.6.3.
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -29,6 +30,18 @@ func Git(t *testing.T, dir string, args ...string) string {
 	}
 
 	return strings.TrimSpace(string(b))
+}
+
+// HTTP serves a bare clone at prefix/owner/repo.git using Git's HTTP backend.
+func HTTP(t *testing.T, repo, prefix string) *cgi.Handler {
+	t.Helper()
+	root := t.TempDir()
+	Git(t, root, "clone", "--bare", repo, filepath.Join(root, "owner", "repo.git"))
+	return &cgi.Handler{
+		Path: filepath.Join(Git(t, repo, "--exec-path"), "git-http-backend"),
+		Root: prefix,
+		Env:  []string{"GIT_PROJECT_ROOT=" + root, "GIT_HTTP_EXPORT_ALL=1", "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null"},
+	}
 }
 
 // New creates two commits, an annotated tag v1 and the branch main.

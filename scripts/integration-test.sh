@@ -181,11 +181,16 @@ checkout_api "$checkout_url/v1/checkouts/$checkout_id/status" |
 checkout_api "$checkout_url/v1/checkouts/$checkout_id/diff" |
   jq -e '(.staged // "") == "" and (.unstaged // "") == ""' >/dev/null || fail "checkout diff"
 second=$(jq -n --arg source "$id" --arg repo "$repo" --arg revision "$revision" \
-  '{repository:{source:$source,path:$repo},reference:$revision}' |
-  checkout_api "$checkout_url/v1/checkouts" -d @-) || fail "create checkout at commit"
+  '{repository:{source:$source,path:$repo},reference:$revision,mode:"isolated"}' |
+  checkout_api "$checkout_url/v1/checkouts" -d @-) || fail "create isolated checkout at commit"
 second_id=$(echo "$second" | jq -r .id)
 checkout_ids="$checkout_ids $second_id"
 [ "$checkout_id" != "$second_id" ] || fail "checkout IDs reused"
+echo "$second" | jq -e '.mode == "isolated"' >/dev/null || fail "isolated checkout mode"
+checkout_api "$checkout_url/v1/checkouts/$second_id/status" |
+  jq -e --arg revision "$revision" '.revision == $revision and (.files | length == 0)' >/dev/null || fail "isolated checkout status"
+checkout_api "$checkout_url/v1/checkouts/$second_id/diff" |
+  jq -e '(.staged // "") == "" and (.unstaged // "") == ""' >/dev/null || fail "isolated checkout diff"
 checkout_api -X POST "$checkout_url/v1/checkouts/$checkout_id/retain" -d '{}' |
   jq -e '.state == "retained"' >/dev/null || fail "retain checkout"
 for checkout_id in $checkout_ids; do

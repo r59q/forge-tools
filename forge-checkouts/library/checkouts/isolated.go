@@ -2,8 +2,11 @@ package checkouts
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/r59q/forge-tools/forge-checkouts/library/internal/gitshadow"
 )
@@ -57,5 +60,59 @@ func readView(ctx context.Context, r Record) (gitView, func(), error) {
 		return gitView{}, nil, err
 	}
 
-	return isolatedView(directory, r.Checkout.Location), cleanup, nil
+	view := isolatedView(directory, r.Checkout.Location)
+	if err = view.skipGitlinks(ctx); err != nil {
+		cleanup()
+		return gitView{}, nil, err
+	}
+	return view, cleanup, nil
+}
+
+// skipGitlinks prevents status's index refresh from reading nested Git config.
+// --ignore-submodules alone does not protect the refresh step. Only the shadow
+// index is modified; staged gitlink changes can still be reported.
+func (v *gitView) skipGitlinks(ctx context.Context) error {
+	out, err := v.run(ctx, "ls-files", "--stage", "-z")
+	if err != nil {
+		return err
+	}
+	for entry := range strings.SplitSeq(out, "\x00") {
+		if !strings.HasPrefix(entry, "160000 ") {
+			continue
+		}
+		metadata, path, ok := strings.Cut(entry, "\t")
+		if !ok {
+			return ErrConflict
+		}
+		v.gitlinks = append(v.gitlinks, path)
+		// Unmerged entries are already skipped by Git's index refresh.
+		if strings.HasSuffix(metadata, " 0") {
+			if _, err = v.run(ctx, "update-index", "--skip-worktree", "--", path); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (v gitView) protectSubmodules(copyPath string) error {
+	if len(v.gitlinks) == 0 {
+		return nil
+	}
+	root, err := os.OpenRoot(copyPath)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	for _, path := range v.gitlinks {
+		// ReadDir does not enter nested .git or follow entries inside it.
+		entries, err := fs.ReadDir(root.FS(), path)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil || len(entries) != 0 {
+			return ErrConflict
+		}
+	}
+	return nil
 }

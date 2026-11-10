@@ -75,10 +75,6 @@ func removable(ctx context.Context, r Record, discard bool) (bool, error) {
 	}
 
 	if err = checkedPath(ctx, r); err != nil {
-		// An interrupted isolated creation may not have installed .git yet.
-		if r.Checkout.Mode == Isolated && r.Checkout.State == Failed && discard && errors.Is(err, os.ErrNotExist) {
-			return true, nil
-		}
 		return true, err
 	}
 	if discard {
@@ -90,6 +86,9 @@ func removable(ctx context.Context, r Record, discard bool) (bool, error) {
 		return true, err
 	}
 	defer cleanup()
+	if err = view.protectSubmodules(r.Checkout.Location); err != nil {
+		return true, err
+	}
 	s, err := status(ctx, view)
 	if err != nil {
 		return true, err

@@ -106,7 +106,9 @@ The service reads isolated copies through host-owned shadows with trusted config
 HEAD, refs, index and copy-local objects are snapshotted as data; config includes,
 filters, hooks, alternate paths and `core.worktree` from the copy are never used.
 This costs I/O proportional to new objects. Nested submodule contents are ignored
-in isolated status/diff. Stop writers for a consistent inspection snapshot.
+in isolated status/diff; nonempty submodule directories require `discard` for
+removal. Forced removal handles deleted or replaced `.git` without following
+symlinks. Stop writers for a consistent inspection snapshot.
 
 This service does not run or sandbox processes. Enforce OS isolation so an
 untrusted process can write only its own copy. The cache must stay read-only and

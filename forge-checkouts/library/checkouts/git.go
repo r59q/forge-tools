@@ -38,6 +38,7 @@ type gitView struct {
 	directory string
 	env       []string
 	isolated  bool
+	gitlinks  []string
 }
 
 func (v gitView) run(ctx context.Context, args ...string) (string, error) {

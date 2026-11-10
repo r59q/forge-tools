@@ -231,13 +231,8 @@ func checkedPath(ctx context.Context, r Record) error {
 		return ErrConflict
 	}
 	if r.Checkout.Mode == Isolated {
-		info, err = os.Lstat(filepath.Join(r.Checkout.Location, ".git"))
-		if err != nil {
-			return err
-		}
-		if !info.IsDir() {
-			return ErrConflict
-		}
+		// .git belongs to the consumer. Reads validate it in the shadow;
+		// forced removal must also work when it is missing or replaced.
 		return nil
 	}
 

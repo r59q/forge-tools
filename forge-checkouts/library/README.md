@@ -106,6 +106,8 @@ proportional to objects created in the copy. Filters, config includes, hooks and
 `core.worktree` from the copy are never used. Submodule contents are not inspected
 in isolated mode, since nested repositories have untrusted config too. Stop
 writers before inspecting for a consistent snapshot, and always before removal.
+Nonempty submodule directories require `discard` for removal. Forced removal also
+works if the consumer deleted or replaced `.git`, without following its symlinks.
 
 Never run host Git from an isolated copy, including for pushes. Move commits into
 a trusted repository first. Commit transfer and push are outside this library.

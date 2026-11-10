@@ -58,6 +58,13 @@ func Snapshot(ctx context.Context, copyPath, directory, cache, revision string) 
 		return err
 	}
 	defer copyRoot.Close()
+	info, err := copyRoot.Lstat(".git")
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return errors.New("gitshadow: expected a Git directory")
+	}
 
 	source, err := copyRoot.OpenRoot(".git")
 	if err != nil {

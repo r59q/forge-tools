@@ -119,3 +119,14 @@ func (v gitView) submodules() string {
 
 	return "--ignore-submodules=none"
 }
+
+func (v gitView) diff(ctx context.Context, staged bool) (string, error) {
+	args := []string{"diff", "--no-ext-diff", "--no-textconv", "--binary"}
+	if v.isolated {
+		args = append(args, v.submodules())
+	}
+	if staged {
+		args = append(args, "--cached", "HEAD")
+	}
+	return v.run(ctx, append(args, "--")...)
+}

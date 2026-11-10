@@ -293,12 +293,12 @@ func (m *Manager) ReadDiff(ctx context.Context, id string) (Diff, error) {
 	}
 	defer cleanup()
 	var d Diff
-	d.Staged, err = view.run(ctx, "diff", view.submodules(), "--no-ext-diff", "--no-textconv", "--binary", "--cached", "HEAD", "--")
+	d.Staged, err = view.diff(ctx, true)
 	if err != nil {
 		return Diff{}, err
 	}
 
-	d.Unstaged, err = view.run(ctx, "diff", view.submodules(), "--no-ext-diff", "--no-textconv", "--binary", "--")
+	d.Unstaged, err = view.diff(ctx, false)
 
 	return d, err
 }

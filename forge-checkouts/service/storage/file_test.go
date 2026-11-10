@@ -153,6 +153,8 @@ func TestLegacyMetadataKeepsCheckoutsAndChanges(t *testing.T) {
 
 	manager.Close()
 	record := state.Checkouts[w.ID]
+	// Old persisted records predate mode and must reopen as worktrees.
+	record.Checkout.Mode = ""
 	legacy, err := json.Marshal(map[string]any{"version": 1, "state": map[string]any{"workspaces": map[string]any{w.ID: map[string]any{"workspace": record.Checkout, "git_directory": record.GitDirectory}}}})
 	if err != nil {
 		t.Fatal(err)

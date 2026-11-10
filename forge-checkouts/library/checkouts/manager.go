@@ -43,7 +43,7 @@ func New(ctx context.Context, root string, store Store, resolve Resolve) (*Manag
 		return nil, err
 	}
 
-	for _, sub := range []string{"copies", "repositories"} {
+	for _, sub := range []string{"copies", "repositories", "shadows"} {
 		path := filepath.Join(root, sub)
 		if err = os.MkdirAll(path, 0700); err != nil {
 			return nil, err
@@ -71,23 +71,7 @@ func New(ctx context.Context, root string, store Store, resolve Resolve) (*Manag
 		gate:    make(chan struct{}, 1),
 		lock:    lock,
 	}
-	err = store.Update(ctx, func(s *State) error {
-		if s.Checkouts == nil {
-			s.Checkouts = map[string]Record{}
-		}
-
-		for id, r := range s.Checkouts {
-			if id != r.Checkout.ID || !m.validRecord(r) {
-				return ErrConflict
-			}
-			if r.Checkout.State == Creating || r.Checkout.State == Removing {
-				r.Checkout.State = Failed
-				s.Checkouts[id] = r
-			}
-		}
-
-		return nil
-	})
+	err = m.recover(ctx)
 	if err != nil {
 		_ = m.Close()
 		return nil, err
@@ -132,7 +116,7 @@ func (m *Manager) leave() { <-m.gate }
 func (m *Manager) save(ctx context.Context, r Record) error {
 	return m.store.Update(ctx, func(s *State) error {
 		s.Checkouts[r.Checkout.ID] = r
-		return nil
+		return pin(ctx, r)
 	})
 }
 
@@ -151,7 +135,8 @@ func validID(id string) bool {
 
 func (m *Manager) validRecord(r Record) bool {
 	w := r.Checkout
-	return validID(w.ID) && w.Location == filepath.Join(m.root, "copies", w.ID) && filepath.IsAbs(r.GitDirectory)
+	validMode := w.Mode == "" || w.Mode == Worktree || w.Mode == Isolated && w.Repository.LocalPath == ""
+	return validMode && validID(w.ID) && w.Location == filepath.Join(m.root, "copies", w.ID) && filepath.IsAbs(r.GitDirectory)
 }
 
 func (m *Manager) record(ctx context.Context, id string) (Record, error) {
@@ -245,6 +230,11 @@ func checkedPath(ctx context.Context, r Record) error {
 	if !info.IsDir() {
 		return ErrConflict
 	}
+	if r.Checkout.Mode == Isolated {
+		// .git belongs to the consumer. Reads validate it in the shadow;
+		// forced removal must also work when it is missing or replaced.
+		return nil
+	}
 
 	common, err := git(ctx, r.Checkout.Location, "rev-parse", "--path-format=absolute", "--git-common-dir")
 	if err != nil {
@@ -273,7 +263,13 @@ func (m *Manager) Inspect(ctx context.Context, id string) (Status, error) {
 		return Status{}, err
 	}
 
-	return status(ctx, r.Checkout.Location)
+	view, cleanup, err := readView(ctx, r)
+	if err != nil {
+		return Status{}, err
+	}
+	defer cleanup()
+
+	return status(ctx, view)
 }
 
 // ReadDiff returns separate staged and unstaged patches, each at most 8 MiB.
@@ -291,13 +287,18 @@ func (m *Manager) ReadDiff(ctx context.Context, id string) (Diff, error) {
 		return Diff{}, err
 	}
 
+	view, cleanup, err := readView(ctx, r)
+	if err != nil {
+		return Diff{}, err
+	}
+	defer cleanup()
 	var d Diff
-	d.Staged, err = git(ctx, r.Checkout.Location, "diff", "--no-ext-diff", "--no-textconv", "--binary", "--cached", "HEAD", "--")
+	d.Staged, err = view.diff(ctx, true)
 	if err != nil {
 		return Diff{}, err
 	}
 
-	d.Unstaged, err = git(ctx, r.Checkout.Location, "diff", "--no-ext-diff", "--no-textconv", "--binary", "--")
+	d.Unstaged, err = view.diff(ctx, false)
 
 	return d, err
 }

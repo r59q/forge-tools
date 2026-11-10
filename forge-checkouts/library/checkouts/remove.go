@@ -31,24 +31,36 @@ func (m *Manager) Remove(ctx context.Context, id string, discard bool) error {
 		return err
 	}
 
+	if err = removeCopy(ctx, r, discard, exists); err != nil {
+		m.failed(ctx, r)
+		return err
+	}
+
+	return m.store.Update(ctx, func(s *State) error {
+		if err := unpin(ctx, r); err != nil {
+			return err
+		}
+		delete(s.Checkouts, id)
+		return nil
+	})
+}
+
+func removeCopy(ctx context.Context, r Record, discard, exists bool) error {
+	if r.Checkout.Mode == Isolated {
+		return os.RemoveAll(r.Checkout.Location)
+	}
+
 	args := []string{"worktree", "remove"}
 	if discard {
 		args = append(args, "--force")
 	}
 
 	args = append(args, "--", r.Checkout.Location)
-	if _, err = git(ctx, r.GitDirectory, args...); err != nil && !exists {
+	_, err := git(ctx, r.GitDirectory, args...)
+	if err != nil && !exists {
 		err = unregistered(ctx, r, err)
 	}
-	if err != nil {
-		m.failed(ctx, r)
-		return err
-	}
-
-	return m.store.Update(ctx, func(s *State) error {
-		delete(s.Checkouts, id)
-		return nil
-	})
+	return err
 }
 
 // removable checks that r's working copy may be removed, and reports whether
@@ -69,7 +81,15 @@ func removable(ctx context.Context, r Record, discard bool) (bool, error) {
 		return true, nil
 	}
 
-	s, err := status(ctx, r.Checkout.Location)
+	view, cleanup, err := readView(ctx, r)
+	if err != nil {
+		return true, err
+	}
+	defer cleanup()
+	if err = view.protectSubmodules(r.Checkout.Location); err != nil {
+		return true, err
+	}
+	s, err := status(ctx, view)
 	if err != nil {
 		return true, err
 	}

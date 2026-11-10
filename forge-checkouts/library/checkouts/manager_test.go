@@ -437,3 +437,22 @@ func TestCreationFailures(t *testing.T) {
 		}
 	}
 }
+
+func TestWorktreeDiffKeepsTrustedSubmoduleConfiguration(t *testing.T) {
+	repo, _, _ := repository(t)
+	m, _, _ := manager(t)
+	w := create(t, m, repo, "main")
+	nested := filepath.Join(w.Location, "nested")
+	command(t, w.Location, "init", nested)
+	write(t, nested, "file", "original\n")
+	command(t, nested, "add", "file")
+	command(t, nested, "commit", "-m", "nested")
+	command(t, w.Location, "add", "nested")
+	command(t, w.Location, "commit", "-m", "add gitlink")
+	write(t, nested, "file", "modified\n")
+	command(t, w.Location, "config", "diff.ignoreSubmodules", "all")
+	diff, err := m.ReadDiff(t.Context(), w.ID)
+	if err != nil || diff.Staged != "" || diff.Unstaged != "" {
+		t.Fatal("trusted worktree diff configuration changed", diff, err)
+	}
+}

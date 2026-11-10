@@ -27,7 +27,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func setup(t *testing.T) (*Server, http.Handler, pb.CheckoutsServiceClient) {
+func setup(t *testing.T, resolvers ...checkouts.Resolve) (*Server, http.Handler, pb.CheckoutsServiceClient) {
 	t.Helper()
 	root := t.TempDir()
 	store, err := storage.Open(t.Context(), root)
@@ -35,7 +35,11 @@ func setup(t *testing.T) (*Server, http.Handler, pb.CheckoutsServiceClient) {
 		t.Fatal(err)
 	}
 
-	manager, err := checkouts.New(context.Background(), root, store, nil)
+	var resolve checkouts.Resolve
+	if len(resolvers) > 0 {
+		resolve = resolvers[0]
+	}
+	manager, err := checkouts.New(context.Background(), root, store, resolve)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,6 +113,9 @@ func TestRESTAndGRPCLifecycle(t *testing.T) {
 	repo := testrepo.New(t)
 	var w pb.Checkout
 	rest(t, h, "POST", "/v1/checkouts", &pb.CreateCheckoutRequest{Repository: &pb.Repository{LocalPath: repo}, Reference: "v1"}, &w)
+	if w.Mode != checkouts.Worktree {
+		t.Fatal("default mode", w.Mode)
+	}
 	ctx := authorized()
 	got, err := g.GetCheckout(ctx, &pb.GetCheckoutRequest{Id: w.Id})
 	if err != nil || !proto.Equal(&w, got.GetCheckout()) {

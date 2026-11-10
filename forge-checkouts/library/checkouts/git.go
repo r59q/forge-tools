@@ -31,10 +31,21 @@ func (b *boundedOutput) Write(p []byte) (int, error) {
 // git disables inherited Git configuration, hooks, prompting and external diffs.
 // Existing local repositories and their repository configuration must be trusted.
 func git(ctx context.Context, directory string, args ...string) (string, error) {
+	return (gitView{directory: directory}).run(ctx, args...)
+}
+
+type gitView struct {
+	directory string
+	env       []string
+	isolated  bool
+	gitlinks  []string
+}
+
+func (v gitView) run(ctx context.Context, args ...string) (string, error) {
 	base := []string{"-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "maintenance.auto=false", "-c", "gc.auto=0"}
 	cmd := exec.CommandContext(ctx, "git", append(base, args...)...) //nolint:gosec // fixed binary; callers validate user input.
 	cmd.WaitDelay = 2 * time.Second
-	cmd.Dir = directory
+	cmd.Dir = v.directory
 	for _, e := range os.Environ() {
 		if !strings.HasPrefix(e, "GIT_") {
 			cmd.Env = append(cmd.Env, e)
@@ -42,6 +53,7 @@ func git(ctx context.Context, directory string, args ...string) (string, error) 
 	}
 
 	cmd.Env = append(cmd.Env, "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_TERMINAL_PROMPT=0", "GIT_OPTIONAL_LOCKS=0")
+	cmd.Env = append(cmd.Env, v.env...)
 	var out boundedOutput
 	cmd.Stdout = &out
 	err := cmd.Run()
@@ -58,20 +70,20 @@ func git(ctx context.Context, directory string, args ...string) (string, error) 
 	return out.buffer.String(), nil
 }
 
-func status(ctx context.Context, path string) (Status, error) {
+func status(ctx context.Context, view gitView) (Status, error) {
 	var s Status
-	rev, err := git(ctx, path, "rev-parse", "--verify", "HEAD")
+	rev, err := view.run(ctx, "rev-parse", "--verify", "HEAD")
 	if err != nil {
 		return s, err
 	}
 
 	s.Revision = strings.TrimSpace(rev)
-	branch, err := git(ctx, path, "symbolic-ref", "--quiet", "--short", "HEAD")
+	branch, err := view.run(ctx, "symbolic-ref", "--quiet", "--short", "HEAD")
 	if err == nil {
 		s.Branch = strings.TrimSpace(branch)
 	}
 
-	out, err := git(ctx, path, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignored=matching", "--ignore-submodules=none")
+	out, err := view.run(ctx, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignored=matching", view.submodules())
 	if err != nil {
 		return s, err
 	}
@@ -97,4 +109,24 @@ func status(ctx context.Context, path string) (Status, error) {
 	}
 
 	return s, nil
+}
+
+func (v gitView) submodules() string {
+	if v.isolated {
+		// Nested repositories have their own untrusted configuration too.
+		return "--ignore-submodules=all"
+	}
+
+	return "--ignore-submodules=none"
+}
+
+func (v gitView) diff(ctx context.Context, staged bool) (string, error) {
+	args := []string{"diff", "--no-ext-diff", "--no-textconv", "--binary"}
+	if v.isolated {
+		args = append(args, v.submodules())
+	}
+	if staged {
+		args = append(args, "--cached", "HEAD")
+	}
+	return v.run(ctx, append(args, "--")...)
 }

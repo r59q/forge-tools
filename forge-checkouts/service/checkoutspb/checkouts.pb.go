@@ -87,9 +87,11 @@ func (x *Repository) GetPath() string {
 
 // CreateCheckoutRequest accepts a branch, tag or commit. Empty reference means HEAD.
 type CreateCheckoutRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Repository    *Repository            `protobuf:"bytes,1,opt,name=repository,proto3" json:"repository,omitempty"`
-	Reference     string                 `protobuf:"bytes,2,opt,name=reference,proto3" json:"reference,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Repository *Repository            `protobuf:"bytes,1,opt,name=repository,proto3" json:"repository,omitempty"`
+	Reference  string                 `protobuf:"bytes,2,opt,name=reference,proto3" json:"reference,omitempty"`
+	// Mode is worktree (default) or isolated. Isolated requires a connected source.
+	Mode          string `protobuf:"bytes,3,opt,name=mode,proto3" json:"mode,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -138,17 +140,26 @@ func (x *CreateCheckoutRequest) GetReference() string {
 	return ""
 }
 
+func (x *CreateCheckoutRequest) GetMode() string {
+	if x != nil {
+		return x.Mode
+	}
+	return ""
+}
+
 // Checkout records the initial resolved revision; Status reports current HEAD.
 // State is creating, ready, retained, removing or failed. Location is host-local.
 type Checkout struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Repository    *Repository            `protobuf:"bytes,2,opt,name=repository,proto3" json:"repository,omitempty"`
-	Reference     string                 `protobuf:"bytes,3,opt,name=reference,proto3" json:"reference,omitempty"`
-	Revision      string                 `protobuf:"bytes,4,opt,name=revision,proto3" json:"revision,omitempty"`
-	State         string                 `protobuf:"bytes,5,opt,name=state,proto3" json:"state,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	Location      string                 `protobuf:"bytes,7,opt,name=location,proto3" json:"location,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Id         string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Repository *Repository            `protobuf:"bytes,2,opt,name=repository,proto3" json:"repository,omitempty"`
+	Reference  string                 `protobuf:"bytes,3,opt,name=reference,proto3" json:"reference,omitempty"`
+	Revision   string                 `protobuf:"bytes,4,opt,name=revision,proto3" json:"revision,omitempty"`
+	State      string                 `protobuf:"bytes,5,opt,name=state,proto3" json:"state,omitempty"`
+	CreatedAt  *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	Location   string                 `protobuf:"bytes,7,opt,name=location,proto3" json:"location,omitempty"`
+	// Mode is worktree or isolated.
+	Mode          string `protobuf:"bytes,8,opt,name=mode,proto3" json:"mode,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -228,6 +239,13 @@ func (x *Checkout) GetCreatedAt() *timestamppb.Timestamp {
 func (x *Checkout) GetLocation() string {
 	if x != nil {
 		return x.Location
+	}
+	return ""
+}
+
+func (x *Checkout) GetMode() string {
+	if x != nil {
+		return x.Mode
 	}
 	return ""
 }
@@ -1005,12 +1023,13 @@ const file_forge_checkouts_v1_checkouts_proto_rawDesc = "" +
 	"\n" +
 	"local_path\x18\x01 \x01(\tR\tlocalPath\x12\x16\n" +
 	"\x06source\x18\x02 \x01(\tR\x06source\x12\x12\n" +
-	"\x04path\x18\x03 \x01(\tR\x04path\"u\n" +
+	"\x04path\x18\x03 \x01(\tR\x04path\"\x89\x01\n" +
 	"\x15CreateCheckoutRequest\x12>\n" +
 	"\n" +
 	"repository\x18\x01 \x01(\v2\x1e.forge.checkouts.v1.RepositoryR\n" +
 	"repository\x12\x1c\n" +
-	"\treference\x18\x02 \x01(\tR\treference\"\x81\x02\n" +
+	"\treference\x18\x02 \x01(\tR\treference\x12\x12\n" +
+	"\x04mode\x18\x03 \x01(\tR\x04mode\"\x95\x02\n" +
 	"\bCheckout\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12>\n" +
 	"\n" +
@@ -1021,7 +1040,8 @@ const file_forge_checkouts_v1_checkouts_proto_rawDesc = "" +
 	"\x05state\x18\x05 \x01(\tR\x05state\x129\n" +
 	"\n" +
 	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x1a\n" +
-	"\blocation\x18\a \x01(\tR\blocation\"R\n" +
+	"\blocation\x18\a \x01(\tR\blocation\x12\x12\n" +
+	"\x04mode\x18\b \x01(\tR\x04mode\"R\n" +
 	"\x16CreateCheckoutResponse\x128\n" +
 	"\bcheckout\x18\x01 \x01(\v2\x1c.forge.checkouts.v1.CheckoutR\bcheckout\"\x16\n" +
 	"\x14ListCheckoutsRequest\"$\n" +

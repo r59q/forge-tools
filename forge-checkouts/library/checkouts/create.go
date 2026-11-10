@@ -19,6 +19,11 @@ func (m *Manager) Create(ctx context.Context, in Input) (Checkout, error) {
 	}
 
 	defer m.leave()
+	mode, err := checkoutMode(in)
+	if err != nil {
+		return Checkout{}, err
+	}
+
 	repo := in.Repository
 	ref := in.Reference
 	if ref == "" {
@@ -42,6 +47,7 @@ func (m *Manager) Create(ctx context.Context, in Input) (Checkout, error) {
 		Reference:  ref,
 		State:      Creating,
 		CreatedAt:  time.Now().UTC(),
+		Mode:       mode,
 	}
 	w.Location = filepath.Join(m.root, "copies", w.ID)
 	r := Record{Checkout: w, GitDirectory: directory}
@@ -69,7 +75,7 @@ func (m *Manager) Create(ctx context.Context, in Input) (Checkout, error) {
 	if err = m.save(ctx, r); err != nil {
 		return Checkout{}, err
 	}
-	if _, err = git(ctx, directory, "worktree", "add", "--detach", "--", w.Location, r.Checkout.Revision); err != nil {
+	if err = createCopy(ctx, r); err != nil {
 		return Checkout{}, err
 	}
 
@@ -81,6 +87,27 @@ func (m *Manager) Create(ctx context.Context, in Input) (Checkout, error) {
 	complete = true
 
 	return r.Checkout, nil
+}
+
+func checkoutMode(in Input) (string, error) {
+	mode := in.Mode
+	if mode == "" {
+		mode = Worktree
+	}
+	if mode != Worktree && mode != Isolated || mode == Isolated && in.Repository.LocalPath != "" {
+		return "", ErrInvalid
+	}
+
+	return mode, nil
+}
+
+func createCopy(ctx context.Context, r Record) error {
+	if r.Checkout.Mode == Isolated {
+		return createIsolated(ctx, r)
+	}
+
+	_, err := git(ctx, r.GitDirectory, "worktree", "add", "--detach", "--", r.Checkout.Location, r.Checkout.Revision)
+	return err
 }
 
 type checkoutSource struct {

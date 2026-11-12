@@ -1,0 +1,30 @@
+package partial
+
+type Account struct {
+	ID   string
+	Name string
+}
+
+func (a *Account) Rename(name string) {
+	a.Name = normalize(name
+	a.touch()
+}
+
+func normalize(name string) string {
+	if name == "" {
+		return fallback(
+	}
+	return strings.TrimSpace(name)
+}
+
+func broken( {
+	helper()
+}
+
+type Ledger struct {
+	entries []Entry
+	total
+
+func (l *Ledger) Add(entry Entry) {
+	l.entries = append(l.entries, entry)
+	audit(l.total

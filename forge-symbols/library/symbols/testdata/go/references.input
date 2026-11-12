@@ -1,0 +1,40 @@
+package refs
+
+import (
+	"fmt"
+	"strings"
+)
+
+var registry = newRegistry()
+
+var _ = register(Plugin{})
+
+const limit = int64(10)
+
+type Plugin struct {
+	next *Plugin
+	out  fmt.Stringer
+}
+
+type Registry map[string]Plugin
+
+func newRegistry() Registry {
+	return make(Registry)
+}
+
+func register(plugin Plugin) bool {
+	registry[plugin.Name()] = plugin
+	return true
+}
+
+func (p Plugin) Name() string {
+	return strings.ToLower(fmt.Sprint(p.out))
+}
+
+func (p *Plugin) Each(visit func(*Plugin)) {
+	for current := p; current != nil; current = current.next {
+		visit(current)
+		(visit)(current)
+		(current.Name)()
+	}
+}

@@ -1,0 +1,18 @@
+definitions:
+  [0] struct Größe 5:6-5:11 range=5:6-7:2
+  [1] field Länge 6:2-6:7 range=6:2-6:11 container=Größe parent=[0]
+  [2] method 世界 9:16-9:18 range=9:1-9:75 container=Größe
+  [3] function grüßen 11:6-11:12 range=11:1-11:59
+  [4] variable π 13:5-13:6 range=13:5-13:34
+  [5] variable τ 13:40-13:41 range=13:40-13:49
+references:
+  type int 6:8-6:11 in=[1] Länge
+  type Größe 9:9-9:14 in=[2] 世界
+  type string 9:22-9:28 in=[2] 世界
+  type string 9:30-9:36 in=[2] 世界
+  call grüßen 9:58-9:64 in=[2] 世界
+  type string 11:17-11:23 in=[3] grüßen
+  type Größe 11:31-11:36 in=[3] grüßen
+  type string 11:38-11:44 in=[3] grüßen
+  call grüßen 13:9-13:15 in=[4] π
+  type Größe 13:26-13:31 in=[4] π

@@ -1,0 +1,53 @@
+package shop
+
+// Functions and methods share names; receivers tell methods apart.
+
+func Open(name string) *Store {
+	return &Store{name: name}
+}
+
+type Store struct {
+	name string
+}
+
+type Cart struct {
+	items []Item
+}
+
+type Item struct{}
+
+func (s *Store) Open() error {
+	return s.load()
+}
+
+func (s Store) Name() string {
+	return s.name
+}
+
+func (s *Store) load() error {
+	return nil
+}
+
+func (c *Cart) Open() error {
+	return c.load()
+}
+
+func (c *Cart) load() error {
+	return nil
+}
+
+func (Item) Name() string {
+	return "item"
+}
+
+type List[T any] struct {
+	values []T
+}
+
+func (l *List[T]) Open() error {
+	return nil
+}
+
+func (l List[T]) Name() string {
+	return "list"
+}

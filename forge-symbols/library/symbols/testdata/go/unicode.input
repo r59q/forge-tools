@@ -1,0 +1,13 @@
+package unicode
+
+// Grüße from the 🌍: columns count UTF-16 units, not bytes or runes.
+
+type Größe struct {
+	Länge int
+}
+
+func (g Größe) 世界(名前 string) string { return "🌍" + 名前 + grüßen("😀", g) }
+
+func grüßen(wem string, größe Größe) string { return wem }
+
+var π = grüßen("𝔘𝔫𝔦", Größe{}); var τ = 2 * π

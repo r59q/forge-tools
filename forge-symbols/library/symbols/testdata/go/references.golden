@@ -1,0 +1,35 @@
+definitions:
+  [0] variable registry 8:5-8:13 range=8:5-8:29
+  [1] constant limit 12:7-12:12 range=12:7-12:24
+  [2] struct Plugin 14:6-14:12 range=14:6-17:2
+  [3] field next 15:2-15:6 range=15:2-15:14 container=Plugin parent=[2]
+  [4] field out 16:2-16:5 range=16:2-16:19 container=Plugin parent=[2]
+  [5] type Registry 19:6-19:14 range=19:6-19:32
+  [6] function newRegistry 21:6-21:17 range=21:1-23:2
+  [7] function register 25:6-25:14 range=25:1-28:2
+  [8] method Name 30:17-30:21 range=30:1-32:2 container=Plugin
+  [9] method Each 34:18-34:22 range=34:1-40:2 container=Plugin
+references:
+  call newRegistry 8:16-8:27 in=[0] registry
+  call register 10:9-10:17
+  type Plugin 10:18-10:24
+  call int64 12:15-12:20 in=[1] limit
+  type Plugin 15:8-15:14 in=[3] next
+  type Stringer 16:11-16:19 in=[4] out
+  type string 19:19-19:25 in=[5] Registry
+  type Plugin 19:26-19:32 in=[5] Registry
+  type Registry 21:20-21:28 in=[6] newRegistry
+  call make 22:9-22:13 in=[6] newRegistry
+  type Registry 22:14-22:22 in=[6] newRegistry
+  type Plugin 25:22-25:28 in=[7] register
+  type bool 25:30-25:34 in=[7] register
+  call Name 26:18-26:22 in=[7] register
+  type Plugin 30:9-30:15 in=[8] Name
+  type string 30:24-30:30 in=[8] Name
+  call ToLower 31:17-31:24 in=[8] Name
+  call Sprint 31:29-31:35 in=[8] Name
+  type Plugin 34:10-34:16 in=[9] Each
+  type Plugin 34:35-34:41 in=[9] Each
+  call visit 36:3-36:8 in=[9] Each
+  call visit 37:4-37:9 in=[9] Each
+  call Name 38:12-38:16 in=[9] Each

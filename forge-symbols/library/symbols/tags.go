@@ -23,11 +23,14 @@ type span struct {
 }
 
 // tag is one usable match of a tag query: a named definition or reference.
+// Pattern is the index of the query pattern that matched; when several
+// patterns tag the same name, the first pattern of the query wins.
 type tag struct {
 	kind      string
 	name      span
 	node      span
 	container *span
+	pattern   int
 }
 
 // newAnalysis turns tag query matches into definitions and references.
@@ -87,6 +90,7 @@ func readTags(matches []treesitter.Match) (definitions, references []tag) {
 // readTag reports whether the match is a tag, and whether it is a definition.
 func readTag(match treesitter.Match) (found tag, definition, ok bool) {
 	named, kinded := false, false
+	found.pattern = match.Pattern
 
 	for _, capture := range match.Captures {
 		captured := span{start: capture.Start, end: capture.End}
@@ -116,6 +120,7 @@ func mergeDefinitions(definitions []tag) []tag {
 			cmp.Compare(b.node.end, a.node.end),
 			cmp.Compare(a.name.start, b.name.start),
 			cmp.Compare(a.name.end, b.name.end),
+			cmp.Compare(a.pattern, b.pattern),
 		)
 	})
 
@@ -133,13 +138,14 @@ func mergeDefinitions(definitions []tag) []tag {
 	return merged
 }
 
-// mergeReferences sorts references in source order and keeps the first
-// match of each name.
+// mergeReferences sorts references in source order and keeps the match of
+// each name from the first pattern.
 func mergeReferences(references []tag) []tag {
 	slices.SortStableFunc(references, func(a, b tag) int {
 		return cmp.Or(
 			cmp.Compare(a.name.start, b.name.start),
 			cmp.Compare(a.name.end, b.name.end),
+			cmp.Compare(a.pattern, b.pattern),
 		)
 	})
 

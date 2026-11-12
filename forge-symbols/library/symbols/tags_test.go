@@ -61,6 +61,34 @@ func TestNewAnalysisNestsAndMerges(t *testing.T) {
 	}
 }
 
+// When patterns tag the same name, the first pattern of the query wins,
+// whatever order the matches come in.
+func TestNewAnalysisPrefersEarlierPatterns(t *testing.T) {
+	//         0         1
+	//         01234567890123
+	source := "Box b = new T;"
+
+	matches := []treesitter.Match{
+		{Pattern: 3, Captures: []treesitter.Capture{capture("name", 0, 3), capture("definition.type", 0, 14)}},
+		{Pattern: 1, Captures: []treesitter.Capture{capture("name", 0, 3), capture("definition.class", 0, 14)}},
+		{Pattern: 2, Captures: []treesitter.Capture{capture("name", 12, 13), capture("reference.type", 12, 13)}},
+		{Pattern: 0, Captures: []treesitter.Capture{capture("name", 12, 13), capture("reference.new", 8, 13)}},
+	}
+
+	got := render(newAnalysis(matches, []byte(source)))
+	want := strings.Join([]string{
+		"definitions:",
+		"  [0] class Box 1:1-1:4 range=1:1-1:15",
+		"references:",
+		"  new T 1:13-1:14 in=[0] Box",
+		"",
+	}, "\n")
+
+	if got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
 func TestNewAnalysisOfNoMatches(t *testing.T) {
 	analysis := newAnalysis(nil, nil)
 

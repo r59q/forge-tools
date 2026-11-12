@@ -23,6 +23,7 @@ type Language struct {
 func Languages() []Language {
 	return []Language{
 		{Name: "go", Extensions: []string{".go"}},
+		{Name: "java", Extensions: []string{".java"}},
 	}
 }
 

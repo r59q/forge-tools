@@ -1,0 +1,32 @@
+package com.example
+
+import java.util.
+
+public class Broken {
+    private int ready = ;
+
+    void unclosedCall() {
+        helper(1,
+    }
+
+    void afterDamage() {
+        helper(2);
+    }
+
+    int helper(int value) {
+        return value;
+    }
+}
+
+class Unclosed {
+    void missingBrace() {
+        if (ready > 0) {
+            helper(3);
+    }
+
+    void swallowed() {}
+}
+
+class Truncated extends Broken {
+    void cut() {
+        new Broken().afterDamage(

@@ -1,0 +1,71 @@
+definitions:
+  [0] interface Shape 7:18-7:23 range=7:1-15:2
+  [1] constant UNIT 8:12-8:16 range=8:5-8:35 container=Shape parent=[0]
+  [2] constant HALF 8:24-8:28 range=8:5-8:35 container=Shape parent=[0]
+  [3] method area 10:12-10:16 range=10:5-10:19 container=Shape parent=[0]
+  [4] method compareTo 12:17-12:26 range=12:5-14:6 container=Shape parent=[0]
+  [5] class Polygon 17:30-17:37 range=17:1-24:2
+  [6] field sides 18:25-18:30 range=18:5-18:31 container=Polygon parent=[5]
+  [7] field label 19:20-19:25 range=19:5-19:44 container=Polygon parent=[5]
+  [8] field note 19:39-19:43 range=19:5-19:44 container=Polygon parent=[5]
+  [9] constructor Polygon 21:15-21:22 range=21:5-23:6 container=Polygon parent=[5]
+  [10] class Square 26:20-26:26 range=26:1-38:2
+  [11] field side 27:26-27:30 range=27:5-27:31 container=Square parent=[10]
+  [12] constructor Square 29:12-29:18 range=29:5-32:6 container=Square parent=[10]
+  [13] method area 35:19-35:23 range=34:5-37:6 container=Square parent=[10]
+  [14] enum Color 40:13-40:18 range=40:1-55:2
+  [15] constant RED 41:5-41:8 range=41:5-41:8 container=Color parent=[14]
+  [16] constant GREEN 42:5-42:10 range=42:5-42:19 container=Color parent=[14]
+  [17] constant BLUE 43:5-43:9 range=43:5-46:6 container=Color parent=[14]
+  [18] method code 45:16-45:20 range=44:9-45:38 container=BLUE parent=[17]
+  [19] field name 48:26-48:30 range=48:5-48:31 container=Color parent=[14]
+  [20] constructor Color 50:5-50:10 range=50:5-50:30 container=Color parent=[14]
+  [21] constructor Color 52:5-52:10 range=52:5-52:45 container=Color parent=[14]
+  [22] method code 54:12-54:16 range=54:5-54:35 container=Color parent=[14]
+  [23] record Point 57:15-57:20 range=57:1-65:2
+  [24] field x 57:25-57:26 range=57:21-57:26 container=Point parent=[23]
+  [25] field y 57:32-57:33 range=57:28-57:33 container=Point parent=[23]
+  [26] constructor Point 58:12-58:17 range=58:5-60:6 container=Point parent=[23]
+  [27] method origin 62:18-62:24 range=62:5-62:54 container=Point parent=[23]
+  [28] method compareTo 64:16-64:25 range=64:5-64:78 container=Point parent=[23]
+  [29] annotation Tag 68:19-68:22 range=67:1-71:2
+  [30] method value 69:12-69:17 range=69:5-69:31 container=Tag parent=[29]
+  [31] method priority 70:9-70:17 range=70:5-70:30 container=Tag parent=[29]
+  [32] class Shapes 73:7-73:13 range=73:1-77:2
+  [33] method sorted 74:38-74:44 range=74:5-76:6 container=Shapes parent=[32]
+references:
+  type Comparable 7:32-7:42 in=[0] Shape
+  type Shape 7:43-7:48 in=[0] Shape
+  type Shape 12:27-12:32 in=[4] compareTo
+  call compare 13:23-13:30 in=[4] compareTo
+  call area 13:31-13:35 in=[4] compareTo
+  call area 13:45-13:49 in=[4] compareTo
+  type Shape 17:49-17:54 in=[5] Polygon
+  type Square 17:63-17:69 in=[5] Polygon
+  type String 19:13-19:19 in=[8] note
+  type Polygon 26:35-26:42 in=[10] Square
+  type Override 34:6-34:14 in=[13] area
+  type Override 44:10-44:18 in=[18] code
+  type String 45:9-45:15 in=[18] code
+  type String 48:19-48:25 in=[19] name
+  type String 52:11-52:17 in=[21] Color
+  type String 54:5-54:11 in=[22] code
+  type Comparable 57:46-57:56 in=[23] Point
+  type Point 57:57-57:62 in=[23] Point
+  call requireNonNull 59:17-59:31 in=[26] Point
+  type Point 62:12-62:17 in=[27] origin
+  new Point 62:40-62:45 in=[27] origin
+  type Point 64:26-64:31 in=[28] compareTo
+  call compare 64:56-64:63 in=[28] compareTo
+  type Retention 67:23-67:32 in=[29] Tag
+  type String 69:5-69:11 in=[30] value
+  type T 74:13-74:14 in=[33] sorted
+  type Shape 74:23-74:28 in=[33] sorted
+  type List 74:30-74:34 in=[33] sorted
+  type T 74:35-74:36 in=[33] sorted
+  type List 74:45-74:49 in=[33] sorted
+  type T 74:50-74:51 in=[33] sorted
+  type IllegalStateException 74:68-74:89 in=[33] sorted
+  call stream 75:23-75:29 in=[33] sorted
+  call sorted 75:32-75:38 in=[33] sorted
+  call toList 75:41-75:47 in=[33] sorted

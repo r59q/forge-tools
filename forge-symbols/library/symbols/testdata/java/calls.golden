@@ -1,0 +1,56 @@
+definitions:
+  [0] class OrderService 7:14-7:26 range=7:1-43:2
+  [1] field repository 8:30-8:40 range=8:5-8:41 container=OrderService parent=[0]
+  [2] field pending 9:31-9:38 range=9:5-9:59 container=OrderService parent=[0]
+  [3] constructor OrderService 11:12-11:24 range=11:5-13:6 container=OrderService parent=[0]
+  [4] method place 15:20-15:25 range=15:5-21:6 container=OrderService parent=[0]
+  [5] method validate 23:18-23:26 range=23:5-27:6 container=OrderService parent=[0]
+  [6] method total 29:18-29:23 range=29:5-34:6 container=OrderService parent=[0]
+  [7] method notifyAll 36:18-36:27 range=36:5-40:6 container=OrderService parent=[0]
+  [8] method log 42:18-42:21 range=42:5-42:38 container=OrderService parent=[0]
+references:
+  type Repository 8:19-8:29 in=[1] repository
+  type List 9:19-9:23 in=[2] pending
+  type Order 9:24-9:29 in=[2] pending
+  new ArrayList 9:45-9:54 in=[2] pending
+  type Repository 11:25-11:35 in=[3] OrderService
+  type Receipt 15:12-15:19 in=[4] place
+  type Order 15:26-15:31 in=[4] place
+  type InvalidOrderException 15:46-15:67 in=[4] place
+  call validate 16:9-16:17 in=[4] place
+  type Order 17:9-17:14 in=[4] place
+  call save 17:34-17:38 in=[4] place
+  call withStatus 17:45-17:55 in=[4] place
+  call add 18:17-18:20 in=[4] place
+  call notifyAll 19:9-19:18 in=[4] place
+  call of 19:23-19:25 in=[4] place
+  call id 19:38-19:40 in=[4] place
+  new Receipt 20:20-20:27 in=[4] place
+  call id 20:34-20:36 in=[4] place
+  call total 20:40-20:45 in=[4] place
+  type Order 23:27-23:32 in=[5] validate
+  type InvalidOrderException 23:47-23:68 in=[5] validate
+  call lines 24:19-24:24 in=[5] validate
+  call isEmpty 24:27-24:34 in=[5] validate
+  new InvalidOrderException 25:23-25:44 in=[5] validate
+  type Order 29:24-29:29 in=[6] total
+  call lines 30:22-30:27 in=[6] total
+  call stream 30:30-30:36 in=[6] total
+  call mapToLong 31:14-31:23 in=[6] total
+  call price 31:30-31:35 in=[6] total
+  call map 32:14-32:17 in=[6] total
+  call max 32:32-32:35 in=[6] total
+  call sum 33:14-33:17 in=[6] total
+  type Map 36:28-36:31 in=[7] notifyAll
+  type String 36:32-36:38 in=[7] notifyAll
+  type Object 36:40-36:46 in=[7] notifyAll
+  call forEach 37:17-37:24 in=[7] notifyAll
+  call log 37:31-37:34 in=[7] notifyAll
+  type List 38:9-38:13 in=[7] notifyAll
+  type Receipt 38:14-38:21 in=[7] notifyAll
+  call stream 38:42-38:48 in=[7] notifyAll
+  call map 38:51-38:54 in=[7] notifyAll
+  new Receipt 38:55-38:62 in=[7] notifyAll
+  call toList 38:69-38:75 in=[7] notifyAll
+  call toString 39:15-39:23 in=[7] notifyAll
+  type Object 42:22-42:28 in=[8] log

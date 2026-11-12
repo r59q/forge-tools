@@ -84,7 +84,7 @@ func (q *query) decode(records, source []byte) ([]Match, error) {
 			return nil, errMalformed
 		}
 		if q.accepts(pattern, captures, source) {
-			matches = append(matches, Match{Captures: captures})
+			matches = append(matches, Match{Pattern: pattern, Captures: captures})
 		}
 	}
 	return matches, nil

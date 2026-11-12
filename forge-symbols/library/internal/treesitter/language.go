@@ -20,6 +20,8 @@ type Capture struct {
 
 // Match holds the captures of one tag query match.
 type Match struct {
+	// Pattern is the index of the matching pattern in the query.
+	Pattern  int
 	Captures []Capture
 }
 

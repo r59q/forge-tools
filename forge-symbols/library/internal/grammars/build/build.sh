@@ -63,3 +63,4 @@ fetch runtime "https://github.com/tree-sitter/tree-sitter/archive/refs/tags/$RUN
 
 # One line per language. Add external scanners after the checksum, e.g. src/parser.c src/scanner.c.
 grammar go tree-sitter/tree-sitter-go v0.25.0 2dc241b97872c53195e01b86542b411a3c1a6201d9c946c78d5c60c063bba1ef
+grammar java tree-sitter/tree-sitter-java v0.23.5 cb199e0faae4b2c08425f88cbb51c1a9319612e7b96315a174a624db9bf3d9f0

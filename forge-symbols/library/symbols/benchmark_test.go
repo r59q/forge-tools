@@ -44,8 +44,63 @@ func normalize%[1]d(label string) string {
 	return []byte(source.String())
 }
 
-// BenchmarkAnalyze measures one warm Analyze call per file size. The library
-// README records the results.
+// javaSource generates valid Java of at least the given size: numbered
+// classes with methods that call each other.
+func javaSource(size int) []byte {
+	var source strings.Builder
+	source.WriteString("package generated;\n\nimport java.util.List;\n")
+
+	for index := 0; source.Len() < size; index++ {
+		fmt.Fprintf(&source, `
+/** Holds one generated value. */
+final class Record%[1]d {
+    private final int id;
+    private final String label;
+    private Record%[1]d next;
+
+    Record%[1]d(int id, String label) {
+        this.id = id;
+        this.label = label;
+    }
+
+    /** Returns a short text for the record. */
+    String describe(String prefix) {
+        if (next != null) {
+            return prefix + next.describe(prefix);
+        }
+        return String.format("%%s%%d:%%s", prefix, id, normalize(label));
+    }
+
+    static String normalize(String label) {
+        StringBuilder result = new StringBuilder(label.length());
+        for (int position = 0; position < label.length(); position++) {
+            if (label.charAt(position) != ' ') {
+                result.append(label.charAt(position));
+            }
+        }
+        return result.toString();
+    }
+}
+`, index)
+	}
+	return []byte(source.String())
+}
+
+// generated lists, per language, a file name, its source generator, and
+// the kind and number of definitions of each generated record.
+var generated = []struct {
+	language  string
+	path      string
+	source    func(size int) []byte
+	record    string
+	perRecord int
+}{
+	{"go", "generated.go", goSource, "struct", 6},
+	{"java", "Generated.java", javaSource, "class", 7},
+}
+
+// BenchmarkAnalyze measures one warm Analyze call per language and file
+// size. The library README records the results.
 func BenchmarkAnalyze(b *testing.B) {
 	sizes := []struct {
 		name  string
@@ -57,18 +112,44 @@ func BenchmarkAnalyze(b *testing.B) {
 	}
 
 	analyzer := newAnalyzer(b, Limits{})
-	for _, size := range sizes {
-		file := File{Path: "generated.go", Content: goSource(size.bytes)}
-		if len(file.Content) > 1<<20 {
-			b.Fatalf("%s source has %d bytes, over the default file limit", size.name, len(file.Content))
+	for _, language := range generated {
+		for _, size := range sizes {
+			benchmarkAnalyze(b, analyzer, language.language+"/"+size.name,
+				File{Path: language.path, Content: language.source(size.bytes)})
 		}
+	}
+}
 
-		b.Run(size.name, func(b *testing.B) {
-			b.SetBytes(int64(len(file.Content)))
-			b.ReportAllocs()
+func benchmarkAnalyze(b *testing.B, analyzer *Analyzer, name string, file File) {
+	if len(file.Content) > 1<<20 {
+		b.Fatalf("%s source has %d bytes, over the default file limit", name, len(file.Content))
+	}
 
+	b.Run(name, func(b *testing.B) {
+		b.SetBytes(int64(len(file.Content)))
+		b.ReportAllocs()
+
+		for b.Loop() {
+			if _, err := analyzer.Analyze(context.Background(), file); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+}
+
+// BenchmarkStart measures the first Analyze call of a new analyzer, which
+// compiles the grammar module.
+func BenchmarkStart(b *testing.B) {
+	for _, language := range generated {
+		file := File{Path: language.path, Content: language.source(1 << 10)}
+
+		b.Run(language.language, func(b *testing.B) {
 			for b.Loop() {
+				analyzer := New(Limits{})
 				if _, err := analyzer.Analyze(context.Background(), file); err != nil {
+					b.Fatal(err)
+				}
+				if err := analyzer.Close(context.Background()); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -76,35 +157,23 @@ func BenchmarkAnalyze(b *testing.B) {
 	}
 }
 
-// BenchmarkStart measures the first Analyze call of a new analyzer, which
-// compiles the grammar module.
-func BenchmarkStart(b *testing.B) {
-	file := File{Path: "generated.go", Content: goSource(1 << 10)}
-
-	for b.Loop() {
-		analyzer := New(Limits{})
-		if _, err := analyzer.Analyze(context.Background(), file); err != nil {
-			b.Fatal(err)
-		}
-		if err := analyzer.Close(context.Background()); err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-// The generated benchmark input must stay valid Go, or the numbers would
+// The generated benchmark input must stay valid, or the numbers would
 // measure error recovery.
 func TestBenchmarkSourceIsValid(t *testing.T) {
 	analyzer := newAnalyzer(t, Limits{})
-	analysis := analyze(t, analyzer, File{Path: "generated.go", Content: goSource(8 << 10)})
 
-	records := 0
-	for _, definition := range analysis.Definitions {
-		if definition.Kind == "struct" {
-			records++
+	for _, language := range generated {
+		analysis := analyze(t, analyzer, File{Path: language.path, Content: language.source(8 << 10)})
+
+		records := 0
+		for _, definition := range analysis.Definitions {
+			if definition.Kind == language.record {
+				records++
+			}
 		}
-	}
-	if want := len(analysis.Definitions) / 6; records == 0 || records != want {
-		t.Errorf("got %d structs in %d definitions, want %d", records, len(analysis.Definitions), want)
+		if want := len(analysis.Definitions) / language.perRecord; records == 0 || records != want {
+			t.Errorf("%s: got %d of kind %s in %d definitions, want %d",
+				language.language, records, language.record, len(analysis.Definitions), want)
+		}
 	}
 }

@@ -24,8 +24,9 @@ From this directory: `CGO_ENABLED=0 go build ./...`, `go vet ./...`,
 
 ## Results
 
-- The language comes from the file extension (`.go`), or from `File.Language`
-  when set. Anything else returns `ErrUnsupported`.
+- Supported languages are Go (`go`, `.go`) and Java (`java`, `.java`). The
+  language comes from the file extension, or from `File.Language` when set.
+  Anything else returns `ErrUnsupported`.
 - A definition has a name, a kind, the range of its name and the range of the
   whole declaration with its body. `Parent` is the index of the innermost
   definition around it, or `None`. `Container` names what it belongs to: the
@@ -36,6 +37,19 @@ From this directory: `CGO_ENABLED=0 go build ./...`, `go vet ./...`,
   `function`, `method`, `struct`, `interface`, `type`, `field`, `constant` and
   `variable`, and references of kind `call` and `type`. Local variables and
   constants are not definitions; local types are.
+- Java gives definitions of kind `class`, `interface`, `enum`, `record`,
+  `annotation`, `method`, `constructor`, `field` (also record components)
+  and `constant` (enum constants and interface fields). References are
+  `call` for method calls and method references such as `Text::trim`, `new`
+  for object creation and constructor references such as `Text::new`, and
+  `type` for other type names, annotations included. Overloads are separate
+  definitions with the same name.
+- In Java, methods of an anonymous class belong to the definition around the
+  class, and methods in the body of an enum constant to the constant. Calls
+  of `this(…)` and `super(…)` are not references, nor are names used as
+  expressions, such as `Math` in `Math.max(a, b)`. Each part of a qualified
+  type such as `java.util.List` is a type reference, and so is a type
+  parameter where it is declared.
 - Ranges use one-based lines and UTF-16 columns with an exclusive end column,
   as in forge-explorer. Lines end at `\n`.
 - Invalid or partial source is not an error. Results come from the tree the
@@ -80,26 +94,32 @@ Rejected in the spike (AMD Ryzen 9 5950X, valid 1 MiB Go file unless noted):
 | Language parsers such as `go/parser` | One model per language and no path to the other planned languages. |
 
 Costs of the choice: WebAssembly runs slower than a native build would,
-a module takes 90 ms to compile on first use, and each language adds a
-checked-in binary of about 380 KB.
+a module takes 90 to 100 ms to compile on first use, and each language adds
+a checked-in binary: 380 KB for Go, 580 KB for Java.
 
 ## Grammars
 
 `internal/grammars` holds, per language, `<name>.wasm` and the tag query
 `<name>.scm`. Nothing is read from analyzed input or the filesystem.
 
-| Part                | Version | Source                                  |
-| ------------------- | ------- | --------------------------------------- |
-| Tree-sitter runtime | v0.27.2 | `github.com/tree-sitter/tree-sitter`    |
-| Go grammar          | v0.25.0 | `github.com/tree-sitter/tree-sitter-go` |
-| Compiler and libc   | 34      | `github.com/WebAssembly/wasi-sdk`       |
+| Part                | Version | Source                                    |
+| ------------------- | ------- | ----------------------------------------- |
+| Tree-sitter runtime | v0.27.2 | `github.com/tree-sitter/tree-sitter`      |
+| Go grammar          | v0.25.0 | `github.com/tree-sitter/tree-sitter-go`   |
+| Java grammar        | v0.23.5 | `github.com/tree-sitter/tree-sitter-java` |
+| Compiler and libc   | 34      | `github.com/WebAssembly/wasi-sdk`         |
 
 Rebuild with `internal/grammars/build/build.sh`. It downloads the pinned
 sources, checks their SHA-256 and writes the modules. It needs `curl`, `tar`
 and `sha256sum`; outside x86_64 Linux also `WASI_SDK_PATH` pointing to the
 pinned wasi-sdk. The build is reproducible: a rebuild leaves `git status`
-clean. `go.wasm` has SHA-256
-`bcc95509f49f71697df1bd68b305719bd1f4ea3a522eeaed09cff72bd30b1c74`.
+clean. SHA-256 of the modules:
+
+| Module      | SHA-256                                                            |
+| ----------- | ------------------------------------------------------------------ |
+| `go.wasm`   | `bcc95509f49f71697df1bd68b305719bd1f4ea3a522eeaed09cff72bd30b1c74` |
+| `java.wasm` | `e9971660371c2348b61a88d808ce2d6e5d998b59e148b1eb66508f289ebdaa8e` |
+
 The modules contain MIT-licensed Tree-sitter code and wasi-libc.
 
 To add a language: add a `grammar` line to `build.sh` and run it, write
@@ -108,7 +128,9 @@ To add a language: add a `grammar` line to `build.sh` and run it, write
 Tag queries use `@name` with `@definition.<kind>` or `@reference.<kind>`,
 and `@container` for a definition that belongs to a type it is not nested
 in. Predicates `#eq?`, `#match?` (Go regular expressions) and `#any-of?`
-work, also with `not-`. Other predicates fail when the query loads.
+work, also with `not-`. Other predicates fail when the query loads. When
+several patterns tag the same name, the first pattern in the query wins, so
+put specific patterns before general ones such as `(type_identifier)`.
 
 ## Golden tests
 
@@ -133,3 +155,14 @@ go test ./symbols -run TestGolden -update
 
 Real code parses faster because comments are cheap: `net/http/server.go`
 repeated to 1 MiB takes about 320 ms.
+
+Java on an Intel Core i7-12700 with 2 CPUs, Go 1.27, `CGO_ENABLED=0`, warm
+analyzer, generated Java classes with Javadoc comments, and the Go case on
+the same machine for comparison:
+
+| File                 | Java    | Go     |
+| -------------------- | ------- | ------ |
+| 4 KiB                | 1.6 ms  | 2.5 ms |
+| 64 KiB               | 24 ms   | 34 ms  |
+| 1 MiB                | 390 ms  | 600 ms |
+| First call (compile) | 100 ms  | 90 ms  |

@@ -1,0 +1,22 @@
+definitions:
+  [0] interface Config 1:11-1:17 range=1:1-5:2
+  [1] field name 2:3-2:7 range=2:3-2:15 container=Config parent=[0]
+  [2] field retries 3:3-3:10 range=3:3-3:18 container=Config parent=[0]
+  [3] field timeout 4:3-4:10 range=4:3-4:10 container=Config parent=[0]
+  [4] class Client 7:7-7:13 range=7:1-17:2
+  [5] constructor constructor 8:3-8:14 range=8:3-8:41 container=Client parent=[4]
+  [6] method send 10:3-10:7 range=10:3-12:4 container=Client parent=[4]
+  [7] method close 14:3-14:8 range=14:3-16:4 container=Client parent=[4]
+  [8] function overload 19:10-19:18 range=19:1-19:40
+  [9] function overload 20:10-20:18 range=20:1-20:40
+  [10] function overload 21:10-21:18 range=21:1-23:2
+  [11] class Truncated 25:7-25:16 range=25:1-28:17
+  [12] method cut 26:3-26:6 range=26:3-26:16 container=Truncated parent=[11]
+references:
+  type Config 8:31-8:37 in=[5] constructor
+  call post 11:5-11:9 in=[6] send
+  type Promise 14:12-14:19 in=[7] close
+  call flush 15:12-15:17 in=[7] close
+  call check 22:10-22:15 in=[10] overload
+  type Client 25:25-25:31 in=[11] Truncated
+  type Result 26:10-26:16 in=[12] cut

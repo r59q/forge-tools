@@ -1,0 +1,28 @@
+definitions:
+  [0] interface ButtonProps 3:11-3:22 range=3:1-6:2
+  [1] field label 4:3-4:8 range=4:3-4:16 container=ButtonProps parent=[0]
+  [2] method onClick 5:3-5:10 range=5:3-5:31 container=ButtonProps parent=[0]
+  [3] function Button 8:17-8:23 range=8:8-10:2
+  [4] function identity 12:7-12:15 range=12:7-12:44
+  [5] function Toolbar 14:14-14:21 range=14:14-25:2
+  [6] class Page 27:7-27:11 range=27:1-31:2
+  [7] method render 28:3-28:9 range=28:3-30:4 container=Page parent=[6]
+references:
+  type ButtonProps 8:44-8:55 in=[3] Button
+  call onClick 9:33-9:40 in=[3] Button
+  type T 12:19-12:20 in=[4] identity
+  type T 12:30-12:31 in=[4] identity
+  type T 12:34-12:35 in=[4] identity
+  type FC 14:29-14:31 in=[5] Toolbar
+  type Item 14:41-14:45 in=[5] Toolbar
+  call useState 15:31-15:39 in=[5] Toolbar
+  type Item 15:40-15:44 in=[5] Toolbar
+  call Row 18:13-18:16 in=[5] Toolbar
+  call map 19:14-19:17 in=[5] Toolbar
+  call Button 20:10-20:16 in=[5] Toolbar
+  call setActive 20:65-20:74 in=[5] Toolbar
+  call identity 20:75-20:83 in=[5] Toolbar
+  type Component 27:26-27:35 in=[6] Page
+  type PageProps 27:36-27:45 in=[6] Page
+  call Toolbar 29:13-29:20 in=[7] render
+  type Item 29:48-29:52 in=[7] render

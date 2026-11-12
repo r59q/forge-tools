@@ -1,0 +1,41 @@
+class Outer {
+  build() {
+    class Local {
+      run() {
+        return helper();
+      }
+    }
+
+    return new Local();
+  }
+
+  static Inner = class {
+    run() {}
+  };
+}
+
+function factory() {
+  class Product {
+    describe() {
+      return "product";
+    }
+  }
+
+  const make = () => new Product();
+
+  function inner() {
+    return make().describe();
+  }
+
+  return inner;
+}
+
+const module = (function () {
+  function hidden() {}
+
+  return {
+    exposed() {
+      hidden();
+    },
+  };
+})();

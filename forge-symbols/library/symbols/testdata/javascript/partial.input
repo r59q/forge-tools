@@ -1,0 +1,34 @@
+class Broken {
+  unclosedCall() {
+    helper(1,
+  }
+
+  afterDamage() {
+    helper(2);
+  }
+
+  helper(value) {
+    return value;
+  }
+}
+
+const ready = ;
+
+import { a, from "./a";
+
+function stray() {
+  )]} else
+  return run();
+}
+
+class Unclosed {
+  missingBrace() {
+    if (ready) {
+      helper(3);
+  }
+
+  swallowed() {}
+}
+
+function truncated() {
+  new Broken().afterDamage(

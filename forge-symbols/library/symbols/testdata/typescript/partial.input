@@ -1,0 +1,28 @@
+interface Config {
+  name: string;
+  retries: number
+  timeout:
+}
+
+class Client {
+  constructor(private config: Config) {}
+
+  send(): void {
+    post(this.config, ;
+  }
+
+  close(): Promise<void> {
+    return flush();
+  }
+}
+
+function overload(value: string): void;
+function overload(value: number): void;
+function overload(value: unknown) {
+  return check(value;
+}
+
+class Truncated extends Client {
+  cut(): Result<
+
+type Broken = {;

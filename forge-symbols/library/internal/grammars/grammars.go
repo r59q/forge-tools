@@ -32,6 +32,21 @@ func Languages() []Language {
 	return []Language{
 		{Name: "go", Extensions: []string{".go"}, Queries: []string{"go"}},
 		{Name: "java", Extensions: []string{".java"}, Queries: []string{"java"}},
+		{
+			Name:       "javascript",
+			Extensions: []string{".js", ".mjs", ".cjs", ".jsx"},
+			Queries:    []string{"ecmascript", "javascript", "jsx"},
+		},
+		{
+			Name:       "typescript",
+			Extensions: []string{".ts", ".mts", ".cts"},
+			Queries:    []string{"ecmascript", "typescript"},
+		},
+		{
+			Name:       "tsx",
+			Extensions: []string{".tsx"},
+			Queries:    []string{"ecmascript", "typescript", "jsx"},
+		},
 	}
 }
 

@@ -28,10 +28,30 @@ const javaSample = `class Greeter {
 }
 `
 
+const javascriptSample = `class Greeter {
+  greet(name) { return <Text>{name}</Text>; }
+}
+`
+
+const typescriptSample = `interface Greeter {
+  greet(name: string): string;
+}
+`
+
+const tsxSample = `interface Greeter {
+  greet(name: string): string;
+}
+
+const render = <T,>(value: T) => <Text>{value}</Text>;
+`
+
 // samples holds, per language, a source file and the definitions in it.
 var samples = map[string]struct{ source, definitions string }{
-	"go":   {sample, "struct Greeter, method Greet, function format"},
-	"java": {javaSample, "class Greeter, constructor Greeter, method greet"},
+	"go":         {sample, "struct Greeter, method Greet, function format"},
+	"java":       {javaSample, "class Greeter, constructor Greeter, method greet"},
+	"javascript": {javascriptSample, "class Greeter, method greet"},
+	"typescript": {typescriptSample, "interface Greeter, method greet"},
+	"tsx":        {tsxSample, "interface Greeter, method greet, function render"},
 }
 
 func analyze(t *testing.T, analyzer *Analyzer, file File) Analysis {
@@ -69,6 +89,17 @@ func TestAnalyzeDetectsLanguage(t *testing.T) {
 		{"upper-case java extension", File{Path: "GREETER.JAVA"}, "java"},
 		{"java override", File{Path: "Greeter.txt", Language: "java"}, "java"},
 		{"java override of go extension", File{Path: "Greeter.go", Language: "java"}, "java"},
+		{"js extension", File{Path: "src/greeter.js"}, "javascript"},
+		{"mjs extension", File{Path: "greeter.mjs"}, "javascript"},
+		{"cjs extension", File{Path: "greeter.cjs"}, "javascript"},
+		{"jsx extension", File{Path: "Greeter.JSX"}, "javascript"},
+		{"ts extension", File{Path: "src/greeter.ts"}, "typescript"},
+		{"mts extension", File{Path: "greeter.mts"}, "typescript"},
+		{"cts extension", File{Path: "greeter.cts"}, "typescript"},
+		{"tsx extension", File{Path: "Greeter.tsx"}, "tsx"},
+		{"javascript override", File{Path: "greeter.txt", Language: "javascript"}, "javascript"},
+		{"typescript override", File{Path: "greeter.js", Language: "typescript"}, "typescript"},
+		{"tsx override of ts extension", File{Path: "greeter.ts", Language: "tsx"}, "tsx"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -118,7 +149,7 @@ func TestDetectLanguage(t *testing.T) {
 	if language, ok := DetectLanguage("a.go/readme"); ok {
 		t.Errorf("detected %q for a path without extension", language)
 	}
-	if got := Languages(); !slices.Equal(got, []string{"go", "java"}) {
+	if got := Languages(); !slices.Equal(got, []string{"go", "java", "javascript", "typescript", "tsx"}) {
 		t.Errorf("Languages() = %v", got)
 	}
 }

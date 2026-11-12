@@ -1,0 +1,23 @@
+// Overload signatures and their implementation are separate definitions.
+export function format(value: number): string;
+export function format(value: Date, pattern?: string): string;
+export function format(value: number | Date, pattern?: string): string {
+  return typeof value === "number" ? value.toFixed(2) : render(value, pattern);
+}
+
+class Formatter {
+  constructor();
+  constructor(separator: string);
+  constructor(private separator = ", ") {}
+
+  join(values: string[]): string;
+  join(values: number[], digits: number): string;
+  join(values: unknown[], digits?: number): string {
+    return values.map((value) => format(value as number)).join(this.separator);
+  }
+}
+
+interface Parser {
+  parse(text: string): number;
+  parse(text: string, radix: number): number;
+}

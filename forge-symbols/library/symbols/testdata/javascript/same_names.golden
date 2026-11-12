@@ -1,0 +1,16 @@
+definitions:
+  [0] class Circle 1:7-1:13 range=1:1-9:2
+  [1] method area 2:3-2:7 range=2:3-4:4 container=Circle parent=[0]
+  [2] method toString 6:3-6:11 range=6:3-8:4 container=Circle parent=[0]
+  [3] class Square 11:7-11:13 range=11:1-19:2
+  [4] method area 12:3-12:7 range=12:3-14:4 container=Square parent=[3]
+  [5] method toString 16:3-16:11 range=16:3-18:4 container=Square parent=[3]
+  [6] constant shapes 21:7-21:13 range=21:7-25:2
+  [7] method area 22:3-22:7 range=22:3-24:4 container=shapes parent=[6]
+  [8] function area 27:10-27:14 range=27:1-29:2
+references:
+  call area 7:27-7:31 in=[2] toString
+  call area 17:27-17:31 in=[5] toString
+  call area 23:18-23:22 in=[7] area
+  call map 28:17-28:20 in=[8] area
+  call area 28:38-28:42 in=[8] area

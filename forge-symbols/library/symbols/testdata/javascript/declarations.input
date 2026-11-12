@@ -1,0 +1,78 @@
+"use strict";
+
+const path = require("path");
+
+const LIMIT = 10;
+let counter = 0;
+var legacy = true;
+
+export const VERSION = "1.0";
+export let mutable = 1;
+
+function declared(value) {
+  return value * 2;
+}
+
+function* numbers() {
+  yield 1;
+}
+
+async function load(url) {
+  return fetch(url);
+}
+
+const arrow = (value) => value + 1;
+
+const expression = function named() {
+  return 1;
+};
+
+let generator = function* () {
+  yield 2;
+};
+
+export const exported = async () => {
+  await load("/");
+};
+
+export function exportedFunction() {}
+
+export default class Service {
+  static instances = 0;
+  #secret = 1;
+  handler = () => this.#secret;
+
+  constructor(name) {
+    this.name = name;
+  }
+
+  get label() {
+    return this.name;
+  }
+
+  static create() {
+    return new Service("default");
+  }
+
+  #hidden() {}
+
+  async *stream() {}
+}
+
+const Anonymous = class {
+  run() {}
+};
+
+const api = {
+  version: 2,
+  get(key) {
+    return key;
+  },
+  put: function (key, value) {},
+  remove: (key) => key,
+};
+
+module.exports.helper = function () {};
+exports.other = () => {};
+
+Service.prototype.legacy = function () {};

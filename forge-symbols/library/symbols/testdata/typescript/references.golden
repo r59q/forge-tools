@@ -1,0 +1,32 @@
+definitions:
+  [0] class UserService 5:14-5:25 range=5:8-16:2
+  [1] field cache 6:11-6:16 range=6:3-6:49 container=UserService parent=[0]
+  [2] method load 8:9-8:13 range=8:3-11:4 container=UserService parent=[0]
+  [3] method dispose 13:3-13:10 range=13:3-15:4 container=UserService parent=[0]
+  [4] function toUser 18:17-18:23 range=18:8-21:2
+  [5] function isUser 23:14-23:20 range=23:14-24:36
+  [6] class Admin 26:7-26:12 range=26:1-26:41
+references:
+  call Injectable 4:2-4:12
+  type BaseService 5:34-5:45 in=[0] UserService
+  type User 5:53-5:57 in=[0] UserService
+  type Loader 5:70-5:76 in=[0] UserService
+  type Disposable 5:78-5:88 in=[0] UserService
+  new Map 6:23-6:26 in=[1] cache
+  type User 6:42-6:46 in=[1] cache
+  type UserId 8:18-8:24 in=[2] load
+  type Promise 8:27-8:34 in=[2] load
+  type User 8:42-8:46 in=[2] load
+  type UserDto 9:42-9:49 in=[2] load
+  call toUser 10:12-10:18 in=[2] load
+  type User 10:46-10:50 in=[2] load
+  call clear 14:16-14:21 in=[3] dispose
+  type UserDto 18:29-18:36 in=[4] toUser
+  type User 18:46-18:50 in=[4] toUser
+  type User 19:24-19:28 in=[4] toUser
+  call assign 20:17-20:23 in=[4] toUser
+  type Partial 20:37-20:44 in=[4] toUser
+  type User 20:52-20:56 in=[4] toUser
+  type User 23:57-23:61 in=[5] isUser
+  type Account 26:25-26:32 in=[6] Admin
+  type Role 26:33-26:37 in=[6] Admin

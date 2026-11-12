@@ -1,0 +1,60 @@
+import type { Clock } from "./clock";
+
+export interface Shape<T> extends Named, Comparable<T> {
+  readonly name: string;
+  area(): number;
+  compare(other: T): number;
+}
+
+type Point = { x: number; y: number };
+
+export type Id = string | number;
+
+type Handler = (event: Event) => void;
+
+enum Color {
+  Red,
+  Green = "green",
+}
+
+export const enum Flags {
+  None = 0,
+}
+
+namespace Geometry.Units {
+  export const scale = 2;
+
+  export function convert(value: number): number {
+    return value * scale;
+  }
+}
+
+declare module Legacy {
+  function old(): void;
+}
+
+declare function external(input: string): Promise<void>;
+
+export abstract class Base<T> implements Shape<T> {
+  static count = 0;
+  protected readonly id: Id;
+  private handler = (event: Event): void => this.handle(event);
+
+  constructor(public name: string) {
+    this.id = name;
+  }
+
+  abstract area(): number;
+
+  compare(other: T): number {
+    return 0;
+  }
+
+  private handle(event: Event) {}
+}
+
+export const square = (side: number): Point => ({ x: side, y: side });
+
+export function sum(...values: number[]): number {
+  return values.reduce((total, value) => total + value, 0);
+}

@@ -1,0 +1,43 @@
+package com.example.orders;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+public class OrderService {
+    private final Repository repository;
+    private final List<Order> pending = new ArrayList<>();
+
+    public OrderService(Repository repository) {
+        this.repository = repository;
+    }
+
+    public Receipt place(Order order) throws InvalidOrderException {
+        validate(order);
+        Order saved = repository.save(order.withStatus(Status.PLACED));
+        pending.add(saved);
+        notifyAll(Map.of("id", saved.id()));
+        return new Receipt(saved.id(), total(saved));
+    }
+
+    private void validate(Order order) throws InvalidOrderException {
+        if (order.lines().isEmpty()) {
+            throw new InvalidOrderException("empty order");
+        }
+    }
+
+    private long total(Order order) {
+        return order.lines().stream()
+            .mapToLong(Line::price)
+            .map(price -> Math.max(price, 0))
+            .sum();
+    }
+
+    private void notifyAll(Map<String, Object> event) {
+        pending.forEach(this::log);
+        List<Receipt> receipts = pending.stream().map(Receipt::new).toList();
+        super.toString();
+    }
+
+    private void log(Object value) {}
+}

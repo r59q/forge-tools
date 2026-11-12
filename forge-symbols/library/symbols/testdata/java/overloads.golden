@@ -1,0 +1,30 @@
+definitions:
+  [0] class Formatter 3:14-3:23 range=3:1-29:2
+  [1] constructor Formatter 4:12-4:21 range=4:5-6:6 container=Formatter parent=[0]
+  [2] constructor Formatter 8:12-8:21 range=8:5-10:6 container=Formatter parent=[0]
+  [3] field separator 12:26-12:35 range=12:5-12:36 container=Formatter parent=[0]
+  [4] method format 14:19-14:25 range=14:5-16:6 container=Formatter parent=[0]
+  [5] method format 18:19-18:25 range=18:5-20:6 container=Formatter parent=[0]
+  [6] method format 22:19-22:25 range=22:5-24:6 container=Formatter parent=[0]
+  [7] method format 26:23-26:29 range=26:5-28:6 container=Formatter parent=[0]
+references:
+  type String 8:22-8:28 in=[2] Formatter
+  type String 12:19-12:25 in=[3] separator
+  type String 14:12-14:18 in=[4] format
+  call format 15:16-15:22 in=[4] format
+  call valueOf 15:30-15:37 in=[4] format
+  type String 18:12-18:18 in=[5] format
+  type String 18:26-18:32 in=[5] format
+  call trim 19:22-19:26 in=[5] format
+  type String 22:12-22:18 in=[6] format
+  type String 22:26-22:32 in=[6] format
+  type String 22:40-22:46 in=[6] format
+  call join 23:43-23:47 in=[6] format
+  type T 26:13-26:14 in=[7] format
+  type String 26:16-26:22 in=[7] format
+  type java 26:30-26:34 in=[7] format
+  type util 26:35-26:39 in=[7] format
+  type List 26:40-26:44 in=[7] format
+  type T 26:45-26:46 in=[7] format
+  call format 27:16-27:22 in=[7] format
+  call toString 27:30-27:38 in=[7] format

@@ -1,0 +1,29 @@
+package com.example;
+
+public class Formatter {
+    public Formatter() {
+        this(", ");
+    }
+
+    public Formatter(String separator) {
+        this.separator = separator;
+    }
+
+    private final String separator;
+
+    public String format(int value) {
+        return format(String.valueOf(value));
+    }
+
+    public String format(String value) {
+        return value.trim();
+    }
+
+    public String format(String first, String... rest) {
+        return first + separator + String.join(separator, rest);
+    }
+
+    public <T> String format(java.util.List<T> values) {
+        return format(values.toString());
+    }
+}

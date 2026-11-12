@@ -1,0 +1,77 @@
+package com.example.shapes;
+
+import java.util.List;
+import java.util.Objects;
+
+/** A shape with an area. */
+public interface Shape extends Comparable<Shape> {
+    double UNIT = 1.0, HALF = 0.5;
+
+    double area();
+
+    default int compareTo(Shape other) {
+        return Double.compare(area(), other.area());
+    }
+}
+
+public abstract sealed class Polygon implements Shape permits Square {
+    protected final int sides;
+    private String label = "polygon", note;
+
+    protected Polygon(int sides) {
+        this.sides = sides;
+    }
+}
+
+public final class Square extends Polygon {
+    private final double side;
+
+    public Square(double side) {
+        super(4);
+        this.side = side;
+    }
+
+    @Override
+    public double area() {
+        return side * side;
+    }
+}
+
+public enum Color {
+    RED,
+    GREEN("green"),
+    BLUE {
+        @Override
+        String code() { return "b"; }
+    };
+
+    private final String name;
+
+    Color() { this("none"); }
+
+    Color(String name) { this.name = name; }
+
+    String code() { return name; }
+}
+
+public record Point(int x, int y) implements Comparable<Point> {
+    public Point {
+        Objects.requireNonNull(x);
+    }
+
+    static Point origin() { return new Point(0, 0); }
+
+    public int compareTo(Point other) { return Integer.compare(x, other.x); }
+}
+
+@java.lang.annotation.Retention(java.lang.annotation.RetentionPolicy.RUNTIME)
+public @interface Tag {
+    String value() default "";
+    int priority() default 0;
+}
+
+class Shapes {
+    static <T extends Shape> List<T> sorted(List<T> shapes) throws IllegalStateException {
+        return shapes.stream().sorted().toList();
+    }
+}

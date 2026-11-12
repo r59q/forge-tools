@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -19,6 +20,19 @@ func (g Greeter) Greet(name string) string { return format(name) }
 
 func format(name string) string { return name }
 `
+
+const javaSample = `class Greeter {
+    Greeter() {}
+
+    String greet(String name) { return format(name); }
+}
+`
+
+// samples holds, per language, a source file and the definitions in it.
+var samples = map[string]struct{ source, definitions string }{
+	"go":   {sample, "struct Greeter, method Greet, function format"},
+	"java": {javaSample, "class Greeter, constructor Greeter, method greet"},
+}
 
 func analyze(t *testing.T, analyzer *Analyzer, file File) Analysis {
 	t.Helper()
@@ -42,24 +56,29 @@ func TestAnalyzeDetectsLanguage(t *testing.T) {
 	analyzer := newAnalyzer(t, Limits{})
 
 	tests := []struct {
-		name string
-		file File
+		name     string
+		file     File
+		language string
 	}{
-		{"extension", File{Path: "pkg/sample.go"}},
-		{"upper-case extension", File{Path: "SAMPLE.GO"}},
-		{"override without extension", File{Path: "sample", Language: "go"}},
-		{"override of another extension", File{Path: "sample.txt", Language: "go"}},
-		{"override without path", File{Language: "go"}},
+		{"extension", File{Path: "pkg/sample.go"}, "go"},
+		{"upper-case extension", File{Path: "SAMPLE.GO"}, "go"},
+		{"override without extension", File{Path: "sample", Language: "go"}, "go"},
+		{"override of another extension", File{Path: "sample.txt", Language: "go"}, "go"},
+		{"override without path", File{Language: "go"}, "go"},
+		{"java extension", File{Path: "src/main/java/Greeter.java"}, "java"},
+		{"upper-case java extension", File{Path: "GREETER.JAVA"}, "java"},
+		{"java override", File{Path: "Greeter.txt", Language: "java"}, "java"},
+		{"java override of go extension", File{Path: "Greeter.go", Language: "java"}, "java"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			test.file.Content = []byte(sample)
+			test.file.Content = []byte(samples[test.language].source)
 			analysis := analyze(t, analyzer, test.file)
 
-			if analysis.Language != "go" || analysis.Path != test.file.Path {
+			if analysis.Language != test.language || analysis.Path != test.file.Path {
 				t.Errorf("got language %q path %q", analysis.Language, analysis.Path)
 			}
-			if got, want := names(analysis.Definitions), "struct Greeter, method Greet, function format"; got != want {
+			if got, want := names(analysis.Definitions), samples[test.language].definitions; got != want {
 				t.Errorf("definitions = %s, want %s", got, want)
 			}
 		})
@@ -93,10 +112,13 @@ func TestDetectLanguage(t *testing.T) {
 	if language, ok := DetectLanguage("a/b/c.go"); !ok || language != "go" {
 		t.Errorf("got %q, %v", language, ok)
 	}
+	if language, ok := DetectLanguage("src/Main.java"); !ok || language != "java" {
+		t.Errorf("got %q, %v", language, ok)
+	}
 	if language, ok := DetectLanguage("a.go/readme"); ok {
 		t.Errorf("detected %q for a path without extension", language)
 	}
-	if got := Languages(); len(got) == 0 || got[0] != "go" {
+	if got := Languages(); !slices.Equal(got, []string{"go", "java"}) {
 		t.Errorf("Languages() = %v", got)
 	}
 }

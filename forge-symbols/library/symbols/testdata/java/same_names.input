@@ -1,0 +1,21 @@
+package com.example;
+
+class Cat {
+    String speak() {
+        return "meow";
+    }
+
+    void greet(Dog dog) {
+        System.out.println(speak() + dog.speak());
+    }
+}
+
+class Dog {
+    String speak() {
+        return "woof";
+    }
+
+    void greet(Cat cat) {
+        System.out.println(speak() + cat.speak());
+    }
+}

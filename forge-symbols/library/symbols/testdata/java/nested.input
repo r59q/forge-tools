@@ -1,0 +1,49 @@
+package com.example;
+
+public class Outer {
+    private int count;
+
+    public class Inner {
+        void touch() {
+            count++;
+        }
+
+        class Deeper {
+            void dive() {
+                touch();
+            }
+        }
+    }
+
+    public static class Nested {
+        static Nested create() {
+            return new Nested();
+        }
+    }
+
+    interface Callback {
+        void done(Outer.Inner inner);
+
+        enum State { IDLE, BUSY }
+    }
+
+    void run() {
+        class Local {
+            void act() {
+                Inner inner = new Inner();
+                inner.touch();
+            }
+        }
+
+        Runnable task = new Runnable() {
+            @Override
+            public void run() {
+                new Local().act();
+            }
+        };
+
+        Callback callback = inner -> inner.touch();
+        Outer.Inner made = this.new Inner();
+        task.run();
+    }
+}

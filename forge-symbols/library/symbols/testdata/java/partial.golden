@@ -1,0 +1,12 @@
+definitions:
+  [0] class Broken 5:14-5:20 range=5:8-19:2
+  [1] field ready 6:17-6:22 range=6:5-6:26 container=Broken parent=[0]
+  [2] method unclosedCall 8:10-8:22 range=8:5-10:6 container=Broken parent=[0]
+  [3] method afterDamage 12:10-12:21 range=12:5-14:6 container=Broken parent=[0]
+  [4] method helper 16:9-16:15 range=16:5-18:6 container=Broken parent=[0]
+  [5] method missingBrace 22:10-22:22 range=22:5-28:2
+references:
+  call helper 13:9-13:15 in=[3] afterDamage
+  call helper 24:13-24:19 in=[5] missingBrace
+  type Broken 30:25-30:31
+  new Broken 32:13-32:19

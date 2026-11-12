@@ -135,6 +135,42 @@ export function normalize%[1]d(label%[3]s)%[3]s {
 	}
 }
 
+// pythonSource generates valid Python of at least the given size: numbered
+// classes with methods that call each other.
+func pythonSource(size int) []byte {
+	var source strings.Builder
+	source.WriteString("from format import format_record\n")
+
+	for index := 0; source.Len() < size; index++ {
+		fmt.Fprintf(&source, `
+
+class Record%[1]d:
+    """Holds one generated value."""
+
+    def __init__(self, id, label):
+        self.id = id
+        self.label = label
+        self.next = None
+
+    @traced
+    def describe(self, prefix):
+        """Returns a short text for the record."""
+        if self.next is not None:
+            return prefix + self.next.describe(prefix)
+        return format_record(prefix, self.id, normalize%[1]d(self.label))
+
+
+def normalize%[1]d(label):
+    result = []
+    for position in range(len(label)):
+        if label[position] != " ":
+            result.append(label[position])
+    return "".join(result)
+`, index)
+	}
+	return []byte(source.String())
+}
+
 // generated lists, per language, a file name, its source generator, and
 // the kind and number of definitions of each generated record.
 var generated = []struct {
@@ -148,6 +184,7 @@ var generated = []struct {
 	{"java", "Generated.java", javaSource, "class", 7},
 	{"javascript", "generated.js", scriptSource(false), "class", 7},
 	{"typescript", "generated.ts", scriptSource(true), "class", 7},
+	{"python", "generated.py", pythonSource, "class", 4},
 }
 
 // BenchmarkAnalyze measures one warm Analyze call per language and file

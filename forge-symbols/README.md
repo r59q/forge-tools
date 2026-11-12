@@ -23,5 +23,4 @@ file. Useful on its own and for code navigation in other tools.
   limited, so untrusted source cannot exhaust a host.
 - **Sandboxed, no cgo.** Parsers run as WebAssembly in a pure Go runtime.
 
-Supported languages: Go, Java, JavaScript, TypeScript and TSX. Python is
-planned.
+Supported languages: Go, Java, JavaScript, TypeScript, TSX and Python.

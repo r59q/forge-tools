@@ -28,22 +28,25 @@ fetch() {
 
 # grammar <language> <repository> <version> <sha256> [source...] builds one module.
 # Sources are relative to the grammar repository and default to src/parser.c.
+# The directory of the first source holds the grammar headers.
 grammar() {
   language=$1 repository=$2 version=$3 sha256=$4
   shift 4
   if [ $# -eq 0 ]; then set -- src/parser.c; fi
 
-  fetch "$language" "https://github.com/$repository/archive/refs/tags/$version.tar.gz" "$sha256"
+  archive=$(basename "$repository")-$version
+  fetch "$archive" "https://github.com/$repository/archive/refs/tags/$version.tar.gz" "$sha256"
+  headers=$work/$archive/$(dirname "$1")
 
   sources=
-  for source in "$@"; do sources="$sources $work/$language/$source"; done
+  for source in "$@"; do sources="$sources $work/$archive/$source"; done
 
   # shellcheck disable=SC2086 # sources is a list.
   "$WASI_SDK_PATH/bin/clang" --target=wasm32-wasip1 -O2 -DNDEBUG \
     -mexec-model=reactor -Wl,--strip-all -Wl,-z,stack-size=1048576 \
     -DSYM_LANGUAGE="tree_sitter_$language" \
     -I "$work/runtime/lib/include" -I "$work/runtime/lib/src" \
-    -I "$work/$language/src" \
+    -I "$headers" \
     "$work/runtime/lib/src/lib.c" $sources "$here/shim.c" \
     -o "$here/../$language.wasm"
   chmod 644 "$here/../$language.wasm"
@@ -64,3 +67,6 @@ fetch runtime "https://github.com/tree-sitter/tree-sitter/archive/refs/tags/$RUN
 # One line per language. Add external scanners after the checksum, e.g. src/parser.c src/scanner.c.
 grammar go tree-sitter/tree-sitter-go v0.25.0 2dc241b97872c53195e01b86542b411a3c1a6201d9c946c78d5c60c063bba1ef
 grammar java tree-sitter/tree-sitter-java v0.23.5 cb199e0faae4b2c08425f88cbb51c1a9319612e7b96315a174a624db9bf3d9f0
+grammar javascript tree-sitter/tree-sitter-javascript v0.25.0 9712fc283d3dc01d996d20b6392143445d05867a7aad76fdd723824468428b86 src/parser.c src/scanner.c
+grammar typescript tree-sitter/tree-sitter-typescript v0.23.2 2c4ce711ae8d1218a3b2f899189298159d672870b5b34dff5d937bed2f3e8983 typescript/src/parser.c typescript/src/scanner.c
+grammar tsx tree-sitter/tree-sitter-typescript v0.23.2 2c4ce711ae8d1218a3b2f899189298159d672870b5b34dff5d937bed2f3e8983 tsx/src/parser.c tsx/src/scanner.c

@@ -3,6 +3,8 @@ package grammars_test
 import (
 	"bytes"
 	"context"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -11,7 +13,8 @@ import (
 )
 
 // Every bundled language must ship a parser module and a tag query that
-// load together, and must own its file extensions.
+// load together, and must own its file extensions. Every query file must
+// belong to a language.
 func TestBundledLanguagesLoad(t *testing.T) {
 	engine := treesitter.New(64 << 20)
 	t.Cleanup(func() {
@@ -21,7 +24,11 @@ func TestBundledLanguagesLoad(t *testing.T) {
 	})
 
 	owners := map[string]string{}
+	unused, _ := filepath.Glob("*.scm")
 	for _, language := range grammars.Languages() {
+		for _, query := range language.Queries {
+			unused = slices.DeleteFunc(unused, func(file string) bool { return file == query+".scm" })
+		}
 		module, err := language.Module()
 		if err != nil || !bytes.HasPrefix(module, []byte("\x00asm")) {
 			t.Errorf("%s: module is not WebAssembly (%v)", language.Name, err)
@@ -51,5 +58,8 @@ func TestBundledLanguagesLoad(t *testing.T) {
 			}
 			owners[extension] = language.Name
 		}
+	}
+	if len(unused) > 0 {
+		t.Errorf("queries %v belong to no language", unused)
 	}
 }

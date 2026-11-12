@@ -1,0 +1,41 @@
+export class Outer {
+  static Inner = class {
+    run(): void {}
+  };
+
+  build(): Product {
+    class Local implements Product {
+      describe(): string {
+        return helper();
+      }
+    }
+
+    return new Local();
+  }
+}
+
+function factory<T>(seed: T) {
+  interface Box {
+    value: T;
+  }
+
+  type Wrapped = { box: Box };
+
+  class Holder {
+    constructor(readonly box: Box) {}
+
+    unwrap = (): T => this.box.value;
+  }
+
+  const make = (): Holder => new Holder({ value: seed });
+
+  return make();
+}
+
+namespace Registry {
+  export class Entry {
+    register() {
+      Registry.add(this);
+    }
+  }
+}

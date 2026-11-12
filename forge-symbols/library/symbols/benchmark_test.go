@@ -86,6 +86,55 @@ final class Record%[1]d {
 	return []byte(source.String())
 }
 
+// scriptSource returns a generator of valid JavaScript, or TypeScript when
+// typed, of at least the given size: numbered classes with methods that
+// call each other.
+func scriptSource(typed bool) func(size int) []byte {
+	return func(size int) []byte {
+		var source strings.Builder
+		source.WriteString("import { format } from \"./format\";\n")
+
+		for index := 0; source.Len() < size; index++ {
+			number, text, next := "", "", ""
+			if typed {
+				number, text, next = ": number", ": string", fmt.Sprintf(": Record%d | null", index)
+			}
+			fmt.Fprintf(&source, `
+/** Holds one generated value. */
+export class Record%[1]d {
+  id%[2]s;
+  label%[3]s;
+  next%[4]s = null;
+
+  constructor(id%[2]s, label%[3]s) {
+    this.id = id;
+    this.label = label;
+  }
+
+  /** Returns a short text for the record. */
+  describe(prefix%[3]s)%[3]s {
+    if (this.next !== null) {
+      return prefix + this.next.describe(prefix);
+    }
+    return format(prefix, this.id, normalize%[1]d(this.label));
+  }
+}
+
+export function normalize%[1]d(label%[3]s)%[3]s {
+  let result = "";
+  for (let position = 0; position < label.length; position++) {
+    if (label[position] !== " ") {
+      result += label.charAt(position);
+    }
+  }
+  return result;
+}
+`, index, number, text, next)
+		}
+		return []byte(source.String())
+	}
+}
+
 // generated lists, per language, a file name, its source generator, and
 // the kind and number of definitions of each generated record.
 var generated = []struct {
@@ -97,6 +146,8 @@ var generated = []struct {
 }{
 	{"go", "generated.go", goSource, "struct", 6},
 	{"java", "Generated.java", javaSource, "class", 7},
+	{"javascript", "generated.js", scriptSource(false), "class", 7},
+	{"typescript", "generated.ts", scriptSource(true), "class", 7},
 }
 
 // BenchmarkAnalyze measures one warm Analyze call per language and file

@@ -1,0 +1,29 @@
+class Circle {
+  area() {
+    return Math.PI * this.radius ** 2;
+  }
+
+  toString() {
+    return `circle ${this.area()}`;
+  }
+}
+
+class Square {
+  area() {
+    return this.side * this.side;
+  }
+
+  toString() {
+    return `square ${this.area()}`;
+  }
+}
+
+const shapes = {
+  area(shape) {
+    return shape.area();
+  },
+};
+
+function area(shapes) {
+  return shapes.map((shape) => shape.area());
+}

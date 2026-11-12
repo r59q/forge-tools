@@ -24,9 +24,20 @@ From this directory: `CGO_ENABLED=0 go build ./...`, `go vet ./...`,
 
 ## Results
 
-- Supported languages are Go (`go`, `.go`) and Java (`java`, `.java`). The
-  language comes from the file extension, or from `File.Language` when set.
-  Anything else returns `ErrUnsupported`.
+- Supported languages, with the identifier for `File.Language`:
+
+  | Language   | Identifier   | Extensions              |
+  | ---------- | ------------ | ----------------------- |
+  | Go         | `go`         | `.go`                   |
+  | Java       | `java`       | `.java`                 |
+  | JavaScript | `javascript` | `.js .mjs .cjs .jsx`    |
+  | TypeScript | `typescript` | `.ts .mts .cts`         |
+  | TSX        | `tsx`        | `.tsx`                  |
+
+  The language comes from the file extension, or from `File.Language` when
+  set. Anything else returns `ErrUnsupported`. TSX is separate from
+  TypeScript because the TypeScript grammar cannot parse JSX, and `<T>x`
+  casts mean something else in TSX. JavaScript includes JSX.
 - A definition has a name, a kind, the range of its name and the range of the
   whole declaration with its body. `Parent` is the index of the innermost
   definition around it, or `None`. `Container` names what it belongs to: the
@@ -50,6 +61,21 @@ From this directory: `CGO_ENABLED=0 go build ./...`, `go vet ./...`,
   expressions, such as `Math` in `Math.max(a, b)`. Each part of a qualified
   type such as `java.util.List` is a type reference, and so is a type
   parameter where it is declared.
+- JavaScript, TypeScript and TSX give definitions of kind `class`,
+  `constructor`, `method` (class and object-literal methods, getters and
+  setters, fields holding a function), `function` (declarations, named
+  function expressions, and arrow functions or function expressions assigned
+  to a variable, property or object key), `field`, and top-level `constant`
+  (`const`) and `variable` (`let`, `var`). TypeScript adds `interface`,
+  `type` (type aliases), `enum`, `constant` for enum members, `module`
+  (namespaces and `declare module`), and fields and methods of interfaces
+  and object type aliases. Overload signatures are separate definitions with
+  the same name, also for constructors.
+- Their references are `call` for calls, decorators and JSX components such
+  as `<Button />` (lower-case elements are HTML, not references), `new` for
+  object creation, and `type` for superclasses and, in TypeScript, every
+  type name. `require(…)` is not a reference. Only the last part of a
+  member name counts: `a.b.c()` calls `c`, `models.User` refers to `User`.
 - Ranges use one-based lines and UTF-16 columns with an exclusive end column,
   as in forge-explorer. Lines end at `\n`.
 - Invalid or partial source is not an error. Results come from the tree the
@@ -94,20 +120,24 @@ Rejected in the spike (AMD Ryzen 9 5950X, valid 1 MiB Go file unless noted):
 | Language parsers such as `go/parser` | One model per language and no path to the other planned languages. |
 
 Costs of the choice: WebAssembly runs slower than a native build would,
-a module takes 90 to 100 ms to compile on first use, and each language adds
-a checked-in binary: 380 KB for Go, 580 KB for Java.
+a module takes 90 to 180 ms to compile on first use, and each language adds
+a checked-in binary: 380 KB for Go, 580 KB each for Java and JavaScript,
+1.6 MB each for TypeScript and TSX.
 
 ## Grammars
 
-`internal/grammars` holds, per language, `<name>.wasm` and the tag query
-`<name>.scm`. Nothing is read from analyzed input or the filesystem.
+`internal/grammars` holds, per language, `<name>.wasm` and the `.scm` files
+of its tag query, listed in `grammars.go`. Nothing is read from analyzed
+input or the filesystem.
 
-| Part                | Version | Source                                    |
-| ------------------- | ------- | ----------------------------------------- |
-| Tree-sitter runtime | v0.27.2 | `github.com/tree-sitter/tree-sitter`      |
-| Go grammar          | v0.25.0 | `github.com/tree-sitter/tree-sitter-go`   |
-| Java grammar        | v0.23.5 | `github.com/tree-sitter/tree-sitter-java` |
-| Compiler and libc   | 34      | `github.com/WebAssembly/wasi-sdk`         |
+| Part                    | Version | Source                                          |
+| ----------------------- | ------- | ----------------------------------------------- |
+| Tree-sitter runtime     | v0.27.2 | `github.com/tree-sitter/tree-sitter`            |
+| Go grammar              | v0.25.0 | `github.com/tree-sitter/tree-sitter-go`         |
+| Java grammar            | v0.23.5 | `github.com/tree-sitter/tree-sitter-java`       |
+| JavaScript grammar      | v0.25.0 | `github.com/tree-sitter/tree-sitter-javascript` |
+| TypeScript, TSX grammar | v0.23.2 | `github.com/tree-sitter/tree-sitter-typescript` |
+| Compiler and libc       | 34      | `github.com/WebAssembly/wasi-sdk`               |
 
 Rebuild with `internal/grammars/build/build.sh`. It downloads the pinned
 sources, checks their SHA-256 and writes the modules. It needs `curl`, `tar`
@@ -115,15 +145,25 @@ and `sha256sum`; outside x86_64 Linux also `WASI_SDK_PATH` pointing to the
 pinned wasi-sdk. The build is reproducible: a rebuild leaves `git status`
 clean. SHA-256 of the modules:
 
-| Module      | SHA-256                                                            |
-| ----------- | ------------------------------------------------------------------ |
-| `go.wasm`   | `bcc95509f49f71697df1bd68b305719bd1f4ea3a522eeaed09cff72bd30b1c74` |
-| `java.wasm` | `e9971660371c2348b61a88d808ce2d6e5d998b59e148b1eb66508f289ebdaa8e` |
+| Module            | SHA-256                                                            |
+| ----------------- | ------------------------------------------------------------------ |
+| `go.wasm`         | `bcc95509f49f71697df1bd68b305719bd1f4ea3a522eeaed09cff72bd30b1c74` |
+| `java.wasm`       | `e9971660371c2348b61a88d808ce2d6e5d998b59e148b1eb66508f289ebdaa8e` |
+| `javascript.wasm` | `f841512e99562f6262073c8a4b34811b1924227fdcb35b7ea99376e9b044ad01` |
+| `typescript.wasm` | `a257971a1b5d766fe282abd1175c7cdca42a72ce538241ce88a5f3d117292768` |
+| `tsx.wasm`        | `99f9bccc367e0dd9b08689f3e3e775848bd3b028f43589b55092a981d00cd306` |
 
 The modules contain MIT-licensed Tree-sitter code and wasi-libc.
 
-To add a language: add a `grammar` line to `build.sh` and run it, write
-`<name>.scm`, add a row to `Languages` in `grammars.go`, and add golden tests.
+To add a language: add a `grammar` line to `build.sh` and run it, write its
+query, add a row to `Languages` in `grammars.go`, and add golden tests.
+
+A query can be joined from several files, in order, so related grammars
+share patterns instead of copying them: `ecmascript.scm` serves JavaScript,
+TypeScript and TSX, `typescript.scm` TypeScript and TSX, `jsx.scm`
+JavaScript and TSX, and `javascript.scm` JavaScript only. Tree-sitter
+rejects patterns with nodes a grammar lacks, so a shared file uses only
+nodes common to all its grammars.
 
 Tag queries use `@name` with `@definition.<kind>` or `@reference.<kind>`,
 and `@container` for a definition that belongs to a type it is not nested
@@ -144,14 +184,15 @@ go test ./symbols -run TestGolden -update
 ## Benchmarks
 
 `go test ./symbols -run '^$' -bench .` on an AMD Ryzen 9 5950X, Go 1.27,
-`CGO_ENABLED=0`, warm analyzer, generated Go code without comments:
+`CGO_ENABLED=0`, warm analyzer, generated Go code without comments and
+generated JavaScript and TypeScript classes with doc comments:
 
-| File                 | Time per file |
-| -------------------- | ------------- |
-| 4 KiB                | 3 ms          |
-| 64 KiB               | 41 ms         |
-| 1 MiB                | 690 ms        |
-| First call (compile) | 90 ms extra   |
+| File                 | Go     | JavaScript | TypeScript |
+| -------------------- | ------ | ---------- | ---------- |
+| 4 KiB                | 3 ms   | 3 ms       | 3.3 ms     |
+| 64 KiB               | 41 ms  | 40 ms      | 43 ms      |
+| 1 MiB                | 690 ms | 680 ms     | 750 ms     |
+| First call (compile) | 90 ms  | 135 ms     | 180 ms     |
 
 Real code parses faster because comments are cheap: `net/http/server.go`
 repeated to 1 MiB takes about 320 ms.

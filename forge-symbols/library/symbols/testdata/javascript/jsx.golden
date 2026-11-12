@@ -1,0 +1,12 @@
+definitions:
+  [0] function Button 3:10-3:16 range=3:1-5:2
+  [1] function Toolbar 7:25-7:32 range=7:16-16:2
+  [2] class Page 18:7-18:11 range=18:1-22:2
+  [3] method render 19:3-19:9 range=19:3-21:4 container=Page parent=[2]
+references:
+  call onClick 4:33-4:40 in=[0] Button
+  call Row 9:13-9:16 in=[1] Toolbar
+  call map 10:14-10:17 in=[1] Toolbar
+  call Button 11:10-11:16 in=[1] Toolbar
+  type Component 18:26-18:35 in=[2] Page
+  call Toolbar 20:13-20:20 in=[3] render

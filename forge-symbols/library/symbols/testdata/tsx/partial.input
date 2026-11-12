@@ -1,0 +1,19 @@
+export function Footer(): JSX.Element {
+  return <Link href="/">home</Link>;
+}
+
+class Panel {
+  render() {
+    return <Card title=
+  }
+
+  close() {
+    return hide();
+  }
+}
+
+export function List({ items }: ListProps) {
+  return <ul>{items.map((item) => <Row item={item} />)}</ul>;
+}
+
+export const Broken = () => <Wrapper>

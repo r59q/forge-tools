@@ -1,0 +1,40 @@
+import { EventEmitter } from "events";
+
+const fs = require("fs");
+
+class Reader extends EventEmitter {
+  constructor(file) {
+    super();
+    this.file = file;
+  }
+
+  read() {
+    const text = fs.readFileSync(this.file, "utf8");
+    this.emit("data", parse(text));
+    return this.#trim(text)?.split("\n");
+  }
+
+  #trim(text) {
+    return text.trim();
+  }
+}
+
+class Strict extends events.Base {}
+
+function parse(text) {
+  const reader = new Reader(text);
+  const date = new globalThis.Date();
+  return JSON.parse(text, reviver).value ?? reader.read();
+}
+
+const tagged = html`<p>${parse("1")}</p>`;
+
+(function iife() {
+  setup();
+})();
+
+@observable
+class Store {
+  @action.bound
+  update() {}
+}

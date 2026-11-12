@@ -1,0 +1,27 @@
+// JavaScript has no overloads: same-named methods and functions are
+// separate definitions.
+class Temperature {
+  get celsius() {
+    return this.value;
+  }
+
+  set celsius(value) {
+    this.value = value;
+  }
+
+  convert(value) {
+    return this.convert(value, "C");
+  }
+
+  convert(value, unit) {
+    return unit === "C" ? value : (value - 32) / 1.8;
+  }
+}
+
+function parse(text) {
+  return Number(text);
+}
+
+function parse(text, radix) {
+  return parseInt(text, radix);
+}

@@ -1,0 +1,31 @@
+import React, { useState } from "react";
+
+interface ButtonProps {
+  label: string;
+  onClick(label: string): void;
+}
+
+export function Button({ label, onClick }: ButtonProps) {
+  return <button onClick={() => onClick(label)}>{label}</button>;
+}
+
+const identity = <T,>(value: T): T => value;
+
+export const Toolbar: React.FC<{ items: Item[] }> = ({ items }) => {
+  const [active, setActive] = useState<Item | null>(null);
+
+  return (
+    <Layout.Row>
+      {items.map((item) => (
+        <Button key={item.id} label={item.label} onClick={() => setActive(identity(item))} />
+      ))}
+      <div className="spacer" />
+    </Layout.Row>
+  );
+};
+
+class Page extends React.Component<PageProps> {
+  render() {
+    return <Toolbar items={this.props.items as Item[]} />;
+  }
+}

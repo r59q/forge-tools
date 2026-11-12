@@ -1,0 +1,22 @@
+import React from "react";
+
+function Button({ label, onClick }) {
+  return <button onClick={() => onClick(label)}>{label}</button>;
+}
+
+export default function Toolbar({ items }) {
+  return (
+    <Layout.Row>
+      {items.map((item) => (
+        <Button key={item.id} label={item.label} onClick={handle} />
+      ))}
+      <div className="spacer" />
+    </Layout.Row>
+  );
+}
+
+class Page extends React.Component {
+  render() {
+    return <Toolbar items={this.props.items} />;
+  }
+}

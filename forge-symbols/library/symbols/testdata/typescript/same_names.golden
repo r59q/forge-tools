@@ -1,0 +1,20 @@
+definitions:
+  [0] interface Shape 1:11-1:16 range=1:1-3:2
+  [1] method area 2:3-2:7 range=2:3-2:17 container=Shape parent=[0]
+  [2] class Circle 5:7-5:13 range=5:1-15:2
+  [3] constructor constructor 6:3-6:14 range=6:3-6:41 container=Circle parent=[2]
+  [4] method area 8:3-8:7 range=8:3-10:4 container=Circle parent=[2]
+  [5] method toString 12:3-12:11 range=12:3-14:4 container=Circle parent=[2]
+  [6] class Square 17:7-17:13 range=17:1-27:2
+  [7] constructor constructor 18:3-18:14 range=18:3-18:39 container=Square parent=[6]
+  [8] method area 20:3-20:7 range=20:3-22:4 container=Square parent=[6]
+  [9] method toString 24:3-24:11 range=24:3-26:4 container=Square parent=[6]
+  [10] function area 29:10-29:14 range=29:1-31:2
+references:
+  type Shape 5:25-5:30 in=[2] Circle
+  call area 13:27-13:31 in=[5] toString
+  type Shape 17:25-17:30 in=[6] Square
+  call area 25:27-25:31 in=[9] toString
+  type Shape 29:23-29:28 in=[10] area
+  call map 30:17-30:20 in=[10] area
+  call area 30:38-30:42 in=[10] area

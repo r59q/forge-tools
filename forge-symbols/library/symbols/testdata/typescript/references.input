@@ -1,0 +1,26 @@
+import { Injectable } from "@angular/core";
+import type * as models from "./models";
+
+@Injectable({ providedIn: "root" })
+export class UserService extends BaseService<models.User> implements Loader, Disposable {
+  private cache = new Map<string, models.User>();
+
+  async load(id: UserId): Promise<models.User | undefined> {
+    const response = await this.http.get<UserDto>(`/users/${id}`);
+    return toUser(response) satisfies models.User;
+  }
+
+  dispose(): void {
+    this.cache.clear();
+  }
+}
+
+export function toUser(dto: UserDto): models.User {
+  const user = <models.User>{ id: dto.id };
+  return Object.assign(user, dto as Partial<models.User>);
+}
+
+export const isUser = (value: unknown): value is models.User =>
+  value instanceof models.UserClass;
+
+class Admin extends lib.Account<Role> {}

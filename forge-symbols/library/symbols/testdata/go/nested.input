@@ -1,0 +1,51 @@
+package nested
+
+type Shape interface {
+	Area() float64
+	Scale(factor float64) Shape
+}
+
+type Config struct {
+	Name    string
+	Options struct {
+		Verbose bool
+		Depth   int
+	}
+	Hooks map[string]func(event Event) error
+	Shape
+	_ int
+}
+
+type Event struct{}
+
+func Build(config Config) func() error {
+	type step struct {
+		name string
+		run  func() error
+	}
+
+	steps := []step{
+		{name: "check", run: func() error { return check(config) }},
+	}
+
+	point := struct {
+		x, y int
+	}{}
+	_ = point
+
+	return func() error {
+		for _, current := range steps {
+			if err := current.run(); err != nil {
+				return wrap(err)
+			}
+		}
+		go func() { notify() }()
+		return nil
+	}
+}
+
+func check(config Config) error { return nil }
+
+func wrap(err error) error { return err }
+
+func notify() {}

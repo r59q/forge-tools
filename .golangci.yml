@@ -58,6 +58,8 @@ linters:
               desc: libraries must not import services
             - pkg: "github.com/r59q/forge-tools/forge-reactor/service"
               desc: libraries must not import services
+            - pkg: "github.com/r59q/forge-tools/forge-symbols/service"
+              desc: libraries must not import services
         core-no-tools:
           files:
             - "**/forge-core/**"
@@ -86,6 +88,8 @@ linters:
               desc: forge-core must not depend on any tool
             - pkg: "github.com/r59q/forge-tools/forge-reactor"
               desc: forge-core must not depend on any tool
+            - pkg: "github.com/r59q/forge-tools/forge-symbols"
+              desc: forge-core must not depend on any tool
         connector-no-tools:
           files:
             - "**/forge-connector/**"
@@ -112,6 +116,8 @@ linters:
               desc: forge-connector knows no tool domain
             - pkg: "github.com/r59q/forge-tools/forge-reactor"
               desc: forge-connector knows no tool domain
+            - pkg: "github.com/r59q/forge-tools/forge-symbols"
+              desc: forge-connector knows no tool domain
         actions-no-other-tools:
           files:
             - "**/forge-actions/**"
@@ -135,6 +141,8 @@ linters:
             - pkg: "github.com/r59q/forge-tools/forge-pipeprint"
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-reactor"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-symbols"
               desc: tools must not depend on each other
         changes-no-other-tools:
           files:
@@ -160,6 +168,8 @@ linters:
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-reactor"
               desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-symbols"
+              desc: tools must not depend on each other
         checkouts-no-other-tools:
           files:
             - "**/forge-checkouts/**"
@@ -183,6 +193,8 @@ linters:
             - pkg: "github.com/r59q/forge-tools/forge-pipeprint"
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-reactor"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-symbols"
               desc: tools must not depend on each other
         code-no-other-tools:
           files:
@@ -208,6 +220,8 @@ linters:
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-reactor"
               desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-symbols"
+              desc: tools must not depend on each other
         issues-no-other-tools:
           files:
             - "**/forge-issues/**"
@@ -231,6 +245,8 @@ linters:
             - pkg: "github.com/r59q/forge-tools/forge-pipeprint"
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-reactor"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-symbols"
               desc: tools must not depend on each other
         repositories-no-other-tools:
           files:
@@ -256,6 +272,8 @@ linters:
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-reactor"
               desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-symbols"
+              desc: tools must not depend on each other
         review-no-other-tools:
           files:
             - "**/forge-review/**"
@@ -279,6 +297,8 @@ linters:
             - pkg: "github.com/r59q/forge-tools/forge-pipeprint"
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-reactor"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-symbols"
               desc: tools must not depend on each other
         explorer-no-other-tools:
           files:
@@ -304,6 +324,8 @@ linters:
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-reactor"
               desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-symbols"
+              desc: tools must not depend on each other
         pipeprint-no-other-tools:
           files:
             - "**/forge-pipeprint/**"
@@ -328,6 +350,8 @@ linters:
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-reactor"
               desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-symbols"
+              desc: tools must not depend on each other
         reactor-no-other-tools:
           files:
             - "**/forge-reactor/**"
@@ -351,6 +375,34 @@ linters:
             - pkg: "github.com/r59q/forge-tools/forge-tools-management"
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-pipeprint"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-symbols"
+              desc: tools must not depend on each other
+        symbols-no-other-tools:
+          files:
+            - "**/forge-symbols/**"
+          deny:
+            - pkg: "github.com/r59q/forge-tools/forge-explorer"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-actions"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-changes"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-checkouts"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-code"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-issues"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-repositories"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-review"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-tools-management"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-pipeprint"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-reactor"
               desc: tools must not depend on each other
     dupl:
       threshold: 150

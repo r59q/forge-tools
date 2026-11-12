@@ -1,0 +1,57 @@
+definitions:
+  [0] type ID 6:2-6:4 range=6:2-6:16
+  [1] type Alias 7:2-7:7 range=7:2-7:14
+  [2] type Handler 8:2-8:9 range=8:2-8:24
+  [3] struct Pair 9:2-9:6 range=9:2-12:3
+  [4] field Key 10:3-10:6 range=10:3-10:10 container=Pair parent=[3]
+  [5] field Value 11:3-11:8 range=11:3-11:10 container=Pair parent=[3]
+  [6] type Set 13:2-13:5 range=13:2-13:34
+  [7] interface Clock 14:2-14:7 range=14:2-16:3
+  [8] method Now 15:3-15:6 range=15:3-15:18 container=Clock parent=[7]
+  [9] type Timeout 17:2-17:9 range=17:2-17:23
+  [10] type Buffer 18:2-18:8 range=18:2-18:16
+  [11] type Ref 19:2-19:5 range=19:2-19:13
+  [12] type Grid 20:2-20:6 range=20:2-20:19
+  [13] type Feed 21:2-21:6 range=21:2-21:19
+  [14] constant First 25:2-25:7 range=25:2-25:14
+  [15] constant Second 26:2-26:8 range=26:2-26:8
+  [16] constant Fourth 28:2-28:8 range=28:2-28:8
+  [17] constant name 31:7-31:11 range=31:7-31:29
+  [18] constant size 31:13-31:17 range=31:7-31:29
+  [19] variable ready 34:2-34:7 range=34:2-34:12
+  [20] variable a 35:2-35:3 range=35:2-35:14
+  [21] variable b 35:5-35:6 range=35:2-35:14
+  [22] variable single 39:5-39:11 range=39:5-39:14
+  [23] function init 43:6-43:10 range=43:1-47:2
+  [24] method method 49:11-49:17 range=49:1-49:22 container=ID
+  [25] method odd 51:14-51:17 range=51:1-51:22
+  [26] function Map 53:6-53:9 range=53:1-55:2
+references:
+  type string 6:10-6:16 in=[0] ID
+  type ID 7:12-7:14 in=[1] Alias
+  type ID 8:15-8:17 in=[2] Handler
+  type error 8:19-8:24 in=[2] Handler
+  type comparable 9:9-9:19 in=[3] Pair
+  type any 9:23-9:26 in=[3] Pair
+  type K 10:9-10:10 in=[4] Key
+  type V 11:9-11:10 in=[5] Value
+  type comparable 13:8-13:18 in=[6] Set
+  type T 13:24-13:25 in=[6] Set
+  type Time 15:14-15:18 in=[8] Now
+  type Duration 17:15-17:23 in=[9] Timeout
+  type byte 18:12-18:16 in=[10] Buffer
+  type ID 19:11-19:13 in=[11] Ref
+  type int 20:16-20:19 in=[12] Grid
+  type ID 21:17-21:19 in=[13] Feed
+  type bool 34:8-34:12 in=[19] ready
+  type ID 39:12-39:14 in=[22] single
+  type int 45:14-45:17 in=[23] init
+  type ID 49:7-49:9 in=[24] method
+  type ID 51:10-51:12 in=[25] odd
+  type comparable 53:12-53:22 in=[26] Map
+  type any 53:26-53:29 in=[26] Map
+  type Pair 53:39-53:43 in=[26] Map
+  type K 53:44-53:45 in=[26] Map
+  type V 53:47-53:48 in=[26] Map
+  type K 53:55-53:56 in=[26] Map
+  type V 53:57-53:58 in=[26] Map

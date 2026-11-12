@@ -1,0 +1,55 @@
+package decl
+
+import "time"
+
+type (
+	ID      string
+	Alias   = ID
+	Handler func(ID) error
+	Pair[K comparable, V any] struct {
+		Key   K
+		Value V
+	}
+	Set[T comparable] map[T]struct{}
+	Clock interface {
+		Now() time.Time
+	}
+	Timeout time.Duration
+	Buffer  []byte
+	Ref     *ID
+	Grid    [3][3]int
+	Feed    <-chan ID
+)
+
+const (
+	First = iota
+	Second
+	_
+	Fourth
+)
+
+const name, size = "decl", 4
+
+var (
+	ready bool
+	a, b  = 1, 2
+	_     = ready
+)
+
+var single ID
+
+func _() {}
+
+func init() {
+	const local = 1
+	var scratch int
+	_ = local + scratch
+}
+
+func (ID) method() {}
+
+func ([2]ID) odd() {}
+
+func Map[K comparable, V any](pairs []Pair[K, V]) map[K]V {
+	return nil
+}

@@ -1,0 +1,48 @@
+definitions:
+  [0] interface Shape 3:6-3:11 range=3:6-6:2
+  [1] method Area 4:2-4:6 range=4:2-4:16 container=Shape parent=[0]
+  [2] method Scale 5:2-5:7 range=5:2-5:29 container=Shape parent=[0]
+  [3] struct Config 8:6-8:12 range=8:6-17:2
+  [4] field Name 9:2-9:6 range=9:2-9:16 container=Config parent=[3]
+  [5] field Options 10:2-10:9 range=10:2-13:3 container=Config parent=[3]
+  [6] field Verbose 11:3-11:10 range=11:3-11:15 container=Options parent=[5]
+  [7] field Depth 12:3-12:8 range=12:3-12:14 container=Options parent=[5]
+  [8] field Hooks 14:2-14:7 range=14:2-14:42 container=Config parent=[3]
+  [9] struct Event 19:6-19:11 range=19:6-19:20
+  [10] function Build 21:6-21:11 range=21:1-45:2
+  [11] struct step 22:7-22:11 range=22:7-25:3 container=Build parent=[10]
+  [12] field name 23:3-23:7 range=23:3-23:14 container=step parent=[11]
+  [13] field run 24:3-24:6 range=24:3-24:20 container=step parent=[11]
+  [14] field x 32:3-32:4 range=32:3-32:11 container=Build parent=[10]
+  [15] field y 32:6-32:7 range=32:3-32:11 container=Build parent=[10]
+  [16] function check 47:6-47:11 range=47:1-47:47
+  [17] function wrap 49:6-49:10 range=49:1-49:42
+  [18] function notify 51:6-51:12 range=51:1-51:17
+references:
+  type float64 4:9-4:16 in=[1] Area
+  type float64 5:15-5:22 in=[2] Scale
+  type Shape 5:24-5:29 in=[2] Scale
+  type string 9:10-9:16 in=[4] Name
+  type bool 11:11-11:15 in=[6] Verbose
+  type int 12:11-12:14 in=[7] Depth
+  type string 14:12-14:18 in=[8] Hooks
+  type Event 14:30-14:35 in=[8] Hooks
+  type error 14:37-14:42 in=[8] Hooks
+  type Shape 15:2-15:7 in=[3] Config
+  type int 16:4-16:7 in=[3] Config
+  type Config 21:19-21:25 in=[10] Build
+  type error 21:34-21:39 in=[10] Build
+  type string 23:8-23:14 in=[12] name
+  type error 24:15-24:20 in=[13] run
+  type step 27:13-27:17 in=[10] Build
+  type error 28:31-28:36 in=[10] Build
+  call check 28:46-28:51 in=[10] Build
+  type int 32:8-32:11 in=[15] y
+  type error 36:16-36:21 in=[10] Build
+  call run 38:22-38:25 in=[10] Build
+  call wrap 39:12-39:16 in=[10] Build
+  call notify 42:15-42:21 in=[10] Build
+  type Config 47:19-47:25 in=[16] check
+  type error 47:27-47:32 in=[16] check
+  type error 49:15-49:20 in=[17] wrap
+  type error 49:22-49:27 in=[17] wrap

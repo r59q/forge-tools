@@ -75,12 +75,13 @@ Rejected in the spike (AMD Ryzen 9 5950X, valid 1 MiB Go file unless noted):
 | ------ | ------- |
 | `github.com/odvcencio/gotreesitter` v0.57.0, a pure Go reimplementation | Parse 600–670 ms and about 165 MB allocated, against 230 ms in wazero. Error recovery degrades badly: 68 s for a file with a garbage tail, 12 s and 3 GB allocated for concatenated broken files. Rejects `#set-adjacent!`. Single maintainer, 61 MB module. |
 | cgo bindings (`tree-sitter/go-tree-sitter`, `smacker/go-tree-sitter`) | Need cgo and a C toolchain, which the requirement excludes. |
-| `github.com/malivvan/tree-sitter`, a wazero wrapper | One v0.0.1 release from January 2025, no control over the runtime version or limits. |
+| `github.com/malivvan/tree-sitter`, a wazero wrapper | A single v0.0.1 release from January 2025, not maintained since. |
 | wazero `WithCloseOnContextDone` for cancellation | Checks the context in every loop: parse 570 ms instead of 230 ms. |
 | Language parsers such as `go/parser` | One model per language and no path to the other planned languages. |
 
-Costs of the choice: about 3–6 times slower than native Tree-sitter, 90 ms
-to compile a module on first use, and a checked-in binary per language.
+Costs of the choice: WebAssembly runs slower than a native build would,
+a module takes 90 ms to compile on first use, and each language adds a
+checked-in binary of about 380 KB.
 
 ## Grammars
 

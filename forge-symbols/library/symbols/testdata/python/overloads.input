@@ -1,0 +1,34 @@
+from typing import overload
+
+
+@overload
+def convert(value: int) -> str: ...
+@overload
+def convert(value: str) -> int: ...
+def convert(value):
+    return str(value) if isinstance(value, int) else int(value)
+
+
+def handler():
+    return 1
+
+
+def handler():
+    return 2
+
+
+class Shape:
+    @overload
+    def scale(self, factor: int) -> "Shape": ...
+
+    @overload
+    def scale(self, factor: float) -> "Shape": ...
+
+    def scale(self, factor):
+        return resize(self, factor)
+
+    def area(self):
+        return 0
+
+    def area(self):
+        return compute_area(self)

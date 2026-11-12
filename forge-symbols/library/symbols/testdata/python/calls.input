@@ -1,0 +1,24 @@
+import logging
+
+log = logging.getLogger(__name__)
+
+
+@app.route("/items", methods=["GET"])
+@login_required
+def list_items(request):
+    items = request.db.query(Item).filter(active=True).all()
+    log.info("found %d", len(items))
+    return render([serialize(item) for item in items])
+
+
+class Service(base.Service):
+    retries = compute_retries()
+
+    def run(self):
+        result = self.client.send(build_request())
+        callbacks[0](result)
+        (lambda: notify())()
+        return result.json()
+
+
+main()

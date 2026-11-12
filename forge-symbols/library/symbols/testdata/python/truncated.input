@@ -1,0 +1,9 @@
+def complete():
+    return 1
+
+
+class Tail:
+    def kept(self):
+        return work()
+
+    def dangling(self

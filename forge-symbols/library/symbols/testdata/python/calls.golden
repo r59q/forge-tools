@@ -1,0 +1,24 @@
+definitions:
+  [0] variable log 3:1-3:4 range=3:1-3:34
+  [1] function list_items 8:5-8:15 range=6:1-11:55
+  [2] class Service 14:7-14:14 range=14:1-21:29
+  [3] field retries 15:5-15:12 range=15:5-15:32 container=Service parent=[2]
+  [4] method run 17:9-17:12 range=17:5-21:29 container=Service parent=[2]
+references:
+  call getLogger 3:15-3:24 in=[0] log
+  call route 6:6-6:11 in=[1] list_items
+  call login_required 7:2-7:16 in=[1] list_items
+  call query 9:24-9:29 in=[1] list_items
+  call filter 9:36-9:42 in=[1] list_items
+  call all 9:56-9:59 in=[1] list_items
+  call info 10:9-10:13 in=[1] list_items
+  call len 10:26-10:29 in=[1] list_items
+  call render 11:12-11:18 in=[1] list_items
+  call serialize 11:20-11:29 in=[1] list_items
+  type Service 14:20-14:27 in=[2] Service
+  call compute_retries 15:15-15:30 in=[3] retries
+  call send 18:30-18:34 in=[4] run
+  call build_request 18:35-18:48 in=[4] run
+  call notify 20:18-20:24 in=[4] run
+  call json 21:23-21:27 in=[4] run
+  call main 24:1-24:5

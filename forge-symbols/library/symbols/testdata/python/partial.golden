@@ -1,0 +1,13 @@
+definitions:
+  [0] class Complete 1:7-1:15 range=1:1-3:24
+  [1] method works 2:9-2:14 range=2:5-3:24 container=Complete parent=[0]
+  [2] class MissingColon 6:7-6:19 range=6:1-12:21
+  [3] method ok 8:9-8:11 range=7:5-9:17 container=MissingColon parent=[2]
+  [4] function after 14:9-14:14 range=14:5-15:23
+references:
+  call helper 3:16-3:22 in=[1] works
+  call property 7:6-7:14 in=[3] ok
+  call two 12:16-12:19 in=[2] MissingColon
+  call three 15:16-15:21 in=[4] after
+  call recovered 18:5-18:14
+  call fine 19:12-19:16

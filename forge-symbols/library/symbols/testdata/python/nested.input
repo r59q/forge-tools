@@ -1,0 +1,30 @@
+class Outer:
+    class Inner:
+        class Deepest:
+            def deep(self):
+                return walk(self)
+
+        def inner_method(self):
+            def local_function():
+                class LocalClass:
+                    def local_method(self):
+                        return 1
+
+                return LocalClass()
+
+            return local_function()
+
+    @dataclass
+    class Decorated:
+        value: int = 0
+
+    def outer_method(self):
+        return self.Inner()
+
+
+def factory():
+    class Product:
+        def build(self):
+            return assemble()
+
+    return Product

@@ -1,0 +1,18 @@
+class Cat:
+    def speak(self):
+        return "meow"
+
+    def greet(self, dog):
+        print(self.speak() + dog.speak())
+
+
+class Dog:
+    def speak(self):
+        return "woof"
+
+    def greet(self, cat):
+        print(self.speak() + cat.speak())
+
+
+def speak():
+    return Cat().speak()

@@ -45,6 +45,15 @@ const tsxSample = `interface Greeter {
 const render = <T,>(value: T) => <Text>{value}</Text>;
 `
 
+const pythonSample = `class Greeter:
+    def greet(self, name):
+        return format(name)
+
+
+def format(name):
+    return name
+`
+
 // samples holds, per language, a source file and the definitions in it.
 var samples = map[string]struct{ source, definitions string }{
 	"go":         {sample, "struct Greeter, method Greet, function format"},
@@ -52,6 +61,7 @@ var samples = map[string]struct{ source, definitions string }{
 	"javascript": {javascriptSample, "class Greeter, method greet"},
 	"typescript": {typescriptSample, "interface Greeter, method greet"},
 	"tsx":        {tsxSample, "interface Greeter, method greet, function render"},
+	"python":     {pythonSample, "class Greeter, method greet, function format"},
 }
 
 func analyze(t *testing.T, analyzer *Analyzer, file File) Analysis {
@@ -100,6 +110,9 @@ func TestAnalyzeDetectsLanguage(t *testing.T) {
 		{"javascript override", File{Path: "greeter.txt", Language: "javascript"}, "javascript"},
 		{"typescript override", File{Path: "greeter.js", Language: "typescript"}, "typescript"},
 		{"tsx override of ts extension", File{Path: "greeter.ts", Language: "tsx"}, "tsx"},
+		{"py extension", File{Path: "pkg/greeter.py"}, "python"},
+		{"pyi stub extension", File{Path: "typeshed/greeter.PYI"}, "python"},
+		{"python override", File{Path: "SConstruct", Language: "python"}, "python"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -149,7 +162,7 @@ func TestDetectLanguage(t *testing.T) {
 	if language, ok := DetectLanguage("a.go/readme"); ok {
 		t.Errorf("detected %q for a path without extension", language)
 	}
-	if got := Languages(); !slices.Equal(got, []string{"go", "java", "javascript", "typescript", "tsx"}) {
+	if got := Languages(); !slices.Equal(got, []string{"go", "java", "javascript", "typescript", "tsx", "python"}) {
 		t.Errorf("Languages() = %v", got)
 	}
 }

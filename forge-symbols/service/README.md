@@ -81,9 +81,10 @@ or `python`.
 Ranges have one-based lines and UTF-16 columns, with an exclusive end
 column. Indexes point into a file's `definitions` or `references` as
 returned by `analyze`; `parent`, `enclosing` and a definition result's
-`index` are absent at the file level. Results match by name only, so each has `precision`
-`"heuristic"`, and are ranked by `tier`: `TIER_FILE` for the target's file,
-`TIER_CONTAINER` for the target's container elsewhere, then `TIER_OTHER`.
+`index` are absent at the file level. Results match by name only, so each
+has `precision` `"heuristic"`, and are ranked by `tier`: `TIER_FILE` for
+the target's file, `TIER_CONTAINER` for the target's container elsewhere,
+then `TIER_OTHER`.
 
 A target is a `name`, a `path` with a `line` and `column`, or both. A
 position selects the definition whose name it is on, else the reference it
@@ -153,14 +154,14 @@ jq -n --argjson f "$(files)" '{files: $f, target: {path: "main.go", line: 14, co
 
 Errors carry only a status code; they never echo request content.
 
-| Code                 | HTTP | When                                                                    |
-| -------------------- | ---- | ----------------------------------------------------------------------- |
-| `UNAUTHENTICATED`    | 401  | The token is missing or wrong. Checked before the body is read.         |
+| Code                 | HTTP | When                                                                              |
+| -------------------- | ---- | --------------------------------------------------------------------------------- |
+| `UNAUTHENTICATED`    | 401  | The token is missing or wrong. Checked before the body is read.                   |
 | `INVALID_ARGUMENT`   | 400  | The target is incomplete, `maxResults` is out of range, or the body is malformed. |
-| `NOT_FOUND`          | 404  | The target position is on no definition or reference.                   |
-| `RESOURCE_EXHAUSTED` | 429  | A file, the request or parser memory is over its limit.                 |
-| `UNIMPLEMENTED`      | 501  | A file's language is not supported. The whole request fails.            |
-| `DEADLINE_EXCEEDED`  | 504  | A parse or the request took too long.                                   |
+| `NOT_FOUND`          | 404  | The target position is on no definition or reference.                             |
+| `RESOURCE_EXHAUSTED` | 429  | A file, the request or parser memory is over its limit.                           |
+| `UNIMPLEMENTED`      | 501  | A file's language is not supported. The whole request fails.                      |
+| `DEADLINE_EXCEEDED`  | 504  | A parse or the request took too long.                                             |
 
 ## License
 

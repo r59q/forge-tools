@@ -7,7 +7,8 @@ file. Useful on its own and for code navigation in other tools.
 
 - [`library/`](library/README.md): the analysis and navigation over it as
   a Go library.
-- `service/`: REST and gRPC service exposing the library. Not built yet.
+- [`service/`](service/README.md): REST and gRPC service exposing the
+  library.
 
 ## Design
 

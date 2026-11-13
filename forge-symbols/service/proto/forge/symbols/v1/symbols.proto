@@ -1,0 +1,290 @@
+syntax = "proto3";
+
+package forge.symbols.v1;
+
+import "google/api/annotations.proto";
+
+option go_package = "github.com/r59q/forge-tools/forge-symbols/service/symbolspb";
+
+// SymbolsService finds definitions and references in source files with
+// Tree-sitter tag queries, and navigates between them. It is stateless: it
+// reads only the files in each request, keeps nothing between requests and
+// never contacts a forge. Every RPC requires the service token in the
+// Authorization: Bearer header (gRPC metadata).
+//
+// Results match names; nothing is resolved or type-checked, so every
+// navigation result has precision "heuristic".
+//
+// Errors carry only a status code: UNIMPLEMENTED for an unsupported
+// language, RESOURCE_EXHAUSTED for content over a size, count or memory
+// limit, DEADLINE_EXCEEDED for a parse or request over its time limit,
+// INVALID_ARGUMENT for an invalid target or field, and NOT_FOUND for a
+// target position that selects nothing.
+service SymbolsService {
+  // Analyze returns the definitions and references of each file, in request
+  // order. POST /v1/symbols/analyze.
+  rpc Analyze(AnalyzeRequest) returns (AnalyzeResponse) {
+    option (google.api.http) = {
+      post: "/v1/symbols/analyze"
+      body: "*"
+    };
+  }
+  // Outgoing returns the references inside the target definitions, such as
+  // the calls a function makes. POST /v1/symbols/outgoing.
+  rpc Outgoing(OutgoingRequest) returns (OutgoingResponse) {
+    option (google.api.http) = {
+      post: "/v1/symbols/outgoing"
+      body: "*"
+    };
+  }
+  // Incoming returns the references named like the target, grouped by the
+  // definition around each, such as the callers of a function.
+  // POST /v1/symbols/incoming.
+  rpc Incoming(IncomingRequest) returns (IncomingResponse) {
+    option (google.api.http) = {
+      post: "/v1/symbols/incoming"
+      body: "*"
+    };
+  }
+  // Definitions returns the definitions named like the target.
+  // POST /v1/symbols/definitions.
+  rpc Definitions(DefinitionsRequest) returns (DefinitionsResponse) {
+    option (google.api.http) = {
+      post: "/v1/symbols/definitions"
+      body: "*"
+    };
+  }
+}
+
+// File is one source file to analyze.
+message File {
+  // path names the file, such as cmd/main.go. Its extension selects the
+  // language unless language is set. Navigation matches it against
+  // Target.path.
+  string path = 1;
+  // content is the file's bytes; base64 in JSON. At most 1 MiB.
+  bytes content = 2;
+  // language overrides detection from the extension: go, java, javascript,
+  // typescript, tsx or python.
+  string language = 3;
+}
+
+// Range uses one-based lines and UTF-16 columns, with an exclusive end
+// column. Lines end at "\n".
+message Range {
+  // start_line is the line of the first character.
+  int32 start_line = 1;
+  // start_column is the column of the first character.
+  int32 start_column = 2;
+  // end_line is the line of the last character.
+  int32 end_line = 3;
+  // end_column is the column just after the last character.
+  int32 end_column = 4;
+}
+
+// Definition is a named declaration, such as a function or a class.
+message Definition {
+  // name is the declared name.
+  string name = 1;
+  // kind is what was declared, such as function, method, class, interface,
+  // type, field, constant or variable.
+  string kind = 2;
+  // name_range covers the name.
+  Range name_range = 3;
+  // range covers the whole declaration with its body.
+  Range range = 4;
+  // container names what the definition belongs to: the receiver type of a
+  // Go method, or else the parent definition. Empty at the top level.
+  string container = 5;
+  // parent is the index in Analysis.definitions of the innermost definition
+  // around this one. Unset at the top level.
+  optional int32 parent = 6;
+}
+
+// Reference is a use of a name, such as a call.
+message Reference {
+  // name is the name used.
+  string name = 1;
+  // kind is how it is used, such as call, new or type.
+  string kind = 2;
+  // range covers the name.
+  Range range = 3;
+  // enclosing is the index in Analysis.definitions of the innermost
+  // definition around the reference. Unset outside any definition.
+  optional int32 enclosing = 4;
+}
+
+// Analysis is the definitions and references of one file, each in source
+// order.
+message Analysis {
+  // path is the file's path from the request.
+  string path = 1;
+  // language is the language the file was parsed as.
+  string language = 2;
+  // bytes is the length of the analyzed content.
+  int32 bytes = 3;
+  // definitions are in source order; indexes in Definition.parent and
+  // Reference.enclosing point into this list.
+  repeated Definition definitions = 4;
+  // references are in source order.
+  repeated Reference references = 5;
+}
+
+// AnalyzeRequest is the files to analyze.
+message AnalyzeRequest {
+  // files are at most 1000 files with at most 16 MiB of content in total.
+  repeated File files = 1;
+}
+
+// AnalyzeResponse is one analysis per requested file.
+message AnalyzeResponse {
+  // analyses are in the order of AnalyzeRequest.files.
+  repeated Analysis analyses = 1;
+}
+
+// Target selects what to navigate from: a name, a position in a file, or
+// both. A position selects, in order, the innermost definition whose name
+// it is on, the reference it is on, or the innermost definition around it.
+// Its end counts, so a cursor just after a name selects it.
+message Target {
+  // name selects tags with this name. Required without a position.
+  string name = 1;
+  // kind narrows the definitions selected and returned to this kind, such
+  // as method.
+  string kind = 2;
+  // path is the target's file. Results in it rank first. Required with a
+  // position.
+  string path = 3;
+  // line is the one-based line of the position. Set it with column.
+  int32 line = 4;
+  // column is the one-based UTF-16 column of the position. Set it with line.
+  int32 column = 5;
+}
+
+// Tier ranks a result by how close it is to the target. Lower tiers come
+// first.
+enum Tier {
+  // TIER_UNSPECIFIED is never returned.
+  TIER_UNSPECIFIED = 0;
+  // TIER_FILE is a result in the target's file.
+  TIER_FILE = 1;
+  // TIER_CONTAINER is a result in another file whose container is the
+  // target's container.
+  TIER_CONTAINER = 2;
+  // TIER_OTHER is any other result.
+  TIER_OTHER = 3;
+}
+
+// DefinitionResult is a definition found by navigation.
+message DefinitionResult {
+  // path is the file of the definition.
+  string path = 1;
+  // index is the index of the definition in the file's
+  // Analysis.definitions. Unset for the file level, outside any definition.
+  optional int32 index = 2;
+  // definition is the definition. Unset for the file level.
+  Definition definition = 3;
+  // tier ranks the result.
+  Tier tier = 4;
+  // precision tells how the result was found. It is always "heuristic":
+  // matched by name, not resolved.
+  string precision = 5;
+}
+
+// ReferenceResult is a reference found by navigation.
+message ReferenceResult {
+  // path is the file of the reference.
+  string path = 1;
+  // index is the index of the reference in the file's Analysis.references.
+  int32 index = 2;
+  // reference is the reference. Its enclosing index points into the file's
+  // Analysis.definitions.
+  Reference reference = 3;
+  // nested reports, in Outgoing, a reference inside a definition nested in
+  // the target, such as a local function.
+  bool nested = 4;
+  // precision tells how the result was found. It is always "heuristic".
+  string precision = 5;
+}
+
+// OutgoingRequest asks for the references inside a target definition.
+message OutgoingRequest {
+  // files are searched, with the limits of AnalyzeRequest.files.
+  repeated File files = 1;
+  // target selects the definitions. A position on a definition targets
+  // only that definition; a name or a reference targets every definition
+  // of the name, with one group each.
+  Target target = 2;
+  // max_results caps the definitions and references returned, group heads
+  // included. 0 means 1000, the maximum.
+  int32 max_results = 3;
+}
+
+// OutgoingGroup is one target definition and the references inside it.
+message OutgoingGroup {
+  // definition is the target definition.
+  DefinitionResult definition = 1;
+  // references are in source order.
+  repeated ReferenceResult references = 2;
+}
+
+// OutgoingResponse holds the groups of every target definition.
+message OutgoingResponse {
+  // name is the target's name.
+  string name = 1;
+  // groups are ranked by tier, then path, then position.
+  repeated OutgoingGroup groups = 2;
+  // truncated is true when max_results dropped groups or references.
+  bool truncated = 3;
+}
+
+// IncomingRequest asks for the references to a target.
+message IncomingRequest {
+  // files are searched, with the limits of AnalyzeRequest.files.
+  repeated File files = 1;
+  // target selects the name to look for.
+  Target target = 2;
+  // max_results caps the definitions and references returned, group heads
+  // included. 0 means 1000, the maximum.
+  int32 max_results = 3;
+}
+
+// IncomingGroup is the references to the target inside one definition.
+message IncomingGroup {
+  // caller is the innermost definition around the references, or the file
+  // level, with neither index nor definition set, outside any definition.
+  DefinitionResult caller = 1;
+  // references are in source order.
+  repeated ReferenceResult references = 2;
+}
+
+// IncomingResponse holds the references to the target, grouped by caller.
+message IncomingResponse {
+  // name is the target's name.
+  string name = 1;
+  // groups are ranked by the caller's tier, then path, then the position of
+  // their first reference.
+  repeated IncomingGroup groups = 2;
+  // truncated is true when max_results dropped groups or references.
+  bool truncated = 3;
+}
+
+// DefinitionsRequest asks where a target is defined.
+message DefinitionsRequest {
+  // files are searched, with the limits of AnalyzeRequest.files.
+  repeated File files = 1;
+  // target selects the name, and kind narrows the definitions.
+  Target target = 2;
+  // max_results caps the definitions returned. 0 means 1000, the maximum.
+  int32 max_results = 3;
+}
+
+// DefinitionsResponse holds the definitions named like the target.
+message DefinitionsResponse {
+  // name is the target's name.
+  string name = 1;
+  // definitions are ranked by tier, then path, then position.
+  repeated DefinitionResult definitions = 2;
+  // truncated is true when max_results dropped definitions.
+  bool truncated = 3;
+}

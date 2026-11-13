@@ -15,6 +15,7 @@ modules:
   - path: forge-tools-management/service/proto
   - path: forge-pipeprint/service/proto
   - path: forge-reactor/service/proto
+  - path: forge-symbols/service/proto
 
 deps:
   - buf.build/googleapis/googleapis

@@ -117,10 +117,11 @@ type Reference struct {
 }
 
 // Analysis holds the definitions and references of one file, each in
-// source order.
+// source order. Bytes is the length of the analyzed content.
 type Analysis struct {
 	Path        string       `json:"path"`
 	Language    string       `json:"language"`
+	Bytes       int          `json:"bytes"`
 	Definitions []Definition `json:"definitions"`
 	References  []Reference  `json:"references"`
 }

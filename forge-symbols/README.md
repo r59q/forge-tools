@@ -10,6 +10,9 @@ file. Useful on its own and for code navigation in other tools.
 - [`service/`](service/README.md): REST and gRPC service exposing the
   library.
 
+The [full-stack example](../examples/fullstack/#code-symbols) runs the
+service with the rest of the stack.
+
 ## Design
 
 - **Stateless.** A request carries the file paths and bytes to analyze and

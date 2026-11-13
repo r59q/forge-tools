@@ -5,7 +5,8 @@ file. Useful on its own and for code navigation in other tools.
 
 ## Layout
 
-- [`library/`](library/README.md): the analysis as a Go library.
+- [`library/`](library/README.md): the analysis and navigation over it as
+  a Go library.
 - `service/`: REST and gRPC service exposing the library. Not built yet.
 
 ## Design

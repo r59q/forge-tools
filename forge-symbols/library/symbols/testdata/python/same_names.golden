@@ -1,0 +1,17 @@
+definitions:
+  [0] class Cat 1:7-1:10 range=1:1-6:42
+  [1] method speak 2:9-2:14 range=2:5-3:22 container=Cat parent=[0]
+  [2] method greet 5:9-5:14 range=5:5-6:42 container=Cat parent=[0]
+  [3] class Dog 9:7-9:10 range=9:1-14:42
+  [4] method speak 10:9-10:14 range=10:5-11:22 container=Dog parent=[3]
+  [5] method greet 13:9-13:14 range=13:5-14:42 container=Dog parent=[3]
+  [6] function speak 17:5-17:10 range=17:1-18:25
+references:
+  call print 6:9-6:14 in=[2] greet
+  call speak 6:20-6:25 in=[2] greet
+  call speak 6:34-6:39 in=[2] greet
+  call print 14:9-14:14 in=[5] greet
+  call speak 14:20-14:25 in=[5] greet
+  call speak 14:34-14:39 in=[5] greet
+  call Cat 18:12-18:15 in=[6] speak
+  call speak 18:18-18:23 in=[6] speak

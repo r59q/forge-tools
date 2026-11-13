@@ -1,0 +1,18 @@
+class OpenParameters:
+    def ok(self):
+        return helper()
+
+    def broken(self, x
+        return x
+
+    def after(self):
+        return more()
+
+
+def unclosed_call():
+    log("start"
+    return finish()
+
+
+def lost():
+    return gone()

@@ -1,0 +1,9 @@
+definitions:
+  [0] class OpenParameters 1:7-1:21 range=1:1-9:22
+  [1] method ok 2:9-2:11 range=2:5-3:24 container=OpenParameters parent=[0]
+  [2] method broken 5:9-5:15 range=5:5-9:22 container=OpenParameters parent=[0]
+  [3] function unclosed_call 12:5-12:18 range=12:1-18:18
+references:
+  call helper 3:16-3:22 in=[1] ok
+  call more 9:16-9:20 in=[2] broken
+  call gone 18:12-18:16 in=[3] unclosed_call

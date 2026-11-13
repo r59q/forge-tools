@@ -1,0 +1,19 @@
+class Complete:
+    def works(self):
+        return helper()
+
+
+class MissingColon:
+    @property
+    def ok(self):
+        return 1
+
+    def missing_colon(self)
+        return two()
+
+    def after(self):
+        return three()
+
+
+def recovered():
+    return fine()

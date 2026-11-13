@@ -1,0 +1,5 @@
+definitions:
+  [0] function complete 1:5-1:13 range=1:1-2:13
+  [1] function kept 6:9-6:13 range=6:5-7:22
+references:
+  call work 7:16-7:20 in=[1] kept

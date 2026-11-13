@@ -33,6 +33,7 @@ From this directory: `CGO_ENABLED=0 go build ./...`, `go vet ./...`,
   | JavaScript | `javascript` | `.js .mjs .cjs .jsx`    |
   | TypeScript | `typescript` | `.ts .mts .cts`         |
   | TSX        | `tsx`        | `.tsx`                  |
+  | Python     | `python`     | `.py .pyi`              |
 
   The language comes from the file extension, or from `File.Language` when
   set. Anything else returns `ErrUnsupported`. TSX is separate from
@@ -76,10 +77,27 @@ From this directory: `CGO_ENABLED=0 go build ./...`, `go vet ./...`,
   object creation, and `type` for superclasses and, in TypeScript, every
   type name. `require(…)` is not a reference. Only the last part of a
   member name counts: `a.b.c()` calls `c`, `models.User` refers to `User`.
+- Python gives definitions of kind `class`, `method` (a `def` directly in a
+  class body), `function` (any other `def`, also nested in a function),
+  `field` (a single-name assignment directly in a class body, also
+  annotated without a value), top-level `constant` (a single-name
+  assignment to an upper-case name such as `MAX_SIZE`) and `variable`
+  (other single names), and `type` (`type` aliases). Redefinitions, such
+  as `@overload` stubs, are separate definitions with the same name. The
+  range of a decorated function or class starts at its first decorator,
+  so calls in decorators are enclosed by the decorated definition.
+- Python references are `call` for calls and decorators, and `type` for
+  superclasses. As in JavaScript, only the last part of a member name
+  counts: `self.db.query()` calls `query`. Attributes set on `self`,
+  tuple assignments and type annotations are not tags. A `def` in an `if`
+  block of a class body is a function.
 - Ranges use one-based lines and UTF-16 columns with an exclusive end column,
   as in forge-explorer. Lines end at `\n`.
 - Invalid or partial source is not an error. Results come from the tree the
   parser recovers, so they can be incomplete or odd near the damage.
+  Python damage reaches further, because blocks are indentation: after an
+  unclosed bracket or a missing colon, later definitions can be lost or a
+  `def` can read as a call.
 - Nothing is resolved: a reference is a name, not a link to its definition.
   Names of builtins such as `string` and `len` are references too.
 
@@ -122,7 +140,7 @@ Rejected in the spike (AMD Ryzen 9 5950X, valid 1 MiB Go file unless noted):
 Costs of the choice: WebAssembly runs slower than a native build would,
 a module takes 90 to 180 ms to compile on first use, and each language adds
 a checked-in binary: 380 KB for Go, 580 KB each for Java and JavaScript,
-1.6 MB each for TypeScript and TSX.
+1.6 MB each for TypeScript and TSX, 610 KB for Python.
 
 ## Grammars
 
@@ -137,6 +155,7 @@ input or the filesystem.
 | Java grammar            | v0.23.5 | `github.com/tree-sitter/tree-sitter-java`       |
 | JavaScript grammar      | v0.25.0 | `github.com/tree-sitter/tree-sitter-javascript` |
 | TypeScript, TSX grammar | v0.23.2 | `github.com/tree-sitter/tree-sitter-typescript` |
+| Python grammar          | v0.25.0 | `github.com/tree-sitter/tree-sitter-python`     |
 | Compiler and libc       | 34      | `github.com/WebAssembly/wasi-sdk`               |
 
 Rebuild with `internal/grammars/build/build.sh`. It downloads the pinned
@@ -152,6 +171,7 @@ clean. SHA-256 of the modules:
 | `javascript.wasm` | `f841512e99562f6262073c8a4b34811b1924227fdcb35b7ea99376e9b044ad01` |
 | `typescript.wasm` | `a257971a1b5d766fe282abd1175c7cdca42a72ce538241ce88a5f3d117292768` |
 | `tsx.wasm`        | `99f9bccc367e0dd9b08689f3e3e775848bd3b028f43589b55092a981d00cd306` |
+| `python.wasm`     | `dcd6243cbbf9f56524b0f4877caa3b135556224ef17bbb71272ad33fcf202986` |
 
 The modules contain MIT-licensed Tree-sitter code and wasi-libc.
 
@@ -171,6 +191,8 @@ in. Predicates `#eq?`, `#match?` (Go regular expressions) and `#any-of?`
 work, also with `not-`. Other predicates fail when the query loads. When
 several patterns tag the same name, the first pattern in the query wins, so
 put specific patterns before general ones such as `(type_identifier)`.
+This holds also when they tag different nodes around the name, so a
+pattern can widen a definition, as the Python query does with decorators.
 
 ## Golden tests
 
@@ -197,13 +219,14 @@ generated JavaScript and TypeScript classes with doc comments:
 Real code parses faster because comments are cheap: `net/http/server.go`
 repeated to 1 MiB takes about 320 ms.
 
-Java on an Intel Core i7-12700 with 2 CPUs, Go 1.27, `CGO_ENABLED=0`, warm
-analyzer, generated Java classes with Javadoc comments, and the Go case on
-the same machine for comparison:
+Java and Python on an Intel Core i7-12700 with 2 CPUs, Go 1.27,
+`CGO_ENABLED=0`, warm analyzer, generated Java classes with Javadoc
+comments, generated Python classes with docstrings and decorated methods,
+and the Go case on the same machine for comparison:
 
-| File                 | Java    | Go     |
-| -------------------- | ------- | ------ |
-| 4 KiB                | 1.6 ms  | 2.5 ms |
-| 64 KiB               | 24 ms   | 34 ms  |
-| 1 MiB                | 390 ms  | 600 ms |
-| First call (compile) | 100 ms  | 90 ms  |
+| File                 | Java    | Python  | Go     |
+| -------------------- | ------- | ------- | ------ |
+| 4 KiB                | 1.6 ms  | 2.3 ms  | 2.5 ms |
+| 64 KiB               | 24 ms   | 32 ms   | 34 ms  |
+| 1 MiB                | 390 ms  | 570 ms  | 600 ms |
+| First call (compile) | 100 ms  | 105 ms  | 90 ms  |

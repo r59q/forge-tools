@@ -1,0 +1,22 @@
+definitions:
+  [0] function convert 5:5-5:12 range=4:1-5:36
+  [1] function convert 7:5-7:12 range=6:1-7:36
+  [2] function convert 8:5-8:12 range=8:1-9:64
+  [3] function handler 12:5-12:12 range=12:1-13:13
+  [4] function handler 16:5-16:12 range=16:1-17:13
+  [5] class Shape 20:7-20:12 range=20:1-34:34
+  [6] method scale 22:9-22:14 range=21:5-22:49 container=Shape parent=[5]
+  [7] method scale 25:9-25:14 range=24:5-25:51 container=Shape parent=[5]
+  [8] method scale 27:9-27:14 range=27:5-28:36 container=Shape parent=[5]
+  [9] method area 30:9-30:13 range=30:5-31:17 container=Shape parent=[5]
+  [10] method area 33:9-33:13 range=33:5-34:34 container=Shape parent=[5]
+references:
+  call overload 4:2-4:10 in=[0] convert
+  call overload 6:2-6:10 in=[1] convert
+  call str 9:12-9:15 in=[2] convert
+  call isinstance 9:26-9:36 in=[2] convert
+  call int 9:54-9:57 in=[2] convert
+  call overload 21:6-21:14 in=[6] scale
+  call overload 24:6-24:14 in=[7] scale
+  call resize 28:16-28:22 in=[8] scale
+  call compute_area 34:16-34:28 in=[10] area

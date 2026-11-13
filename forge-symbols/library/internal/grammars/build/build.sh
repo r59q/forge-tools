@@ -70,3 +70,4 @@ grammar java tree-sitter/tree-sitter-java v0.23.5 cb199e0faae4b2c08425f88cbb51c1
 grammar javascript tree-sitter/tree-sitter-javascript v0.25.0 9712fc283d3dc01d996d20b6392143445d05867a7aad76fdd723824468428b86 src/parser.c src/scanner.c
 grammar typescript tree-sitter/tree-sitter-typescript v0.23.2 2c4ce711ae8d1218a3b2f899189298159d672870b5b34dff5d937bed2f3e8983 typescript/src/parser.c typescript/src/scanner.c
 grammar tsx tree-sitter/tree-sitter-typescript v0.23.2 2c4ce711ae8d1218a3b2f899189298159d672870b5b34dff5d937bed2f3e8983 tsx/src/parser.c tsx/src/scanner.c
+grammar python tree-sitter/tree-sitter-python v0.25.0 4609a3665a620e117acf795ff01b9e965880f81745f287a16336f4ca86cf270c src/parser.c src/scanner.c

@@ -47,6 +47,7 @@ func Languages() []Language {
 			Extensions: []string{".tsx"},
 			Queries:    []string{"ecmascript", "typescript", "jsx"},
 		},
+		{Name: "python", Extensions: []string{".py", ".pyi"}, Queries: []string{"python"}},
 	}
 }
 

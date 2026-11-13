@@ -89,6 +89,37 @@ func TestNewAnalysisPrefersEarlierPatterns(t *testing.T) {
 	}
 }
 
+// A name tagged in nested nodes is one definition, with the node of the
+// first pattern, as when a pattern widens a definition to its decorators.
+func TestNewAnalysisMergesNodesOfOneName(t *testing.T) {
+	//         0         1
+	//         0123456789012345678
+	source := "@d def f(): g() x"
+
+	matches := []treesitter.Match{
+		{Pattern: 1, Captures: []treesitter.Capture{capture("name", 7, 8), capture("definition.function", 3, 15)}},
+		{Pattern: 0, Captures: []treesitter.Capture{capture("name", 7, 8), capture("definition.function", 0, 15)}},
+		{Pattern: 1, Captures: []treesitter.Capture{capture("name", 16, 17), capture("definition.function", 16, 17)}},
+		{Pattern: 2, Captures: []treesitter.Capture{capture("name", 1, 2), capture("reference.call", 1, 2)}},
+		{Pattern: 2, Captures: []treesitter.Capture{capture("name", 12, 13), capture("reference.call", 12, 13)}},
+	}
+
+	got := render(newAnalysis(matches, []byte(source)))
+	want := strings.Join([]string{
+		"definitions:",
+		"  [0] function f 1:8-1:9 range=1:1-1:16",
+		"  [1] function x 1:17-1:18 range=1:17-1:18",
+		"references:",
+		"  call d 1:2-1:3 in=[0] f",
+		"  call g 1:13-1:14 in=[0] f",
+		"",
+	}, "\n")
+
+	if got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
 func TestNewAnalysisOfNoMatches(t *testing.T) {
 	analysis := newAnalysis(nil, nil)
 

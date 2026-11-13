@@ -1,0 +1,22 @@
+definitions:
+  [0] class Outer 1:7-1:12 range=1:1-22:28
+  [1] class Inner 2:11-2:16 range=2:5-15:36 container=Outer parent=[0]
+  [2] class Deepest 3:15-3:22 range=3:9-5:34 container=Inner parent=[1]
+  [3] method deep 4:17-4:21 range=4:13-5:34 container=Deepest parent=[2]
+  [4] method inner_method 7:13-7:25 range=7:9-15:36 container=Inner parent=[1]
+  [5] function local_function 8:17-8:31 range=8:13-13:36 container=inner_method parent=[4]
+  [6] class LocalClass 9:23-9:33 range=9:17-11:33 container=local_function parent=[5]
+  [7] method local_method 10:25-10:37 range=10:21-11:33 container=LocalClass parent=[6]
+  [8] class Decorated 18:11-18:20 range=17:5-19:23 container=Outer parent=[0]
+  [9] field value 19:9-19:14 range=19:9-19:23 container=Decorated parent=[8]
+  [10] method outer_method 21:9-21:21 range=21:5-22:28 container=Outer parent=[0]
+  [11] function factory 25:5-25:12 range=25:1-30:19
+  [12] class Product 26:11-26:18 range=26:5-28:30 container=factory parent=[11]
+  [13] method build 27:13-27:18 range=27:9-28:30 container=Product parent=[12]
+references:
+  call walk 5:24-5:28 in=[3] deep
+  call LocalClass 13:24-13:34 in=[5] local_function
+  call local_function 15:20-15:34 in=[4] inner_method
+  call dataclass 17:6-17:15 in=[8] Decorated
+  call Inner 22:21-22:26 in=[10] outer_method
+  call assemble 28:20-28:28 in=[13] build

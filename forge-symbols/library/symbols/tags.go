@@ -111,13 +111,13 @@ func readTag(match treesitter.Match) (found tag, definition, ok bool) {
 	return found, definition, named && kinded
 }
 
-// mergeDefinitions sorts definitions in source order, outer before inner,
-// and merges matches of the same name in the same node.
+// mergeDefinitions merges matches of the same name, which name one
+// definition, and keeps the match of the first pattern, so a pattern can
+// widen the node of a more general one, as with Python decorators. Then
+// it sorts definitions in source order, outer before inner.
 func mergeDefinitions(definitions []tag) []tag {
 	slices.SortStableFunc(definitions, func(a, b tag) int {
 		return cmp.Or(
-			cmp.Compare(a.node.start, b.node.start),
-			cmp.Compare(b.node.end, a.node.end),
 			cmp.Compare(a.name.start, b.name.start),
 			cmp.Compare(a.name.end, b.name.end),
 			cmp.Compare(a.pattern, b.pattern),
@@ -127,7 +127,7 @@ func mergeDefinitions(definitions []tag) []tag {
 	merged := definitions[:0]
 	for _, definition := range definitions {
 		last := len(merged) - 1
-		if last < 0 || merged[last].node != definition.node || merged[last].name != definition.name {
+		if last < 0 || merged[last].name != definition.name {
 			merged = append(merged, definition)
 			continue
 		}
@@ -135,6 +135,14 @@ func mergeDefinitions(definitions []tag) []tag {
 			merged[last].container = definition.container
 		}
 	}
+
+	slices.SortStableFunc(merged, func(a, b tag) int {
+		return cmp.Or(
+			cmp.Compare(a.node.start, b.node.start),
+			cmp.Compare(b.node.end, a.node.end),
+			cmp.Compare(a.name.start, b.name.start),
+		)
+	})
 	return merged
 }
 

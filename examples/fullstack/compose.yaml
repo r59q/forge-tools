@@ -105,6 +105,18 @@ services:
       - "127.0.0.1:8092:8080"
       - "127.0.0.1:9102:9090"
 
+  # Finds definitions and references in request content; no forge credentials.
+  symbols:
+    build:
+      context: ../..
+      dockerfile: forge-symbols/service/Dockerfile
+    restart: unless-stopped
+    environment:
+      FORGE_SYMBOLS_TOKEN: ${FORGE_SYMBOLS_TOKEN:?set in .env}
+    ports:
+      - "127.0.0.1:8094:8080"
+      - "127.0.0.1:9104:9090"
+
   # Queues reactor deliveries. Subscribers consume and acknowledge here. The
   # fixed hostname keeps the node name, and so its data, across recreation.
   rabbitmq:

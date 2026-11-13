@@ -8,6 +8,7 @@ Runs the whole stack with Docker Compose: the
 [actions service](../../forge-actions/service/), the
 [explorer service](../../forge-explorer/service/), the
 [pipeprint service](../../forge-pipeprint/service/), the
+[symbols service](../../forge-symbols/service/), the
 [reactor service](../../forge-reactor/service/) with RabbitMQ and the
 [management interface](../../forge-tools-management/). You connect forges in
 the browser.
@@ -47,6 +48,7 @@ updating this example. It never changes existing values.
 | `FORGE_EXPLORER_TOKEN`              | Authenticates local explorer REST/gRPC callers.                   |
 | `FORGE_ACTIONS_TOKEN`                | Authenticates actions REST/gRPC callers and management.          |
 | `FORGE_PIPEPRINT_TOKEN`              | Authenticates pipeprint REST/gRPC callers.                       |
+| `FORGE_SYMBOLS_TOKEN`                | Authenticates symbols REST/gRPC callers.                         |
 | `FORGE_REACTOR_TOKEN`                | Authenticates reactor REST/gRPC callers and management.          |
 | `FORGE_REACTOR_CONNECTOR_TOKEN`      | Lets the reactor poll branches and register webhooks.            |
 | `FORGE_REACTOR_RABBITMQ_PASSWORD`    | RabbitMQ password of user `reactor`, for the reactor and you.    |
@@ -89,7 +91,7 @@ To skip the manual steps, set `GITHUB_TOKEN` or `FORGEJO_TOKEN` before
 
 ## Notes
 
-- Management, checkouts, actions, explorer, pipeprint, the reactor and RabbitMQ are reachable from the host, on `127.0.0.1`. The other
+- Management, checkouts, actions, explorer, pipeprint, symbols, the reactor and RabbitMQ are reachable from the host, on `127.0.0.1`. The other
   services talk over the Compose network in plaintext; use TLS endpoints
   for remote access.
 - All operators see what the connected accounts can see. Management grants
@@ -161,6 +163,21 @@ returns job graphs. It reads only the request and holds no forge credentials.
 jq -n --rawfile c .gitlab-ci.yml '{content: $c, to: "github"}' |
   curl -fsS -H "Authorization: Bearer $FORGE_PIPEPRINT_TOKEN" \
     http://127.0.0.1:8092/v1/pipeprint/convert -d @-
+```
+
+## Code symbols
+
+The symbols API listens on `127.0.0.1:8094` (REST) and `127.0.0.1:9104`
+(gRPC), authenticated with `FORGE_SYMBOLS_TOKEN`. It finds definitions and
+references in the source files of each request, and what a function calls or
+is called by. Results match by name only, so they are labelled `heuristic`.
+It reads only the request and holds no forge credentials. See its
+[API reference](../../forge-symbols/service/README.md#api).
+
+```sh
+jq -n --rawfile c main.go '{files: [{path: "main.go", content: ($c | @base64)}]}' |
+  curl -fsS -H "Authorization: Bearer $FORGE_SYMBOLS_TOKEN" \
+    http://127.0.0.1:8094/v1/symbols/analyze -d @-
 ```
 
 ## Forge events

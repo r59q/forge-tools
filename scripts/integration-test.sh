@@ -44,6 +44,10 @@ FORGE_EXPLORER_TEST_TOKEN=$(sed -n 's/^FORGE_EXPLORER_TOKEN=//p' "$(dirname "$0"
 FORGE_PIPEPRINT_TEST_TOKEN=$(sed -n 's/^FORGE_PIPEPRINT_TOKEN=//p' "$(dirname "$0")/../examples/fullstack/.env") \
   sh "$(dirname "$0")/pipeprint-integration-test.sh"
 
+# Symbols analyzes request content only, independent of forge state.
+FORGE_SYMBOLS_TEST_TOKEN=$(sed -n 's/^FORGE_SYMBOLS_TOKEN=//p' "$(dirname "$0")/../examples/fullstack/.env") \
+  sh "$(dirname "$0")/symbols-integration-test.sh"
+
 # The reactor uses its configured webhook source and RabbitMQ, independent of forge state.
 env_file="$(dirname "$0")/../examples/fullstack/.env"
 FORGE_REACTOR_TEST_TOKEN=$(sed -n 's/^FORGE_REACTOR_TOKEN=//p' "$env_file") \

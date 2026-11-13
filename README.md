@@ -42,6 +42,8 @@ Tools may have named services such as `broker/` and `proxy/` sharing one library
 
 [examples/](examples/) runs the published images with Docker Compose and shows
 how to use them with `curl` and Go.
+[examples/fullstack/](examples/fullstack/) builds the services from source and
+runs them together.
 [deploy/test/](deploy/test/) deploys them to the test environment.
 
 ## Contributing

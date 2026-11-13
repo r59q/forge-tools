@@ -85,6 +85,7 @@ func (a *Analyzer) Analyze(ctx context.Context, file File) (Analysis, error) {
 	analysis := newAnalysis(matches, file.Content)
 	analysis.Path = file.Path
 	analysis.Language = language.Name
+	analysis.Bytes = len(file.Content)
 	return analysis, nil
 }
 

@@ -122,6 +122,9 @@ func TestAnalyzeDetectsLanguage(t *testing.T) {
 			if analysis.Language != test.language || analysis.Path != test.file.Path {
 				t.Errorf("got language %q path %q", analysis.Language, analysis.Path)
 			}
+			if analysis.Bytes != len(test.file.Content) {
+				t.Errorf("bytes = %d, want %d", analysis.Bytes, len(test.file.Content))
+			}
 			if got, want := names(analysis.Definitions), samples[test.language].definitions; got != want {
 				t.Errorf("definitions = %s, want %s", got, want)
 			}

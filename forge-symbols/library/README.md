@@ -101,6 +101,79 @@ From this directory: `CGO_ENABLED=0 go build ./...`, `go vet ./...`,
 - Nothing is resolved: a reference is a name, not a link to its definition.
   Names of builtins such as `string` and `len` are references too.
 
+## Navigation
+
+Package `navigation`, imported as
+`github.com/r59q/forge-tools/forge-symbols/library/navigation`, answers
+IDE-style questions over analyses the caller supplies, for example the
+files a literal search found. It reads no files and keeps no index or
+cache. It works the same for every supported language.
+
+```go
+analyses, err := analyzer.AnalyzeFiles(ctx, files)
+target := navigation.Target{Path: "store.go", Line: 5, Column: 18}
+
+calls, err := navigation.Outgoing(analyses, target, navigation.Limits{})
+callers, err := navigation.Incoming(analyses, target, navigation.Limits{})
+definitions, err := navigation.Definitions(analyses, target, navigation.Limits{})
+```
+
+- `Outgoing` returns the references inside a target definition, in source
+  order. References inside definitions nested in it, such as a local type
+  or a function assigned to a local variable, are included and marked
+  `Nested`.
+- `Incoming` returns the references named like the target, of any kind,
+  grouped by the innermost definition around each. References outside any
+  definition form one group per file, whose caller has index `None`.
+- `Definitions` returns the definitions named like the target, of
+  `Target.Kind` when set.
+
+A target is one of:
+
+| Target                           | Selects                                             |
+| -------------------------------- | --------------------------------------------------- |
+| `Name`                           | that name; nothing ranks as same file or container  |
+| `Name`, `Path`                   | that name; results in `Path` rank first             |
+| `Path`, `Line`, `Column`         | what is at the position, see below                  |
+| `Name`, `Path`, `Line`, `Column` | as above, but only tags with that name              |
+
+A position selects, in order: the innermost definition whose name it is on,
+the reference it is on, or the innermost definition around it. Its end
+counts, so a cursor just after a name selects it. `Kind` also narrows the
+definitions a position selects. In `Outgoing`, a selected definition is the
+only target; a name or a reference targets every definition of the name,
+with one group each.
+
+Results of `Incoming` and `Definitions`, and the groups of `Outgoing` for a
+name, are ranked in tiers, then by path, then by position:
+
+1. `TierFile`: in the target's file.
+2. `TierContainer`: in another file, with the target's `Container`. A
+   selected reference takes the container of the definition around it.
+   An empty container matches nothing.
+3. `TierOther`: the rest.
+
+An incoming group takes the tier of its caller and the position of its
+first reference.
+
+Every result has precision `Heuristic`: names match, nothing is resolved.
+Overloads, same-named methods of different types and unrelated symbols
+with the same name are all returned and ranked, not filtered. `Incoming`
+cannot tell which of them a reference means.
+
+| Limit        | Default | Exceeded           |
+| ------------ | ------- | ------------------ |
+| `Files`      | 1000    | `ErrTooLarge`      |
+| `TotalBytes` | 16 MiB  | `ErrTooLarge`      |
+| `Results`    | 1000    | `Truncated` is set |
+
+`Files` and `TotalBytes` default as in `symbols`; bytes are summed over
+`Analysis.Bytes`. `Results` counts every definition and reference
+returned, group heads included. Ranking comes first, so the best results
+are kept. A group is kept only if its head and a first reference fit. A
+target without a name or position returns `ErrInvalidTarget`; a position
+that selects nothing returns `ErrNotFound`.
+
 ## Limits
 
 | Limit         | Default | Exceeded                               |

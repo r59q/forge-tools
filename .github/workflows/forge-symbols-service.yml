@@ -1,0 +1,64 @@
+name: forge-symbols-service
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - forge-symbols/service/**
+      - forge-symbols/library/**
+      - .golangci.yml
+      - forge-core/forgeapi/**
+      - forge-core/servicekit/**
+      - .dockerignore
+      - .github/workflows/forge-symbols-service.yml
+      - buf.yaml
+      - buf.lock
+      - .github/workflows/reusable-*.yml
+  pull_request:
+    paths:
+      - forge-symbols/service/**
+      - forge-symbols/library/**
+      - .golangci.yml
+      - forge-core/forgeapi/**
+      - forge-core/servicekit/**
+      - .dockerignore
+      - .github/workflows/forge-symbols-service.yml
+      - buf.yaml
+      - buf.lock
+      - .github/workflows/reusable-*.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: ./.github/workflows/reusable-go.yml
+    with:
+      dir: forge-symbols/service
+
+  proto:
+    uses: ./.github/workflows/reusable-proto.yml
+    with:
+      dir: forge-symbols/service
+
+  # Pull requests build the image without pushing or registry access.
+  image:
+    if: github.event_name == 'pull_request'
+    needs: test
+    uses: ./.github/workflows/reusable-docker.yml
+    with:
+      image: forge-symbols-service
+      dockerfile: forge-symbols/service/Dockerfile
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+    needs: test
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/reusable-docker.yml
+    with:
+      image: forge-symbols-service
+      dockerfile: forge-symbols/service/Dockerfile
+      push: true

@@ -12,3 +12,7 @@ func memoryStore(testing.TB) search.Store { return &search.MemoryStore{} }
 func TestMemoryStore(t *testing.T) {
 	storetest.Run(t, memoryStore)
 }
+
+func BenchmarkSearch(b *testing.B) {
+	storetest.Benchmark(b, memoryStore)
+}

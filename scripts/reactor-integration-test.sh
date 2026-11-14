@@ -36,9 +36,10 @@ cleanup() { api -X DELETE "$url/v1/subscriptions/$sub" >/dev/null 2>&1 || true; 
 trap cleanup EXIT
 
 # Takes one message from the queue; mode is reject_requeue_true or ack_requeue_false.
+# The body is an argument, since mq_api gives curl's stdin to the password.
 take() {
-  jq -n --arg mode "$1" '{count: 1, ackmode: $mode, encoding: "auto"}' |
-    mq_api -H 'Content-Type: application/json' "$mq/api/queues/%2F/$queue/get" -d @-
+  mq_api -H 'Content-Type: application/json' "$mq/api/queues/%2F/$queue/get" \
+    -d "$(jq -cn --arg mode "$1" '{count: 1, ackmode: $mode, encoding: "auto"}')"
 }
 take_one() {
   i=0

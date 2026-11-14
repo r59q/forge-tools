@@ -106,7 +106,9 @@ func withContent(ctx context.Context, tx *sql.Tx, batch []listed, visit func(sea
 
 // selected calls visit with the row ID and identity of each selected
 // document, in match order, until visit returns false or an error.
-func selected(ctx context.Context, tx *sql.Tx, index string, selection search.Selection, visit func(int64, search.Ref) (bool, error)) error {
+func selected(
+	ctx context.Context, tx *sql.Tx, index string, selection search.Selection, visit func(int64, search.Ref) (bool, error),
+) error {
 	id, err := indexID(ctx, tx, index)
 	if err != nil {
 		return err

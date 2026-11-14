@@ -30,13 +30,13 @@ func decodeTerms(encoded []byte) ([]search.Term, error) {
 	)
 	for len(encoded) > 0 {
 		gap, size := binary.Uvarint(encoded)
-		if size <= 0 || previous+gap > math.MaxUint32 {
+		if size <= 0 || gap > math.MaxUint32-previous {
 			return nil, ErrStorage
 		}
 		encoded = encoded[size:]
 
 		previous += gap
-		terms = append(terms, search.Term(previous))
+		terms = append(terms, search.Term(previous)) //nolint:gosec // previous is at most MaxUint32.
 	}
 	return terms, nil
 }

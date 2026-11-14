@@ -2,8 +2,8 @@
 
 The forge-search model and literal search in two modes: unindexed, over
 documents the caller supplies, and indexed, over named indexes kept behind a
-storage interface. No file or network access, no cgo. See the
-[tool overview](../README.md).
+storage interface, in memory or in an embedded SQLite database. No network
+access, no cgo. See the [tool overview](../README.md).
 
 ```go
 documents := []search.Document{{
@@ -145,6 +145,60 @@ func BenchmarkSearch(b *testing.B) { storetest.Benchmark(b, open) }
 updates are atomic under concurrent readers, and that indexed search returns
 what `Unindexed` returns over random documents, updates and queries.
 
+An adapter for another database plugs in the same way: implement the nine
+methods with one transaction each, keep the terms of every entry so that the
+entries holding all terms of a selection can be found, and pass the suite.
+The search rules stay in the engine.
+
+### SQLite store
+
+Package `sqlite` keeps every index in one SQLite database, through the
+pure-Go `modernc.org/sqlite` driver, so it builds with `CGO_ENABLED=0`:
+
+```go
+store, err := sqlite.Open(ctx, dataDir) // an existing directory
+defer store.Close()
+
+engine := search.NewEngine(store, search.IndexLimits{})
+```
+
+Import `github.com/r59q/forge-tools/forge-search/library/sqlite`.
+
+- **Files.** `search.db` holds all indexes. While the store is open, SQLite
+  keeps `search.db-wal` and `search.db-shm` beside it. Index names are rows,
+  never paths. Use one process per directory.
+- **Private.** The files hold the content and terms of every document at
+  rest. They are created with mode 0600, and `Open` resets the mode of the
+  database file; the directory and the disk are the caller's to protect.
+- **Schema.** The version is `PRAGMA user_version`. `Open` migrates an older
+  database; a newer one returns `ErrStorage`.
+- **Removed content.** With `secure_delete`, the content of a replaced or
+  removed document, or of a deleted index, is overwritten in the database
+  file when the change commits. Until a checkpoint, the write-ahead log may
+  still hold it, and the full-text index keeps its terms behind delete
+  markers; the store never returns either. `Checkpoint` merges the full-text
+  index and empties the log, after which neither file holds them. `Close`
+  empties the log but does not merge. The file does not shrink: freed pages
+  are zeroed and reused, and there is no `VACUUM`. Copies outside the files,
+  such as backups and file system snapshots, are out of reach.
+- **Checkpoint cost.** `Checkpoint` rewrites the full-text index of all
+  indexes: 0.7 s for the benchmark corpus. Updates wait for it; searches do
+  not. Call it after removing content that must leave the disk, or
+  periodically.
+- **Concurrency.** Updates run one at a time on one connection, each in one
+  transaction. Searches use a pool of `max(4, GOMAXPROCS)` read-only
+  connections and read one snapshot each, so they wait neither for updates
+  nor for each other.
+- **Durability.** The database uses a write-ahead log with
+  `synchronous=NORMAL`: a committed change survives the process ending. A
+  power loss may lose the latest commits, but does not corrupt the file.
+- **Errors.** Besides the search errors and context errors, the store
+  returns `ErrStorage`, `ErrDiskFull` and `ErrReadOnly`, without SQL, paths
+  or content. A change that does not fit on the disk leaves the index as it
+  was.
+- **Memory map.** Readers map up to 1 GiB of the file. An I/O error on a
+  mapped page ends the process instead of returning an error.
+
 ## Benchmarks
 
 `CGO_ENABLED=0 go test ./search -run '^$' -bench .` on an AMD Ryzen 9 5950X
@@ -168,3 +222,34 @@ Filling the index takes 1.7 s. `MemoryStore` then holds about 165 MiB of
 terms beside the 32 MiB of content: random words give each document far more
 distinct sequences than code does, and the store favours simplicity over
 size.
+
+### SQLite
+
+`CGO_ENABLED=0 go test ./sqlite -run '^$' -bench . -cpu 6` on the same host
+and corpus, with the database in a temporary directory on an SSD. Unindexed
+times are as above. Indexed times are right after filling, and after a
+`Checkpoint` has merged the full-text index.
+
+| Query                                | Indexed | After `Checkpoint` | Speedup |
+| ------------------------------------ | ------- | ------------------ | ------- |
+| Identifier, in 3 documents           | 990 µs  | 630 µs             | 2.5–4x  |
+| Line of common words, in 1 document  | 12 ms   | 5.7 ms             | 1.4–3x  |
+| Three-letter word, in 644 documents  | 11 ms   | 11 ms              | 1.4x    |
+| Two bytes, in 3 documents            | 20 ms   | 20 ms              | 0.13x   |
+
+The target of 10x is not met. A search pays for SQLite's full-text query
+and for reading every candidate's content from the database, which
+`MemoryStore` hands over in memory. A two-byte query reads all 32 MiB.
+
+Filling the index takes 12 s. The database file is then 80 MiB, with up to
+65 MiB more in the write-ahead log, and 85 MiB after `Checkpoint`.
+
+`BenchmarkSearchDuringUpdates` searches for a line on 256 documents of
+16 KiB. Compared with one shared connection, as in the forge-connector
+broker:
+
+| Search                       | Reader pool | One connection |
+| ---------------------------- | ----------- | -------------- |
+| Alone                        | 2.4 ms      | 2.4 ms         |
+| 6 at a time, wall per search | 0.55 ms     | 2.4 ms         |
+| During updates, 115 per s    | 5.3 ms      | 9.0 ms         |

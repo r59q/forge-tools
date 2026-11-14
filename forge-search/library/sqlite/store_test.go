@@ -1,7 +1,12 @@
 package sqlite_test
 
 import (
+	"strconv"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/r59q/forge-tools/forge-search/library/search"
 	"github.com/r59q/forge-tools/forge-search/library/search/storetest"
@@ -30,3 +35,47 @@ func openIn(tb testing.TB, dir string) *sqlite.Store {
 func TestStore(t *testing.T) { storetest.Run(t, openStore) }
 
 func BenchmarkSearch(b *testing.B) { storetest.Benchmark(b, openStore) }
+
+// BenchmarkSearchDuringUpdates measures a search for a line of one document
+// on an idle store and while another goroutine replaces documents of the
+// same index without pause. Searches read a snapshot, so they should not
+// wait for the updates.
+func BenchmarkSearchDuringUpdates(b *testing.B) {
+	documents := storetest.Corpus(4<<20, 16<<10)
+	engine := search.NewEngine(openStore(b), search.IndexLimits{})
+	wantErr(b, engine.CreateIndex(b.Context(), "main"), nil)
+	put(b, engine, "main", documents...)
+
+	lines := strings.Split(strings.TrimSpace(string(documents[len(documents)/2].Content)), "\n")
+	query := search.Query{Text: strings.TrimSpace(lines[len(lines)-1])}
+	searching := func(b *testing.B) {
+		for b.Loop() {
+			results, err := engine.Search(b.Context(), "main", query, search.Filter{})
+			if err != nil || len(results.Matches) == 0 {
+				b.Fatalf("%d matches, error %v", len(results.Matches), err)
+			}
+		}
+	}
+
+	b.Run("idle", searching)
+	b.Run("updating", func(b *testing.B) {
+		var (
+			stop    atomic.Bool
+			updates int
+			done    sync.WaitGroup
+		)
+		start := time.Now()
+		done.Go(func() {
+			for ; !stop.Load(); updates++ {
+				document := documents[updates%len(documents)]
+				document.Version = strconv.Itoa(updates)
+				wantErr(b, engine.Put(b.Context(), "main", document), nil)
+			}
+		})
+
+		searching(b)
+		stop.Store(true)
+		done.Wait()
+		b.ReportMetric(float64(updates)/time.Since(start).Seconds(), "updates/s")
+	})
+}

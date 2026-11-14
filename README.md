@@ -15,6 +15,7 @@ useful on its own.
 | [forge-code](forge-code/)                         | Git content across forges: trees, files, diffs and commits.            |
 | [forge-explorer](forge-explorer/)                 | Live worktree browsing, bounded search and embeddable code exploration. |
 | [forge-symbols](forge-symbols/)                   | Definitions and references in source code, found with Tree-sitter.     |
+| [forge-search](forge-search/)                     | Literal text search over code and issues, with or without an index.    |
 | [forge-review](forge-review/)                     | Fixed review snapshots, assignments and native or standalone feedback. |
 | [forge-changes](forge-changes/)                   | Proposed code changes, discussion and merging across forges.           |
 | [forge-issues](forge-issues/)                     | Issues and comments across forges.                                     |

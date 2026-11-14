@@ -3,7 +3,8 @@
 //
 // The rules for queries, ranges, previews and match order are the contract of
 // every search mode. Unindexed searches the documents a call carries; it reads
-// and stores nothing else.
+// and stores nothing else. An Engine keeps documents in the named indexes of a
+// Store and returns the same results for them.
 package search
 
 import "errors"

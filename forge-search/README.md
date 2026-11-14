@@ -6,7 +6,8 @@ and symbols. One set of query rules serves two modes.
 ## Layout
 
 - [`library/`](library/README.md): the search model, unindexed search and
-  the index engine with its storage interface, as a Go library.
+  the index engine with its storage interface and an embedded SQLite store,
+  as a Go library.
 
 ## Design
 

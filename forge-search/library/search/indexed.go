@@ -45,7 +45,9 @@ func (e *Engine) Search(ctx context.Context, index string, query Query, filter F
 }
 
 // verify scans the documents that may hold the query, in match order, and
-// counts the binary documents the scan passed.
+// counts the binary documents the scan passed. The binary documents are
+// listed first, in a store call of their own: while documents change, the
+// count may describe a slightly earlier moment than the matches.
 func (e *Engine) verify(ctx context.Context, s *scan, index string, filter Filter) error {
 	binary, err := e.refs(ctx, index, Selection{Filter: filter, Terms: []Term{unsearchableTerm}})
 	if err != nil {

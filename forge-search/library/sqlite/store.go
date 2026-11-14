@@ -83,15 +83,26 @@ func (s *Store) Close() error {
 	return clean(context.Background(), errors.Join(s.readers.Close(), s.writer.Close()))
 }
 
-// Checkpoint copies every committed change into the database file and
-// empties the write-ahead log. Removed content is overwritten in the
-// database file, but the log may still hold it until a checkpoint; after
-// Checkpoint returns, neither file holds it. It waits for searches that read
-// an older snapshot, and returns ErrStorage when they do not finish in time.
+// Checkpoint removes what is left of removed documents and empties the
+// write-ahead log. Their content is overwritten in the database file at
+// once, but the log may still hold it, and the full-text index their terms,
+// until a checkpoint; after Checkpoint returns, neither file holds them.
+//
+// It rewrites the full-text index, which takes time in proportion to the
+// size of all indexes, and updates wait for it. It then waits for searches
+// that read an older snapshot, and returns ErrStorage when they do not
+// finish in time.
 func (s *Store) Checkpoint(ctx context.Context) error {
-	var busy, frames, copied int
+	err := s.write(ctx, func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, "INSERT INTO postings(postings) VALUES('optimize')")
+		return err
+	})
+	if err != nil {
+		return err
+	}
 
-	err := s.writer.QueryRowContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)").Scan(&busy, &frames, &copied)
+	var busy, frames, copied int
+	err = s.writer.QueryRowContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)").Scan(&busy, &frames, &copied)
 	if err == nil && busy != 0 {
 		err = ErrStorage
 	}

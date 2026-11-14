@@ -1,7 +1,10 @@
 package sqlite
 
 import (
+	"bytes"
 	"errors"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -46,6 +49,48 @@ func TestDiskFull(t *testing.T) {
 	info, err := store.Index(ctx, "main")
 	if err != nil || info.Documents != 0 {
 		t.Fatalf("index after a failed Put: %+v, %v", info, err)
+	}
+}
+
+func TestCheckpointDropsRemovedTerms(t *testing.T) {
+	ctx, dir := t.Context(), t.TempDir()
+	store := open(t, dir)
+	defer func() { _ = store.Close() }()
+
+	if err := store.CreateIndex(ctx, "main"); err != nil {
+		t.Fatal(err)
+	}
+	id, err := indexID(ctx, store.writer, "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref := search.Ref{Kind: search.KindCode, Source: "s", ID: "a"}
+	terms := []search.Term{0xfedcba}
+	token := tokens(id, terms)
+
+	held := func() bool {
+		if err := store.Checkpoint(ctx); err != nil {
+			t.Fatal(err)
+		}
+		content, err := os.ReadFile(filepath.Join(dir, FileName))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return bytes.Contains(content, []byte(token))
+	}
+
+	entry := search.Entry{Document: search.Document{Ref: ref, Content: []byte{}}, Terms: terms}
+	if err := store.Put(ctx, "main", entry, search.Capacity{Documents: 1, Bytes: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if !held() {
+		t.Fatalf("the database file does not hold the token %q", token)
+	}
+	if err := store.Remove(ctx, "main", ref); err != nil {
+		t.Fatal(err)
+	}
+	if held() {
+		t.Fatalf("the database file holds the token %q of a removed document", token)
 	}
 }
 

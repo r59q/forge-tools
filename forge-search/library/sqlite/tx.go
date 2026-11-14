@@ -19,8 +19,8 @@ const schemaVersion = 1
 // counts. documents holds the identity, content and encoded terms of each
 // document; its unique key gives the match order. postings is a full-text
 // index of the terms of each document, with the document row ID as rowid.
-// It keeps no text and no positions, and deletes remove their tokens at
-// once, without leaving markers behind.
+// It keeps no text and no positions. A delete adds a marker that hides the
+// tokens of the document; they leave the index when its segments merge.
 const schema = `
 CREATE TABLE indexes (
 	id INTEGER PRIMARY KEY,
@@ -41,7 +41,6 @@ CREATE TABLE documents (
 	UNIQUE (index_id, kind, source, ref_id)
 ) STRICT;
 CREATE VIRTUAL TABLE postings USING fts5(terms, content='', detail=none, tokenize='ascii');
-INSERT INTO postings(postings, rank) VALUES('secure-delete', 1);
 PRAGMA user_version = 1;`
 
 // migrate brings the schema to schemaVersion. A database of a newer

@@ -20,7 +20,7 @@ type storedIndex struct {
 type storedEntry struct {
 	id    int64
 	bytes int64
-	terms []search.Term
+	terms []byte
 }
 
 // Put implements search.Store.
@@ -42,16 +42,15 @@ func (s *Store) Put(ctx context.Context, index string, entry search.Entry, capac
 			return search.ErrFull
 		}
 
+		if err := unindex(ctx, tx, target.id, old); err != nil {
+			return err
+		}
 		id, err := saveDocument(ctx, tx, target.id, old.id, document, encoded)
 		if err != nil {
 			return err
 		}
-
-		added, removed := diffTerms(old.terms, entry.Terms)
-		if err := changeTerms(ctx, tx, removeTermsSQL, target.id, id, removed); err != nil {
-			return err
-		}
-		if err := changeTerms(ctx, tx, addTermsSQL, target.id, id, added); err != nil {
+		_, err = tx.ExecContext(ctx, "INSERT INTO postings(rowid, terms) VALUES(?, ?)", id, tokens(target.id, entry.Terms))
+		if err != nil {
 			return err
 		}
 		return changeCounts(ctx, tx, target.id, documents, size)
@@ -78,11 +77,7 @@ func (s *Store) Remove(ctx context.Context, index string, ref search.Ref) error 
 		if old.id == 0 {
 			return search.ErrNotFound
 		}
-
-		if err := changeTerms(ctx, tx, removeTermsSQL, target.id, old.id, old.terms); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, "DELETE FROM documents WHERE id = ?", old.id); err != nil {
+		if err := drop(ctx, tx, target.id, old); err != nil {
 			return err
 		}
 		return changeCounts(ctx, tx, target.id, -1, -old.bytes)
@@ -98,24 +93,19 @@ func lookup(ctx context.Context, tx *sql.Tx, index string, ref search.Ref) (stor
 		return storedIndex{}, storedEntry{}, err
 	}
 
-	var (
-		old     storedEntry
-		encoded []byte
-	)
+	var old storedEntry
 	row = tx.QueryRowContext(ctx,
 		"SELECT id, length(content), terms FROM documents WHERE index_id = ? AND kind = ? AND source = ? AND ref_id = ?",
 		target.id, string(ref.Kind), ref.Source, ref.ID)
 
-	err := row.Scan(&old.id, &old.bytes, &encoded)
+	err := row.Scan(&old.id, &old.bytes, &old.terms)
 	if errors.Is(err, sql.ErrNoRows) {
 		return target, storedEntry{}, nil
 	}
 	if err != nil {
 		return storedIndex{}, storedEntry{}, err
 	}
-
-	old.terms, err = decodeTerms(encoded)
-	return target, old, err
+	return target, old, nil
 }
 
 // saveDocument stores a document in place of the one with row ID old, or
@@ -136,18 +126,27 @@ func saveDocument(ctx context.Context, tx *sql.Tx, index, old int64, document se
 	return result.LastInsertId()
 }
 
-// Statements that add or remove the terms of a document, given as a JSON
-// array, so that a document needs one statement whatever its size.
-const (
-	addTermsSQL    = "INSERT INTO terms(index_id, term, document_id) SELECT ?1, value, ?2 FROM json_each(?3)"
-	removeTermsSQL = "DELETE FROM terms WHERE index_id = ?1 AND document_id = ?2 AND term IN (SELECT value FROM json_each(?3))"
-)
+// drop deletes a stored document and its postings.
+func drop(ctx context.Context, tx *sql.Tx, index int64, old storedEntry) error {
+	if err := unindex(ctx, tx, index, old); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, "DELETE FROM documents WHERE id = ?", old.id)
+	return err
+}
 
-func changeTerms(ctx context.Context, tx *sql.Tx, statement string, index, document int64, terms []search.Term) error {
-	if len(terms) == 0 {
+// unindex deletes the postings of a stored document, if there is one. The
+// full-text index keeps no text, so the delete gives the tokens it held.
+func unindex(ctx context.Context, tx *sql.Tx, index int64, old storedEntry) error {
+	if old.id == 0 {
 		return nil
 	}
-	_, err := tx.ExecContext(ctx, statement, index, document, jsonTerms(terms))
+	terms, err := decodeTerms(old.terms)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, "INSERT INTO postings(postings, rowid, terms) VALUES('delete', ?, ?)",
+		old.id, tokens(index, terms))
 	return err
 }
 

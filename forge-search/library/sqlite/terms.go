@@ -9,8 +9,8 @@ import (
 )
 
 // encodeTerms packs sorted, distinct terms as the varint gaps between them.
-// A document keeps its terms in this form, so that a Put or Remove finds the
-// rows to delete without a second index over the terms table.
+// A document keeps its terms in this form, so that a Put or Remove can give
+// the full-text index the tokens it deletes.
 func encodeTerms(terms []search.Term) []byte {
 	encoded := make([]byte, 0, 2*len(terms))
 	var previous search.Term
@@ -41,34 +41,21 @@ func decodeTerms(encoded []byte) ([]search.Term, error) {
 	return terms, nil
 }
 
-// diffTerms returns the terms of now that were not in before, and the terms
-// of before that are not in now. Both slices are sorted and distinct.
-func diffTerms(before, now []search.Term) (added, removed []search.Term) {
-	for len(before) > 0 || len(now) > 0 {
-		switch {
-		case len(now) == 0 || len(before) > 0 && before[0] < now[0]:
-			removed = append(removed, before[0])
-			before = before[1:]
-		case len(before) == 0 || now[0] < before[0]:
-			added = append(added, now[0])
-			now = now[1:]
-		default:
-			before, now = before[1:], now[1:]
-		}
-	}
-	return added, removed
-}
+// tokens returns the terms of an index as the text of the full-text index:
+// one token per term, of the index ID and term in base 32 around an x, so
+// that each index has tokens of its own. Space separates the tokens, and a
+// full-text query of them matches the documents that hold all of them.
+func tokens(index int64, terms []search.Term) string {
+	prefix := strconv.AppendInt(nil, index, 32)
+	prefix = append(prefix, 'x')
 
-// jsonTerms returns terms as a JSON array, for json_each.
-func jsonTerms(terms []search.Term) string {
-	text := make([]byte, 0, 2+9*len(terms))
-	text = append(text, '[')
-
+	text := make([]byte, 0, len(terms)*(len(prefix)+6))
 	for position, term := range terms {
 		if position > 0 {
-			text = append(text, ',')
+			text = append(text, ' ')
 		}
-		text = strconv.AppendUint(text, uint64(term), 10)
+		text = append(text, prefix...)
+		text = strconv.AppendUint(text, uint64(term), 32)
 	}
-	return string(append(text, ']'))
+	return string(text)
 }

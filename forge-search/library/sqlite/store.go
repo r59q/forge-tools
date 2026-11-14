@@ -63,7 +63,7 @@ func Open(ctx context.Context, dir string) (*Store, error) {
 	writer.SetMaxOpenConns(1)
 
 	s := &Store{writer: writer}
-	if err := s.migrate(ctx); err != nil {
+	if err := s.setUp(ctx); err != nil {
 		_ = writer.Close()
 		return nil, clean(ctx, err)
 	}
@@ -98,13 +98,27 @@ func (s *Store) Checkpoint(ctx context.Context) error {
 	return clean(ctx, err)
 }
 
+// setUp gives a new database its page size and write-ahead log, which the
+// file keeps, and migrates the schema. The page size has to come first, so
+// it cannot be a connection option: the driver runs those by name.
+func (s *Store) setUp(ctx context.Context) error {
+	for _, statement := range []string{"PRAGMA page_size = 65536", "PRAGMA journal_mode = WAL"} {
+		if _, err := s.writer.ExecContext(ctx, statement); err != nil {
+			return err
+		}
+	}
+	return s.migrate(ctx)
+}
+
 // Connection options. secure_delete overwrites removed content, temp_store
 // keeps temporary data, which may hold content, out of files, and
 // synchronous(normal) is durable when the process ends, not on power loss.
+// Readers map the file into memory, so that reading a page takes no system
+// call.
 const (
-	writerOptions = "_txlock=immediate&_pragma=journal_mode(wal)&_pragma=synchronous(normal)" +
+	writerOptions = "_txlock=immediate&_pragma=synchronous(normal)" +
 		"&_pragma=secure_delete(1)&_pragma=temp_store(memory)&_pragma=busy_timeout(5000)"
-	readerOptions = "_pragma=query_only(1)&_pragma=secure_delete(1)" +
+	readerOptions = "_pragma=mmap_size(1073741824)&_pragma=query_only(1)&_pragma=secure_delete(1)" +
 		"&_pragma=temp_store(memory)&_pragma=busy_timeout(5000)"
 )
 

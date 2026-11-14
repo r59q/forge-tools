@@ -17,8 +17,10 @@ const schemaVersion = 1
 
 // schema creates version 1. indexes holds one row per index with its
 // counts. documents holds the identity, content and encoded terms of each
-// document; its unique key gives the match order. terms holds one row per
-// term of a document, so a search finds the documents of a term.
+// document; its unique key gives the match order. postings is a full-text
+// index of the terms of each document, with the document row ID as rowid.
+// It keeps no text and no positions, and deletes remove their tokens at
+// once, without leaving markers behind.
 const schema = `
 CREATE TABLE indexes (
 	id INTEGER PRIMARY KEY,
@@ -38,12 +40,8 @@ CREATE TABLE documents (
 	terms BLOB NOT NULL,
 	UNIQUE (index_id, kind, source, ref_id)
 ) STRICT;
-CREATE TABLE terms (
-	index_id INTEGER NOT NULL,
-	term INTEGER NOT NULL,
-	document_id INTEGER NOT NULL,
-	PRIMARY KEY (index_id, term, document_id)
-) STRICT, WITHOUT ROWID;
+CREATE VIRTUAL TABLE postings USING fts5(terms, content='', detail=none, tokenize='ascii');
+INSERT INTO postings(postings, rank) VALUES('secure-delete', 1);
 PRAGMA user_version = 1;`
 
 // migrate brings the schema to schemaVersion. A database of a newer

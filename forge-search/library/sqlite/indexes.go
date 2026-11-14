@@ -37,17 +37,43 @@ func (s *Store) DeleteIndex(ctx context.Context, name string) error {
 			return err
 		}
 
-		for _, statement := range []string{
-			"DELETE FROM terms WHERE index_id = ?",
-			"DELETE FROM documents WHERE index_id = ?",
-			"DELETE FROM indexes WHERE id = ?",
-		} {
-			if _, err := tx.ExecContext(ctx, statement, id); err != nil {
+		for {
+			batch, err := someDocuments(ctx, tx, id)
+			if err != nil || len(batch) == 0 {
+				if err == nil {
+					_, err = tx.ExecContext(ctx, "DELETE FROM indexes WHERE id = ?", id)
+				}
 				return err
 			}
+			for _, old := range batch {
+				if err := drop(ctx, tx, id, old); err != nil {
+					return err
+				}
+			}
 		}
-		return nil
 	})
+}
+
+// someDocuments returns up to deleteBatch documents of an index, so that
+// deleting an index holds no more than those in memory.
+func someDocuments(ctx context.Context, tx *sql.Tx, index int64) ([]storedEntry, error) {
+	const deleteBatch = 64
+
+	rows, err := tx.QueryContext(ctx, "SELECT id, terms FROM documents WHERE index_id = ? LIMIT ?", index, deleteBatch)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var batch []storedEntry
+	for rows.Next() {
+		var old storedEntry
+		if err := rows.Scan(&old.id, &old.terms); err != nil {
+			return nil, err
+		}
+		batch = append(batch, old)
+	}
+	return batch, rows.Err()
 }
 
 // Indexes implements search.Store.

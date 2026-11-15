@@ -176,6 +176,69 @@ revision only when it completes, so a set marker names the revision the index
 holds. A sync that fails or is canceled returns what it changed so far, and
 the next sync corrects the index. Syncs of one index must not overlap.
 
+## Issues
+
+Package `issue`, imported from
+`github.com/r59q/forge-tools/forge-search/library/issue`, turns forge-issues
+issues into issue documents. `Search` searches a list unindexed,
+`SearchRepository` lists a repository through a `Reader` (such as
+`issues.Client`) and searches it unindexed, `Sync` keeps an index up to date
+with a repository and `SearchIndex` searches what it synced.
+
+```go
+repository := issues.RepositoryRef{Source: "github", Repository: "owner/name"}
+
+results, err := issue.SearchRepository(ctx, client, repository,
+	search.Query{Text: "crash"}, issue.Options{Filter: issue.Filter{State: issues.Open}})
+for _, match := range results.Matches {
+	fmt.Println(match.Issue.Number, match.Issue.State, match.Field, match.Range, match.Preview)
+}
+
+result, err := issue.Sync(ctx, client, engine, "issues-1", repository, issue.Limits{})
+results, err = issue.SearchIndex(ctx, engine, "issues-1", search.Query{Text: "crash"},
+	issue.Options{Filter: issue.Filter{Repository: "owner/name"}})
+synced, err := issue.LastSynced(ctx, engine, "issues-1", repository)
+```
+
+- An issue is one document: its title, with line breaks turned into spaces,
+  on the first line, then its body. A match reports `Field` `title` or
+  `body`, with the range and preview relative to that field. Comments,
+  labels and other fields are not indexed.
+- An issue is identified by source ID, repository and number. Its document
+  ID is the repository, `#` and the number zero-padded to 19 digits, so
+  matches come by source, repository and number, then title before body.
+  `SearchRepository` and `Sync` name issues by the requested repository, so
+  their results agree even when a forge reports a different spelling.
+- The version holds the state, title, web URL and SHA-256 of the content, so
+  a match in an index carries the same issue metadata as an unindexed one,
+  and a sync rewrites an issue only when one of them changed.
+- Filters select by source, repository and state. The state is checked after
+  the search, among its first `Results` matches in all states. When those
+  were not all the matches, `Truncated` is set, in both modes alike.
+- Issue text is untrusted: titles and bodies are only matched and previewed,
+  never interpreted. Errors name issue numbers, never issue text.
+
+| Limit       | `Search`, `SearchRepository` | `Sync`  | Exceeded                                  |
+| ----------- | ---------------------------- | ------- | ----------------------------------------- |
+| `BodyBytes` | 256 KiB                      | 256 KiB | Issue left out, counted in `TooLarge`     |
+| `Issues`    | 10000                        | 50000   | `ErrTooLarge`, before the index changes   |
+| `Results`   | 1000                         | 1000    | `Truncated` is set                        |
+
+Titles over 1024 bytes and web URLs over 2048 bytes are left out like long
+bodies. A sync removes issues left out from the index.
+
+### Issue sync
+
+The first sync adds every open and closed issue; later ones add, replace and
+remove only what changed, removals first. Other repositories, kinds and
+sources are left alone, so one index can hold several repositories and a
+checkout. Each repository's last completed sync is recorded in a document of
+kind `issue-sync`. A sync removes that record before it lists issues and
+writes it only when it completes, so a reader error, a store error or a
+cancellation leaves the repository marked as not synced, and `LastSynced`
+returns zero until a later sync converges. Syncs of one repository into one
+index must not overlap.
+
 ## Storage
 
 An engine keeps everything in a `Store`: nine methods that create and delete

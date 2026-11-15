@@ -123,6 +123,59 @@ Zero fields use the default. `Documents` and `Bytes` apply to each index. A
 `Put` that returns an error leaves the index as it was. The number of indexes
 is not limited; the caller decides who may create them.
 
+## Checkout directories
+
+Package `checkout`, imported from
+`github.com/r59q/forge-tools/forge-search/library/checkout`, turns a
+directory tree into code documents whose IDs are paths relative to the root,
+with `/` separators. `Read` returns the documents, `Search` searches them
+unindexed and `Sync` keeps an index up to date with them.
+
+```go
+root, err := os.OpenRoot(dir)
+
+results, err := checkout.Search(ctx, root, search.Query{Text: "main"},
+	checkout.Options{Source: "checkout-1"})
+
+result, err := checkout.Sync(ctx, root, engine, "checkout-1", commit,
+	checkout.Options{Source: "checkout-1"})
+fmt.Println(result.ChangedPaths, result.RemovedPaths)
+revision, err := checkout.Revision(ctx, engine, "checkout-1")
+```
+
+- Every read goes through the `*os.Root`, so nothing outside it is read,
+  even when the tree changes during a read.
+- Symlinks, special files such as FIFOs, entries named `.git` and paths that
+  are not valid document IDs are skipped. Ignored and vendored files are read
+  like any other: the tool sees the checkout as it is on disk. Binary files
+  follow the matching rules.
+- A file that changes while it is read returns `ErrChanged`; one that cannot
+  be opened returns `ErrUnreadable`. Errors name root-relative paths, never
+  host paths or content.
+
+| Limit        | `Read`, `Search` | `Sync` | Exceeded                             |
+| ------------ | ---------------- | ------ | ------------------------------------ |
+| `FileBytes`  | 1 MiB            | 1 MiB  | File skipped, counted in `TooLarge`  |
+| `Entries`    | 10000            | 100000 | `ErrTooLarge`                        |
+| `Depth`      | 64               | 64     | `ErrTooLarge`                        |
+| `TotalBytes` | 64 MiB           | 1 GiB  | `Truncated`; `ErrTooLarge` in `Sync` |
+
+Files are read in match order, so `TotalBytes` leaves out the last ones.
+`Sync` returns `ErrTooLarge` before it changes the index.
+
+### Sync
+
+A document's version is the SHA-256 of its content, in both modes, so a
+synced index and an unindexed search of the same tree give the same results.
+The first sync adds every file; later ones add, replace and remove only what
+changed, removals first. Documents of other kinds or sources are left
+alone. The caller creates the index.
+
+A sync clears the index marker before its first change and records the
+revision only when it completes, so a set marker names the revision the index
+holds. A sync that fails or is canceled returns what it changed so far, and
+the next sync corrects the index. Syncs of one index must not overlap.
+
 ## Storage
 
 An engine keeps everything in a `Store`: nine methods that create and delete

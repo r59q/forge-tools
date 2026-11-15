@@ -50,13 +50,18 @@ func checkout(t *testing.T, files map[string]string) (string, *os.Root) {
 
 	dir := t.TempDir()
 	write(t, dir, files)
+	return dir, openRoot(t, dir)
+}
+
+func openRoot(t *testing.T, dir string) *os.Root {
+	t.Helper()
 
 	root, err := os.OpenRoot(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = root.Close() })
-	return dir, root
+	return root
 }
 
 func read(t *testing.T, root *os.Root, options Options) Tree {

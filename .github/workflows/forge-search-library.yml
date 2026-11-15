@@ -6,12 +6,16 @@ on:
     branches: [master]
     paths:
       - forge-search/library/**
+      - forge-issues/library/**
+      - forge-core/forgeapi/**
       - .github/workflows/forge-search-library.yml
       - .github/workflows/reusable-go.yml
       - .golangci.yml
   pull_request:
     paths:
       - forge-search/library/**
+      - forge-issues/library/**
+      - forge-core/forgeapi/**
       - .github/workflows/forge-search-library.yml
       - .github/workflows/reusable-go.yml
       - .golangci.yml

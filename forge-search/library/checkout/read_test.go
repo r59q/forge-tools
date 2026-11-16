@@ -75,7 +75,7 @@ func TestReadStaysInRootWhenDirectoryBecomesSymlink(t *testing.T) {
 	write(t, outside, map[string]string{"file.txt": "outside\n"})
 
 	dir, root := checkout(t, map[string]string{"sub/file.txt": "inside\n"})
-	listed, err := list(context.Background(), root, DefaultLimits())
+	listed, err := list(context.Background(), root, DefaultLimits(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +128,7 @@ func TestReadInvalidSource(t *testing.T) {
 
 func TestReadChangedFile(t *testing.T) {
 	dir, root := checkout(t, map[string]string{"grows.txt": "small\n", "gone.txt": "here\n"})
-	listed, err := list(context.Background(), root, DefaultLimits())
+	listed, err := list(context.Background(), root, DefaultLimits(), "")
 	if err != nil {
 		t.Fatal(err)
 	}

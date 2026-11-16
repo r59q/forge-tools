@@ -48,14 +48,16 @@ func (l listing) bytes() int64 {
 type walker struct {
 	root    *os.Root
 	limits  Limits
+	prefix  string
 	visited int
 	result  listing
 }
 
-// list finds the files of the tree below root. Too many entries or too deep
-// a directory return search.ErrTooLarge.
-func list(ctx context.Context, root *os.Root, limits Limits) (listing, error) {
-	w := walker{root: root, limits: limits, result: listing{files: []file{}}}
+// list finds the files of the tree below root whose path starts with
+// prefix. Too many entries or too deep a directory return
+// search.ErrTooLarge.
+func list(ctx context.Context, root *os.Root, limits Limits, prefix string) (listing, error) {
+	w := walker{root: root, limits: limits, prefix: prefix, result: listing{files: []file{}}}
 
 	if err := w.directory(ctx, ".", 0); err != nil {
 		return listing{}, err
@@ -113,6 +115,10 @@ func (w *walker) entry(ctx context.Context, directory string, entry fs.DirEntry,
 	}
 
 	name := path.Join(directory, entry.Name())
+	if !w.selected(name, entry.IsDir()) {
+		return nil
+	}
+
 	switch {
 	case !validName(name):
 		w.result.state.Unsupported++
@@ -124,6 +130,17 @@ func (w *walker) entry(ctx context.Context, directory string, entry fs.DirEntry,
 		w.result.state.Unsupported++
 	}
 	return nil
+}
+
+// selected reports whether an entry is within the prefix, or is a directory
+// that can hold entries within it. Other entries count against
+// Limits.Entries, as every entry of a visited directory does, but not in
+// State.
+func (w *walker) selected(name string, directory bool) bool {
+	if strings.HasPrefix(name, w.prefix) {
+		return true
+	}
+	return directory && strings.HasPrefix(w.prefix, name+"/")
 }
 
 func (w *walker) regular(name string, entry fs.DirEntry) error {

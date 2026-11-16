@@ -439,7 +439,8 @@ func TestRemote(t *testing.T) {
 }
 
 // CreateCheckout knows the default branch of github octo/demo, refuses the
-// source "bad" and fails for the reference "broken".
+// source "bad", fails for the reference "broken" and reports "huge" too
+// large and "busy" in conflict.
 func (f *fakeService) CreateCheckout(_ context.Context, r *checkoutspb.CreateCheckoutRequest) (*checkoutspb.CreateCheckoutResponse, error) {
 	repo := r.GetRepository()
 	switch {
@@ -447,6 +448,10 @@ func (f *fakeService) CreateCheckout(_ context.Context, r *checkoutspb.CreateChe
 		return nil, status.Error(codes.InvalidArgument, "bad source /data/x")
 	case r.GetReference() == "broken":
 		return nil, status.Error(codes.Internal, "git failed in /data/repos")
+	case r.GetReference() == "huge":
+		return nil, status.Error(codes.ResourceExhausted, "repository over 1 GiB")
+	case r.GetReference() == "busy":
+		return nil, status.Error(codes.FailedPrecondition, "conflict")
 	case repo.GetSource() != "github" || repo.GetPath() != "octo/demo" || r.GetReference() != "" || r.GetMode() != "":
 		return nil, status.Error(codes.NotFound, "no repository")
 	}
@@ -480,6 +485,8 @@ func TestRemoteCreateRemove(t *testing.T) {
 		{Source: "bad", Repository: "octo/demo"}:                         ErrRejected,
 		{Source: "github", Repository: "octo/other"}:                     ErrNotFound,
 		{Source: "github", Repository: "octo/demo", Reference: "broken"}: errUnavailable,
+		{Source: "github", Repository: "octo/demo", Reference: "huge"}:   ErrTooLarge,
+		{Source: "github", Repository: "octo/demo", Reference: "busy"}:   ErrConflict,
 	} {
 		if _, err := remote.Create(ctx, target); !errors.Is(err, want) {
 			t.Errorf("create %+v: %v, want %v", target, err, want)

@@ -69,7 +69,7 @@ func createError(ctx context.Context, err error) error {
 	switch {
 	case ctx.Err() != nil:
 		return ctx.Err()
-	case errors.Is(err, ErrNotFound), errors.Is(err, ErrRejected):
+	case errors.Is(err, ErrNotFound), errors.Is(err, ErrRejected), errors.Is(err, ErrTooLarge), errors.Is(err, ErrConflict):
 		return err
 	}
 	return errUnavailable

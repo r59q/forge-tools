@@ -23,6 +23,14 @@ var ErrNotFound = errors.New("api: checkout not found")
 // refuses as invalid.
 var ErrRejected = errors.New("api: target rejected")
 
+// ErrTooLarge is returned by Checkouts.Create for a repository over a limit
+// of forge-checkouts.
+var ErrTooLarge = errors.New("api: repository too large to check out")
+
+// ErrConflict is returned by Checkouts.Create when forge-checkouts refuses
+// the checkout in its current state.
+var ErrConflict = errors.New("api: checkout conflicts")
+
 // Checkout is what the server needs to know of a forge-checkouts checkout.
 type Checkout struct {
 	ID, Revision, State, Location string
@@ -201,6 +209,10 @@ func remoteError(ctx context.Context, err error) error {
 		return ErrNotFound
 	case status.Code(err) == codes.InvalidArgument:
 		return ErrRejected
+	case status.Code(err) == codes.ResourceExhausted:
+		return ErrTooLarge
+	case status.Code(err) == codes.FailedPrecondition:
+		return ErrConflict
 	}
 	return errUnavailable
 }

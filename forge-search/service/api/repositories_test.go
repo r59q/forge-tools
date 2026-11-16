@@ -124,6 +124,8 @@ func TestRepositoryErrors(t *testing.T) {
 		"missing reference": {req: &pb.IndexRepositoryRequest{Target: missing.proto()}, want: codes.NotFound},
 		"missing search":    {req: &pb.SearchRepositoryRequest{Target: missing.proto(), Query: query}, want: codes.NotFound},
 		"rejected":          {req: &pb.IndexRepositoryRequest{Target: repository.proto()}, fail: ErrRejected, want: codes.InvalidArgument},
+		"too large":         {req: &pb.IndexRepositoryRequest{Target: repository.proto()}, fail: ErrTooLarge, want: codes.ResourceExhausted},
+		"conflict":          {req: &pb.SearchRepositoryRequest{Target: repository.proto(), Query: query}, fail: ErrConflict, want: codes.FailedPrecondition},
 		"unavailable":       {req: &pb.IndexRepositoryRequest{Target: repository.proto()}, fail: errors.New("dial /run/secret"), want: codes.Unavailable},
 		"bad query":         {req: &pb.SearchRepositoryRequest{Target: repository.proto(), Query: &pb.CodeQuery{}}, want: codes.InvalidArgument},
 		"bad limit":         {req: &pb.SearchRepositoryRequest{Target: repository.proto(), Query: &pb.CodeQuery{Text: "x", MaxResults: -1}}, want: codes.InvalidArgument},

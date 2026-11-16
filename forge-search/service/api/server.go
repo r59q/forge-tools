@@ -211,11 +211,13 @@ func code(err error) codes.Code {
 		return codes.NotFound
 	case errors.Is(err, search.ErrExists):
 		return codes.AlreadyExists
-	case errors.Is(err, errNotReady), errors.Is(err, errNotReadable), errors.Is(err, checkout.ErrUnreadable):
+	case errors.Is(err, errNotReady), errors.Is(err, errNotReadable), errors.Is(err, checkout.ErrUnreadable),
+		errors.Is(err, ErrConflict):
 		return codes.FailedPrecondition
 	case errors.Is(err, errBusy), errors.Is(err, checkout.ErrChanged):
 		return codes.Aborted
-	case errors.Is(err, errTooMany), errors.Is(err, errCheckoutsBusy), errors.Is(err, search.ErrTooLarge),
+	case errors.Is(err, errTooMany), errors.Is(err, errCheckoutsBusy), errors.Is(err, ErrTooLarge),
+		errors.Is(err, search.ErrTooLarge),
 		errors.Is(err, search.ErrFull),
 		errors.Is(err, sqlite.ErrDiskFull):
 		return codes.ResourceExhausted

@@ -194,7 +194,10 @@ search a branch it creates a checkout, which fetches the repository, and
 removes it when the call ends; nothing is fetched in the background. The
 `search-data` volume keeps the indexes and the journal of checkouts still
 to remove. It holds no forge credentials and never changes the files of a
-checkout. See its [API reference](../../forge-search/service/README.md#api).
+checkout. It also indexes and searches the issues of a repository, listed
+through the issues service with `FORGE_ISSUES_TOKEN` when called, never in
+the background. See its
+[API reference](../../forge-search/service/README.md#api).
 
 ```sh
 TARGET='{"source": "connection-id", "repository": "owner/repo"}'
@@ -206,6 +209,10 @@ curl -fsS -H "Authorization: Bearer $FORGE_SEARCH_TOKEN" \
   http://127.0.0.1:8095/v1/indexes/main/checkout -d "{\"checkoutId\": \"$CHECKOUT\"}"
 curl -fsS -H "Authorization: Bearer $FORGE_SEARCH_TOKEN" \
   http://127.0.0.1:8095/v1/indexes/main:search -d '{"query": {"text": "TODO"}}'
+curl -fsS -H "Authorization: Bearer $FORGE_SEARCH_TOKEN" \
+  http://127.0.0.1:8095/v1/issues:index -d "{\"repository\": $TARGET}"
+curl -fsS -H "Authorization: Bearer $FORGE_SEARCH_TOKEN" \
+  http://127.0.0.1:8095/v1/issues:searchIndexed -d "{\"repository\": $TARGET, \"query\": {\"text\": \"crash\", \"state\": \"open\"}}"
 ```
 
 ## Forge events

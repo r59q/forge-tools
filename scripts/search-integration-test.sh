@@ -1,8 +1,8 @@
 #!/bin/sh
 # Smoke test of the search service: index a ready checkout, search the index
 # and the checkout without it with the same query, index the default branch
-# of its repository and search it with and without that index, then delete
-# the indexes. FORGE_SEARCH_TEST_TOKEN, FORGE_SEARCH_TEST_CHECKOUT (a ready
+# of its repository and search it with and without that index, index and
+# search the issues of the repository the same way, then delete the indexes. FORGE_SEARCH_TEST_TOKEN, FORGE_SEARCH_TEST_CHECKOUT (a ready
 # checkout of the default branch), FORGE_SEARCH_TEST_REVISION (its revision),
 # FORGE_SEARCH_TEST_SOURCE and FORGE_SEARCH_TEST_REPOSITORY (its repository),
 # and FORGE_SEARCH_TEST_CHECKOUTS_TOKEN (the forge-checkouts token, to check no
@@ -32,7 +32,8 @@ until api -o /dev/null "$url/v1/indexes" 2>/dev/null; do
   sleep 2
 done
 # Start from no index, and leave none behind when a check fails. The
-# repository index is named by the service, so it is deleted once known.
+# repository and issue indexes are named by the service, so they are deleted
+# once known.
 cleanup() {
   for i in "$index" $repo_index; do
     api -X DELETE "$url/v1/indexes/$i" >/dev/null 2>&1 || true
@@ -101,6 +102,35 @@ printf '%s\n%s\n%s\n' "$indexed" "$by_index" "$by_checkout" |
   fail "repository searches differ"
 [ "$(own_checkouts)" = "$before" ] || fail "repository checkouts left behind"
 echo "ok: search finds the same matches in a repository with and without its index"
+
+# Issues are read through forge-issues; the repository may have none.
+issues=$(jq -n --argjson t "$target" '{repository: $t}' | api "$url/v1/issues:index" -d @-) ||
+  fail "index issues"
+issue_index=$(printf '%s\n' "$issues" | jq -r '.index.name')
+repo_index="$repo_index $issue_index"
+printf '%s\n' "$issues" |
+  jq -e --argjson t "$target" '(.index.name | startswith("issues-")) and .index.issues == $t and
+    .index.updatedAt != null and .syncedAt != null' >/dev/null || fail "index issues of repository"
+if printf '%s\n' "$issues" | jq -e '(.index.documents // "0" | tonumber) == 0' >/dev/null; then
+  echo "skip: $FORGE_SEARCH_TEST_REPOSITORY has no issues to search"
+else
+  jq -n --argjson t "$target" '{repository: $t}' | api "$url/v1/issues:index" -d @- |
+    jq -e '(.added // "0" | tonumber) == 0 and (.replaced // "0" | tonumber) == 0 and
+      (.removed // "0" | tonumber) == 0' >/dev/null || fail "reindex unchanged issues"
+  issue_query=$(jq -n -c --argjson t "$target" '{repository: $t, query: {text: "e", maxResults: 500}}')
+  by_issue_index=$(api "$url/v1/issues:searchIndexed" -d "$issue_query") || fail "search issue index"
+  live_issues=$(api "$url/v1/issues:searchUnindexed" -d "$issue_query") || fail "search issues unindexed"
+  printf '%s\n%s\n' "$by_issue_index" "$live_issues" |
+    jq -s -e --arg i "$issue_index" '.[0] as $a | .[1] as $b |
+      $a.index.name == $i and $a.matches == $b.matches and ($a.state // {}) == ($b.state // {}) and
+      all($a.matches[]?; (.number | tonumber) > 0 and (.field == "title" or .field == "body"))' >/dev/null ||
+    fail "indexed and unindexed issue searches differ"
+  echo "ok: search finds the same issue matches with and without the index"
+fi
+api -X DELETE "$url/v1/indexes/$issue_index" >/dev/null || fail "delete issue index"
+api "$url/v1/indexes" | jq -e --arg i "$issue_index" 'all(.indexes[]?; .name != $i)' >/dev/null ||
+  fail "issue index still listed after deletion"
+echo "ok: search deletes the issue index"
 
 [ "$(curl -sS -o /dev/null -w '%{http_code}' "$url/v1/indexes")" = 401 ] ||
   fail "unauthenticated request"

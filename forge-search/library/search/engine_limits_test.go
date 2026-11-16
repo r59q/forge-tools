@@ -53,6 +53,7 @@ func everyCall(engine *Engine, index string, document Document, marker string, f
 	errs["Remove"] = engine.Remove(ctx, index, document.Ref)
 	_, errs["Documents"] = engine.Documents(ctx, index, filter)
 	_, errs["Search"] = engine.Search(ctx, index, Query{Text: "needle"}, filter)
+	errs["Read"] = engine.Read(ctx, index, "needle", filter, func(Document) bool { return true })
 	return errs
 }
 

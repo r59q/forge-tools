@@ -33,7 +33,10 @@ docker build -f forge-search/service/Dockerfile -t forge-search-service .
 ```
 
 The image is pure Go on distroless, runs as user 65532, keeps its indexes in
-the `/data` volume and listens on 9090 (gRPC) and 8080 (REST).
+the `/search-data` volume and listens on 9090 (gRPC) and 8080 (REST). The
+path leaves `/data` free for the forge-checkouts data directory, mounted
+read-only where forge-checkouts has it, as in the
+[full-stack example](../../examples/fullstack/).
 
 ## Run
 

@@ -74,6 +74,8 @@ jobs:
           FORGE_ACTIONS_TOKEN: example-actions-token
           FORGE_EXPLORER_TOKEN: example-explorer-token
           FORGE_PIPEPRINT_TOKEN: example-pipeprint-token
+          FORGE_SYMBOLS_TOKEN: example-symbols-token
+          FORGE_SEARCH_TOKEN: example-search-token
           FORGE_ACTIONS_CONNECTOR_TOKEN: example-actions-connector-token
           FORGE_REACTOR_TOKEN: example-reactor-token
           FORGE_REACTOR_CONNECTOR_TOKEN: example-reactor-connector-token

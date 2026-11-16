@@ -35,9 +35,11 @@ RUN mkdir -m 0700 -p /out/data
 
 FROM gcr.io/distroless/static-debian13:nonroot@sha256:18f4cc26c9ffa7f20a359298be7deadac5c607c8e03a02b8119f1a5fc2f82c99
 COPY --from=build /out/forge-search-service /usr/local/bin/forge-search-service
-COPY --from=build --chown=65532:65532 --chmod=0700 /out/data /data
-VOLUME ["/data"]
-ENV FORGE_SEARCH_DATA_DIR=/data \
+# Indexes stay out of /data, where the forge-checkouts data directory is
+# mounted, so both keep the paths their services use.
+COPY --from=build --chown=65532:65532 --chmod=0700 /out/data /search-data
+VOLUME ["/search-data"]
+ENV FORGE_SEARCH_DATA_DIR=/search-data \
     FORGE_SEARCH_GRPC_LISTEN=0.0.0.0:9090 \
     FORGE_SEARCH_HTTP_LISTEN=0.0.0.0:8080
 EXPOSE 8080 9090

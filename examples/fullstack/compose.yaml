@@ -117,6 +117,28 @@ services:
       - "127.0.0.1:8094:8080"
       - "127.0.0.1:9104:9090"
 
+  # Indexes and searches checkouts. It reads checkout files from the checkouts
+  # volume, read-only at /data where checkouts reports their locations.
+  search:
+    build:
+      context: ../..
+      dockerfile: forge-search/service/Dockerfile
+    restart: unless-stopped
+    environment:
+      FORGE_SEARCH_TOKEN: ${FORGE_SEARCH_TOKEN:?set in .env}
+      FORGE_SEARCH_CHECKOUTS_ADDR: checkouts:9090
+      FORGE_SEARCH_CHECKOUTS_INSECURE: "true"
+      # forge-checkouts has a single bearer token.
+      FORGE_SEARCH_CHECKOUTS_TOKEN: ${FORGE_CHECKOUTS_TOKEN:?set in .env}
+      FORGE_SEARCH_CHECKOUTS_DATA_DIR: /data
+      FORGE_SEARCH_DATA_DIR: /search-data
+    volumes:
+      - search-data:/search-data
+      - checkouts-data:/data:ro
+    ports:
+      - "127.0.0.1:8095:8080"
+      - "127.0.0.1:9105:9090"
+
   # Queues reactor deliveries. Subscribers consume and acknowledge here. The
   # fixed hostname keeps the node name, and so its data, across recreation.
   rabbitmq:
@@ -195,5 +217,6 @@ volumes:
   broker-data:
   rabbitmq-data:
   reactor-data:
+  search-data:
   checkouts-data:
     name: ${FORGE_CHECKOUTS_DATA_VOLUME:-${COMPOSE_PROJECT_NAME}_checkouts-data}

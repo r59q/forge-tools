@@ -19,22 +19,25 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	SearchService_IndexCheckout_FullMethodName    = "/forge.search.v1.SearchService/IndexCheckout"
-	SearchService_ListIndexes_FullMethodName      = "/forge.search.v1.SearchService/ListIndexes"
-	SearchService_GetIndex_FullMethodName         = "/forge.search.v1.SearchService/GetIndex"
-	SearchService_DeleteIndex_FullMethodName      = "/forge.search.v1.SearchService/DeleteIndex"
-	SearchService_SearchIndex_FullMethodName      = "/forge.search.v1.SearchService/SearchIndex"
-	SearchService_SearchCheckout_FullMethodName   = "/forge.search.v1.SearchService/SearchCheckout"
-	SearchService_IndexRepository_FullMethodName  = "/forge.search.v1.SearchService/IndexRepository"
-	SearchService_SearchRepository_FullMethodName = "/forge.search.v1.SearchService/SearchRepository"
+	SearchService_IndexCheckout_FullMethodName         = "/forge.search.v1.SearchService/IndexCheckout"
+	SearchService_ListIndexes_FullMethodName           = "/forge.search.v1.SearchService/ListIndexes"
+	SearchService_GetIndex_FullMethodName              = "/forge.search.v1.SearchService/GetIndex"
+	SearchService_DeleteIndex_FullMethodName           = "/forge.search.v1.SearchService/DeleteIndex"
+	SearchService_SearchIndex_FullMethodName           = "/forge.search.v1.SearchService/SearchIndex"
+	SearchService_SearchCheckout_FullMethodName        = "/forge.search.v1.SearchService/SearchCheckout"
+	SearchService_IndexRepository_FullMethodName       = "/forge.search.v1.SearchService/IndexRepository"
+	SearchService_SearchRepository_FullMethodName      = "/forge.search.v1.SearchService/SearchRepository"
+	SearchService_IndexIssues_FullMethodName           = "/forge.search.v1.SearchService/IndexIssues"
+	SearchService_SearchIndexedIssues_FullMethodName   = "/forge.search.v1.SearchService/SearchIndexedIssues"
+	SearchService_SearchUnindexedIssues_FullMethodName = "/forge.search.v1.SearchService/SearchUnindexedIssues"
 )
 
 // SearchServiceClient is the client API for SearchService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// SearchService searches the code of forge-checkouts checkouts, indexed or
-// not. An index is a named, durable copy of one checkout's files; indexing a
+// SearchService searches the code of forge-checkouts checkouts and the
+// issues of forge-issues repositories, indexed or not. An index is a named, durable copy of one checkout's files; indexing a
 // checkout again, or another checkout into the same index, changes only the
 // files that differ. Every RPC requires the service token in the
 // Authorization: Bearer header (gRPC metadata).
@@ -49,14 +52,24 @@ const (
 // and the checkout is removed before the call returns. The service never
 // fetches code on its own.
 //
-// Errors carry only a status code: INVALID_ARGUMENT for an invalid field,
-// NOT_FOUND for a missing index or checkout, or an unknown source,
-// repository or reference,
+// A repository's issues are read from forge-issues, in one listing of its
+// open and closed issues, only within an IndexIssues or
+// SearchUnindexedIssues call; the service never fetches issues on its own.
+// Indexed and unindexed searches of the same issues return the same matches
+// in the same order. Without a forge-issues address, those two calls fail
+// with UNIMPLEMENTED and the others still work.
+//
+// Errors carry only a status code: INVALID_ARGUMENT for an invalid field or
+// a source forge-issues rejects, NOT_FOUND for a missing index or
+// checkout, or an unknown source, repository or reference,
+// PERMISSION_DENIED when the forge refuses access,
 // FAILED_PRECONDITION for a checkout that is not ready or not readable here,
 // ABORTED for an index already being indexed or files that changed while
-// read, RESOURCE_EXHAUSTED for a request, checkout or index over a limit,
-// UNAVAILABLE when forge-checkouts or the storage cannot be reached, and
-// DEADLINE_EXCEEDED for a call over its time limit.
+// read, RESOURCE_EXHAUSTED for a request, checkout, issue listing or index
+// over a limit, or a forge rate limit, UNAVAILABLE when forge-checkouts,
+// forge-issues or the storage cannot be reached, UNIMPLEMENTED for an issue
+// call that needs forge-issues without one, and DEADLINE_EXCEEDED for a call
+// over its time limit.
 type SearchServiceClient interface {
 	// IndexCheckout syncs a checkout's files into an index, creating the
 	// index if needed, and returns what changed. It runs within the call; a
@@ -86,6 +99,17 @@ type SearchServiceClient interface {
 	// one, it checks the reference out, searches it unindexed and removes the
 	// checkout. POST /v1/repositories:search.
 	SearchRepository(ctx context.Context, in *SearchRepositoryRequest, opts ...grpc.CallOption) (*SearchRepositoryResponse, error)
+	// IndexIssues reads a repository's issues and syncs them into the issue
+	// index of that repository, creating it if needed. Calling it again
+	// refreshes the index, changing only the issues that differ. It runs
+	// within the call. POST /v1/issues:index.
+	IndexIssues(ctx context.Context, in *IndexIssuesRequest, opts ...grpc.CallOption) (*IndexIssuesResponse, error)
+	// SearchIndexedIssues searches the issue index of a repository without
+	// reading forge-issues. POST /v1/issues:searchIndexed.
+	SearchIndexedIssues(ctx context.Context, in *SearchIndexedIssuesRequest, opts ...grpc.CallOption) (*SearchIndexedIssuesResponse, error)
+	// SearchUnindexedIssues reads a repository's issues and searches them
+	// without an index, keeping nothing. POST /v1/issues:searchUnindexed.
+	SearchUnindexedIssues(ctx context.Context, in *SearchUnindexedIssuesRequest, opts ...grpc.CallOption) (*SearchUnindexedIssuesResponse, error)
 }
 
 type searchServiceClient struct {
@@ -176,12 +200,42 @@ func (c *searchServiceClient) SearchRepository(ctx context.Context, in *SearchRe
 	return out, nil
 }
 
+func (c *searchServiceClient) IndexIssues(ctx context.Context, in *IndexIssuesRequest, opts ...grpc.CallOption) (*IndexIssuesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(IndexIssuesResponse)
+	err := c.cc.Invoke(ctx, SearchService_IndexIssues_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *searchServiceClient) SearchIndexedIssues(ctx context.Context, in *SearchIndexedIssuesRequest, opts ...grpc.CallOption) (*SearchIndexedIssuesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SearchIndexedIssuesResponse)
+	err := c.cc.Invoke(ctx, SearchService_SearchIndexedIssues_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *searchServiceClient) SearchUnindexedIssues(ctx context.Context, in *SearchUnindexedIssuesRequest, opts ...grpc.CallOption) (*SearchUnindexedIssuesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SearchUnindexedIssuesResponse)
+	err := c.cc.Invoke(ctx, SearchService_SearchUnindexedIssues_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SearchServiceServer is the server API for SearchService service.
 // All implementations must embed UnimplementedSearchServiceServer
 // for forward compatibility.
 //
-// SearchService searches the code of forge-checkouts checkouts, indexed or
-// not. An index is a named, durable copy of one checkout's files; indexing a
+// SearchService searches the code of forge-checkouts checkouts and the
+// issues of forge-issues repositories, indexed or not. An index is a named, durable copy of one checkout's files; indexing a
 // checkout again, or another checkout into the same index, changes only the
 // files that differ. Every RPC requires the service token in the
 // Authorization: Bearer header (gRPC metadata).
@@ -196,14 +250,24 @@ func (c *searchServiceClient) SearchRepository(ctx context.Context, in *SearchRe
 // and the checkout is removed before the call returns. The service never
 // fetches code on its own.
 //
-// Errors carry only a status code: INVALID_ARGUMENT for an invalid field,
-// NOT_FOUND for a missing index or checkout, or an unknown source,
-// repository or reference,
+// A repository's issues are read from forge-issues, in one listing of its
+// open and closed issues, only within an IndexIssues or
+// SearchUnindexedIssues call; the service never fetches issues on its own.
+// Indexed and unindexed searches of the same issues return the same matches
+// in the same order. Without a forge-issues address, those two calls fail
+// with UNIMPLEMENTED and the others still work.
+//
+// Errors carry only a status code: INVALID_ARGUMENT for an invalid field or
+// a source forge-issues rejects, NOT_FOUND for a missing index or
+// checkout, or an unknown source, repository or reference,
+// PERMISSION_DENIED when the forge refuses access,
 // FAILED_PRECONDITION for a checkout that is not ready or not readable here,
 // ABORTED for an index already being indexed or files that changed while
-// read, RESOURCE_EXHAUSTED for a request, checkout or index over a limit,
-// UNAVAILABLE when forge-checkouts or the storage cannot be reached, and
-// DEADLINE_EXCEEDED for a call over its time limit.
+// read, RESOURCE_EXHAUSTED for a request, checkout, issue listing or index
+// over a limit, or a forge rate limit, UNAVAILABLE when forge-checkouts,
+// forge-issues or the storage cannot be reached, UNIMPLEMENTED for an issue
+// call that needs forge-issues without one, and DEADLINE_EXCEEDED for a call
+// over its time limit.
 type SearchServiceServer interface {
 	// IndexCheckout syncs a checkout's files into an index, creating the
 	// index if needed, and returns what changed. It runs within the call; a
@@ -233,6 +297,17 @@ type SearchServiceServer interface {
 	// one, it checks the reference out, searches it unindexed and removes the
 	// checkout. POST /v1/repositories:search.
 	SearchRepository(context.Context, *SearchRepositoryRequest) (*SearchRepositoryResponse, error)
+	// IndexIssues reads a repository's issues and syncs them into the issue
+	// index of that repository, creating it if needed. Calling it again
+	// refreshes the index, changing only the issues that differ. It runs
+	// within the call. POST /v1/issues:index.
+	IndexIssues(context.Context, *IndexIssuesRequest) (*IndexIssuesResponse, error)
+	// SearchIndexedIssues searches the issue index of a repository without
+	// reading forge-issues. POST /v1/issues:searchIndexed.
+	SearchIndexedIssues(context.Context, *SearchIndexedIssuesRequest) (*SearchIndexedIssuesResponse, error)
+	// SearchUnindexedIssues reads a repository's issues and searches them
+	// without an index, keeping nothing. POST /v1/issues:searchUnindexed.
+	SearchUnindexedIssues(context.Context, *SearchUnindexedIssuesRequest) (*SearchUnindexedIssuesResponse, error)
 	mustEmbedUnimplementedSearchServiceServer()
 }
 
@@ -266,6 +341,15 @@ func (UnimplementedSearchServiceServer) IndexRepository(context.Context, *IndexR
 }
 func (UnimplementedSearchServiceServer) SearchRepository(context.Context, *SearchRepositoryRequest) (*SearchRepositoryResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SearchRepository not implemented")
+}
+func (UnimplementedSearchServiceServer) IndexIssues(context.Context, *IndexIssuesRequest) (*IndexIssuesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method IndexIssues not implemented")
+}
+func (UnimplementedSearchServiceServer) SearchIndexedIssues(context.Context, *SearchIndexedIssuesRequest) (*SearchIndexedIssuesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SearchIndexedIssues not implemented")
+}
+func (UnimplementedSearchServiceServer) SearchUnindexedIssues(context.Context, *SearchUnindexedIssuesRequest) (*SearchUnindexedIssuesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SearchUnindexedIssues not implemented")
 }
 func (UnimplementedSearchServiceServer) mustEmbedUnimplementedSearchServiceServer() {}
 func (UnimplementedSearchServiceServer) testEmbeddedByValue()                       {}
@@ -432,6 +516,60 @@ func _SearchService_SearchRepository_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SearchService_IndexIssues_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(IndexIssuesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SearchServiceServer).IndexIssues(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SearchService_IndexIssues_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SearchServiceServer).IndexIssues(ctx, req.(*IndexIssuesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SearchService_SearchIndexedIssues_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SearchIndexedIssuesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SearchServiceServer).SearchIndexedIssues(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SearchService_SearchIndexedIssues_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SearchServiceServer).SearchIndexedIssues(ctx, req.(*SearchIndexedIssuesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SearchService_SearchUnindexedIssues_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SearchUnindexedIssuesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SearchServiceServer).SearchUnindexedIssues(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SearchService_SearchUnindexedIssues_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SearchServiceServer).SearchUnindexedIssues(ctx, req.(*SearchUnindexedIssuesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SearchService_ServiceDesc is the grpc.ServiceDesc for SearchService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -470,6 +608,18 @@ var SearchService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SearchRepository",
 			Handler:    _SearchService_SearchRepository_Handler,
+		},
+		{
+			MethodName: "IndexIssues",
+			Handler:    _SearchService_IndexIssues_Handler,
+		},
+		{
+			MethodName: "SearchIndexedIssues",
+			Handler:    _SearchService_SearchIndexedIssues_Handler,
+		},
+		{
+			MethodName: "SearchUnindexedIssues",
+			Handler:    _SearchService_SearchUnindexedIssues_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

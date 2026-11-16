@@ -13,6 +13,15 @@ const previewLead = 40
 // previewCut marks text cut from a preview.
 const previewCut = "…"
 
+// LinePreview returns the preview of the length bytes at byte offset at of a
+// line, by the rules of Match.Preview, and the UTF-16 column of the line
+// where the preview text starts. The line is valid UTF-8 without "\n", and
+// the bytes lie within it. Other aggregates use it to preview their own
+// matches the same way.
+func LinePreview(line []byte, at, length int) (string, int) {
+	return linePreview(line, at, length)
+}
+
 // linePreview returns the preview of a match of length bytes at byte offset
 // at of line, and the UTF-16 column where the preview text starts.
 func linePreview(line []byte, at, length int) (string, int) {

@@ -23,6 +23,12 @@ option go_package = "github.com/r59q/forge-tools/forge-search/service/searchpb";
 // and the checkout is removed before the call returns. The service never
 // fetches code on its own.
 //
+// Indexing code also indexes its definitions, such as functions, methods
+// and types, found with the forge-symbols library in the service itself.
+// Index.symbols tells whether they are complete for the index revision.
+// Indexed and unindexed symbol searches of the same files return the same
+// definitions in the same order.
+//
 // A repository's issues are read from forge-issues, in one listing of its
 // open and closed issues, only within an IndexIssues or
 // SearchUnindexedIssues call; the service never fetches issues on its own.
@@ -127,6 +133,24 @@ service SearchService {
       body: "*"
     };
   }
+  // SearchIndexSymbols searches the definitions of the files an index
+  // holds by name. IndexCheckout and IndexRepository maintain them.
+  // POST /v1/indexes/{index}/symbols:search.
+  rpc SearchIndexSymbols(SearchIndexSymbolsRequest) returns (SearchIndexSymbolsResponse) {
+    option (google.api.http) = {
+      post: "/v1/indexes/{index}/symbols:search"
+      body: "*"
+    };
+  }
+  // SearchCheckoutSymbols reads a checkout's files, finds their
+  // definitions and searches them by name without an index, keeping
+  // nothing. POST /v1/checkouts/{checkout_id}/symbols:search.
+  rpc SearchCheckoutSymbols(SearchCheckoutSymbolsRequest) returns (SearchCheckoutSymbolsResponse) {
+    option (google.api.http) = {
+      post: "/v1/checkouts/{checkout_id}/symbols:search"
+      body: "*"
+    };
+  }
 }
 
 // RepositoryTarget names a repository reference on a forge.
@@ -151,7 +175,8 @@ message Index {
   string name = 1;
   // documents is the number of files the index holds.
   int64 documents = 2;
-  // bytes is the content size of those files.
+  // bytes is the content size of those files and of their stored
+  // definitions.
   int64 bytes = 3;
   // revision is the checkout revision of the last completed indexing. It is
   // empty before one, and while an indexing changes the index.
@@ -168,6 +193,57 @@ message Index {
   // the last completed IndexIssues was read: it is unset while one runs and
   // after one fails.
   IssueRepository issues = 8;
+  // symbols is the state of the definitions of the files. It is unset for
+  // an issue index.
+  IndexSymbols symbols = 9;
+}
+
+// IndexSymbols is the state of the definitions an index holds.
+message IndexSymbols {
+  // complete is set when the definitions are those of the files at
+  // revision: every file was analyzed or is counted in skipped. It is
+  // unset while an indexing runs, and after one whose symbol pass failed
+  // or stopped at a limit; the next indexing analyzes every file again.
+  bool complete = 1;
+  // documents counts the files holding definitions.
+  int64 documents = 2;
+  // skipped counts the files without definitions because they were left
+  // out. It covers every file, not only those of the last indexing.
+  SymbolFileState skipped = 3;
+}
+
+// SymbolFileState counts the files whose definitions were left out. None of
+// them fails a call.
+message SymbolFileState {
+  // unsupported counts files in a language without symbol support, and
+  // binary files.
+  int32 unsupported = 1;
+  // too_large counts files over 1 MiB, with more than 10000 definitions,
+  // or whose definitions take more than 1 MiB.
+  int32 too_large = 2;
+  // failed counts files whose parse took longer than 5 s or more than
+  // 256 MiB of memory.
+  int32 failed = 3;
+}
+
+// SymbolPass is what an indexing did to the definitions of an index.
+message SymbolPass {
+  // stored counts the files whose definitions were written, and
+  // definitions the definitions they hold.
+  int32 stored = 1;
+  int32 definitions = 2;
+  // removed counts the files whose definitions were dropped: removed
+  // files, and changed ones that no longer have any.
+  int32 removed = 3;
+  // skipped counts the files of this pass that were left out.
+  SymbolFileState skipped = 4;
+  // full is set when every file was analyzed, not only the changed ones:
+  // on the first indexing, and after one that left symbols incomplete.
+  bool full = 5;
+  // truncated is set when the pass stopped at a limit: over 10000 files or
+  // 256 MiB to analyze, or a full index. Index.symbols.complete is then
+  // unset; the files are indexed all the same.
+  bool truncated = 6;
 }
 
 // FileState counts the checkout files left out.
@@ -203,6 +279,8 @@ message IndexCheckoutResponse {
   int32 unchanged = 5;
   // files counts the files left out of the index.
   FileState files = 6;
+  // symbols is what the sync did to the definitions of the files.
+  SymbolPass symbols = 7;
 }
 
 // ListIndexesRequest has no fields.
@@ -314,16 +392,17 @@ message IndexRepositoryRequest {
 // IndexRepositoryResponse is the index after the sync and what it changed.
 message IndexRepositoryResponse {
   Index index = 1;
-  // added, replaced, removed, unchanged and files are as in
+  // added, replaced, removed, unchanged, files and symbols are as in
   // IndexCheckoutResponse. They are zero when up_to_date.
   int32 added = 2;
   int32 replaced = 3;
   int32 removed = 4;
   int32 unchanged = 5;
   FileState files = 6;
-  // up_to_date is set when the index already held the current commit, so
-  // that no file was read or written.
+  // up_to_date is set when the index already held the current commit, with
+  // complete symbols, so that no file was read or written.
   bool up_to_date = 7;
+  SymbolPass symbols = 8;
 }
 
 // SearchRepositoryRequest searches a repository reference.
@@ -434,4 +513,85 @@ message SearchUnindexedIssuesResponse {
   SearchState state = 2;
   // too_large counts the issues left out, as in IndexIssuesResponse.
   int32 too_large = 3;
+}
+
+// SymbolQuery is which definitions to find.
+message SymbolQuery {
+  // text is matched within definition names, literally and
+  // case-sensitively, with the rules of CodeQuery.text.
+  string text = 1;
+  // kind keeps only definitions of one kind, such as "function",
+  // "method", "class" or "type".
+  string kind = 2;
+  // language keeps only files of one language, such as "go" or "python".
+  string language = 3;
+  // path_prefix keeps only files whose path starts with it, such as "cmd/".
+  string path_prefix = 4;
+  // max_results is the most definitions returned: 1-500, 0 for 100.
+  int32 max_results = 5;
+}
+
+// Symbol is one definition whose name holds the query text.
+message Symbol {
+  string name = 1;
+  // kind is the kind of definition, such as "function" or "method".
+  string kind = 2;
+  // language is the language of the file, such as "go".
+  string language = 3;
+  // path and version are as in CodeMatch.
+  string path = 4;
+  string version = 5;
+  // name_range covers the name; range covers the whole definition with its
+  // body.
+  Range name_range = 6;
+  Range range = 7;
+  // container names what the definition belongs to, such as the type of a
+  // method. It is empty at the top level.
+  string container = 8;
+  // preview is the declaration line: the line of the name, cut to the
+  // definition where it starts or ends on it, without indentation. Its
+  // length and "…" follow CodeMatch.preview, with the name as the match.
+  string preview = 9;
+  // preview_column is the column where the preview text starts.
+  int32 preview_column = 10;
+}
+
+// SearchIndexSymbolsRequest searches the definitions of an index.
+message SearchIndexSymbolsRequest {
+  string index = 1;
+  SymbolQuery query = 2;
+}
+
+// SearchIndexSymbolsResponse holds the definitions in path order, then in
+// the order they are declared.
+message SearchIndexSymbolsResponse {
+  repeated Symbol symbols = 1;
+  // truncated is set when more definitions match than max_results.
+  bool truncated = 2;
+  // revision is Index.revision as read just before the search.
+  string revision = 3;
+  // complete is Index.symbols.complete as read just before the search.
+  // Without it, some files may have no definitions or older ones.
+  bool complete = 4;
+}
+
+// SearchCheckoutSymbolsRequest searches the definitions of a checkout
+// without an index.
+message SearchCheckoutSymbolsRequest {
+  string checkout_id = 1;
+  SymbolQuery query = 2;
+}
+
+// SearchCheckoutSymbolsResponse holds the definitions in the order of
+// SearchIndexSymbolsResponse.
+message SearchCheckoutSymbolsResponse {
+  repeated Symbol symbols = 1;
+  // truncated is as in SearchIndexSymbolsResponse.
+  bool truncated = 2;
+  // revision is the checkout revision.
+  string revision = 3;
+  // files counts the files left out because they could not be read.
+  FileState files = 4;
+  // skipped counts the files read whose definitions were left out.
+  SymbolFileState skipped = 5;
 }

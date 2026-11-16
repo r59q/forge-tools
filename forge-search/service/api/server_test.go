@@ -54,7 +54,7 @@ func TestNew(t *testing.T) {
 }
 
 // TestAuthentication checks every RPC on both transports, and that no
-// rejected call reaches forge-checkouts.
+// rejected call reaches forge-checkouts or forge-issues.
 func TestAuthentication(t *testing.T) {
 	f := newFixture(t, nil)
 	f.add(t, checkoutID, "rev1", sample())
@@ -70,6 +70,9 @@ func TestAuthentication(t *testing.T) {
 	}
 	if f.checkouts.calls != 0 || len(f.checkouts.created) != 0 {
 		t.Fatalf("%d checkout lookups, %d created", f.checkouts.calls, len(f.checkouts.created))
+	}
+	if n := f.issues.called(); n != 0 {
+		t.Fatalf("%d issue listings", n)
 	}
 }
 
@@ -175,6 +178,11 @@ func TestCode(t *testing.T) {
 		context.Canceled:         codes.Canceled,
 		context.DeadlineExceeded: codes.DeadlineExceeded,
 		errBadRequest:            codes.InvalidArgument,
+		ErrIssuesRejected:        codes.InvalidArgument,
+		ErrIssuesDenied:          codes.PermissionDenied,
+		errNoIssues:              codes.Unimplemented,
+		ErrIssuesExhausted:       codes.ResourceExhausted,
+		errIssuesUnavailable:     codes.Unavailable,
 		invalidQuery:             codes.InvalidArgument,
 		ErrNotFound:              codes.NotFound,
 		search.ErrNotFound:       codes.NotFound,

@@ -10,6 +10,7 @@ COPY forge-connector/library/go.mod forge-connector/library/go.sum forge-connect
 COPY forge-checkouts/library/go.mod forge-checkouts/library/
 COPY forge-checkouts/service/go.mod forge-checkouts/service/go.sum forge-checkouts/service/
 COPY forge-issues/library/go.mod forge-issues/library/
+COPY forge-issues/service/go.mod forge-issues/service/go.sum forge-issues/service/
 COPY forge-symbols/library/go.mod forge-symbols/library/go.sum forge-symbols/library/
 COPY forge-search/library/go.mod forge-search/library/go.sum forge-search/library/
 COPY forge-search/service/go.mod forge-search/service/go.sum forge-search/service/
@@ -22,6 +23,7 @@ COPY forge-connector/library/ forge-connector/library/
 COPY forge-checkouts/library/ forge-checkouts/library/
 COPY forge-checkouts/service/ forge-checkouts/service/
 COPY forge-issues/library/ forge-issues/library/
+COPY forge-issues/service/ forge-issues/service/
 COPY forge-symbols/library/ forge-symbols/library/
 COPY forge-search/library/ forge-search/library/
 COPY forge-search/service/ forge-search/service/

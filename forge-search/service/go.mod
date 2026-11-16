@@ -7,6 +7,8 @@ require (
 	github.com/r59q/forge-tools/forge-checkouts/service v0.0.0
 	github.com/r59q/forge-tools/forge-core/forgeapi v0.0.0
 	github.com/r59q/forge-tools/forge-core/servicekit v0.0.0
+	github.com/r59q/forge-tools/forge-issues/library v0.0.0
+	github.com/r59q/forge-tools/forge-issues/service v0.0.0
 	github.com/r59q/forge-tools/forge-search/library v0.0.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20250929231259-57b25ae835d4
 	google.golang.org/grpc v1.75.1
@@ -45,3 +47,5 @@ replace github.com/r59q/forge-tools/forge-issues/library => ../../forge-issues/l
 replace github.com/r59q/forge-tools/forge-search/library => ../library
 
 replace github.com/r59q/forge-tools/forge-symbols/library => ../../forge-symbols/library
+
+replace github.com/r59q/forge-tools/forge-issues/service => ../../forge-issues/service

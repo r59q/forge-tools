@@ -1,6 +1,7 @@
 // Command forge-search-service indexes and searches the code of
-// forge-checkouts checkouts over REST and gRPC. It resolves checkouts through
-// forge-checkouts and reads their directories from a shared data directory.
+// forge-checkouts checkouts, and the issues of forge-issues, over REST and
+// gRPC. It resolves checkouts through forge-checkouts and reads their
+// directories from a shared data directory.
 package main
 
 import (
@@ -39,8 +40,8 @@ const copies = "copies"
 // the service created and has not removed.
 const journalDir = "checkouts"
 
-// settings are the shared service settings plus storage and forge-checkouts
-// settings.
+// settings are the shared service settings plus storage, forge-checkouts and
+// forge-issues settings.
 type settings struct {
 	servicekit.Settings
 	dataDirectory string
@@ -57,13 +58,15 @@ type settings struct {
 	// root holds the checkout directories.
 	root api.Root
 
+	issues issueSettings
+
 	indexTimeout time.Duration
 	maxIndexes   int
 }
 
 func parse(args []string, getenv func(string) string, help io.Writer) (settings, error) {
 	var s settings
-	var checkoutsInsecure, checkoutsData, checkoutsReported, indexTimeout, maxIndexes string
+	var checkoutsInsecure, checkoutsData, checkoutsReported, issuesInsecure, indexTimeout, maxIndexes string
 	extra := func(fs *flag.FlagSet, env servicekit.Env) {
 		fs.StringVar(&s.dataDirectory, "data-dir", env("DATA_DIR", "./search-data"), "durable index data directory")
 		fs.StringVar(&s.checkoutsAddress, "checkouts-addr", env("CHECKOUTS_ADDR", "127.0.0.1:9098"), "forge-checkouts gRPC address")
@@ -79,6 +82,7 @@ func parse(args []string, getenv func(string) string, help io.Writer) (settings,
 			"absolute forge-checkouts data directory as forge-checkouts names it, when mounted elsewhere")
 		fs.StringVar(&indexTimeout, "index-timeout", env("INDEX_TIMEOUT", "10m"), "deadline for each checkout indexing")
 		fs.StringVar(&maxIndexes, "max-indexes", env("MAX_INDEXES", strconv.Itoa(api.DefaultMaxIndexes)), "most indexes")
+		issueFlags(fs, env, &s.issues, &issuesInsecure)
 	}
 
 	shared, err := servicekit.Parse(args, getenv, help, servicekit.Options{
@@ -103,6 +107,9 @@ func parse(args []string, getenv func(string) string, help io.Writer) (settings,
 		return settings{}, errors.New("invalid max-indexes")
 	}
 	if s.root, err = root(checkoutsData, checkoutsReported); err != nil {
+		return settings{}, err
+	}
+	if err := s.issues.check(issuesInsecure); err != nil {
 		return settings{}, err
 	}
 
@@ -140,8 +147,8 @@ func root(data, reported string) (api.Root, error) {
 	return r, nil
 }
 
-// dial connects to forge-checkouts, over TLS unless plaintext.
-func dial(address string, plaintext bool) (*grpc.ClientConn, error) {
+// dial connects to the service name names, over TLS unless plaintext.
+func dial(name, address string, plaintext bool) (*grpc.ClientConn, error) {
 	transport := credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12})
 	if plaintext {
 		transport = insecure.NewCredentials()
@@ -149,7 +156,7 @@ func dial(address string, plaintext bool) (*grpc.ClientConn, error) {
 
 	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(transport))
 	if err != nil {
-		return nil, errors.New("invalid checkouts address")
+		return nil, fmt.Errorf("invalid %s address", name)
 	}
 	return conn, nil
 }
@@ -185,11 +192,19 @@ func run(ctx context.Context, s settings, ready func(grpcAddr, httpAddr net.Addr
 		return err
 	}
 
-	conn, err := dial(s.checkoutsAddress, s.checkoutsInsecure)
+	conn, err := dial("checkouts", s.checkoutsAddress, s.checkoutsInsecure)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = conn.Close() }()
+
+	issues, issuesConn, err := s.issues.connect(ctx)
+	if err != nil {
+		return err
+	}
+	if issuesConn != nil {
+		defer func() { _ = issuesConn.Close() }()
+	}
 
 	store, err := openData(ctx, s.dataDirectory)
 	if err != nil {
@@ -208,7 +223,7 @@ func run(ctx context.Context, s settings, ready func(grpcAddr, httpAddr net.Addr
 		return errors.New("cannot open checkout journal")
 	}
 
-	service, err := api.New(api.Config{
+	config := api.Config{
 		Engine:       search.NewEngine(store, search.IndexLimits{}),
 		Checkpoint:   store.Checkpoint,
 		Checkouts:    api.NewRemote(checkoutspb.NewCheckoutsServiceClient(conn), checkoutsToken),
@@ -218,7 +233,11 @@ func run(ctx context.Context, s settings, ready func(grpcAddr, httpAddr net.Addr
 		Timeout:      s.Timeout,
 		IndexTimeout: s.indexTimeout,
 		MaxIndexes:   s.maxIndexes,
-	})
+	}
+	if issues != nil { // A nil *RemoteIssues is not a nil reader.
+		config.Issues = issues
+	}
+	service, err := api.New(config)
 	if err != nil {
 		return errors.New("cannot initialize API")
 	}

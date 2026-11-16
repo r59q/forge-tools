@@ -3,8 +3,9 @@
 Serves the [forge-search library](../library/) over gRPC and generated REST
 routes: index the code of [forge-checkouts](../../forge-checkouts/service/)
 checkouts, or of repository branches, into named, durable indexes and search
-them, or search without an index. Both return the same matches in the same
-order.
+them, or search without an index. It does the same for the issues of a
+repository, read through [forge-issues](../../forge-issues/service/). Indexed
+and unindexed searches return the same matches in the same order.
 
 The service resolves checkout IDs through forge-checkouts, with its own
 token, and reads the checkout directories from the forge-checkouts data
@@ -12,7 +13,7 @@ directory, mounted read-only. To index or search a repository reference it
 creates a checkout, reads it and removes it again; it never changes the
 files of a checkout and holds no forge credentials. Nothing is fetched in
 the background: a repository index changes only when `IndexRepository` is
-called.
+called, and an issue index only when `IndexIssues` is.
 
 ## Build and test
 
@@ -71,13 +72,21 @@ FORGE_SEARCH_CHECKOUTS_TOKEN="$(cat checkouts-token)" /tmp/forge-search-service 
 | `--checkouts-reported-data-dir` | `FORGE_SEARCH_CHECKOUTS_REPORTED_DATA_DIR` | `--checkouts-data-dir`                               |
 | `--index-timeout`               | `FORGE_SEARCH_INDEX_TIMEOUT`               | `10m`                                                |
 | `--max-indexes`                 | `FORGE_SEARCH_MAX_INDEXES`                 | `32`                                                 |
+| `--issues-addr`                 | `FORGE_SEARCH_ISSUES_ADDR`                 | none: issue calls fail with `UNIMPLEMENTED`          |
+| `--issues-insecure`             | `FORGE_SEARCH_ISSUES_INSECURE`             | `false`: TLS                                         |
+| `--issues-token-file`           | `FORGE_SEARCH_ISSUES_TOKEN_FILE`           | none                                                 |
+| `--issues-token-env`            | `FORGE_SEARCH_ISSUES_TOKEN_ENV`            | `FORGE_SEARCH_ISSUES_TOKEN` when no source is set    |
 
-Both tokens are read at startup, and the service does not start without
-them. `--checkouts-data-dir` is the forge-checkouts data directory as
+The service and checkouts tokens are read at startup, and the service does
+not start without them. The forge-issues token, the service token of
+forge-issues, is read too when `--issues-addr` is set. Without
+`--issues-addr`, issue calls fail with `UNIMPLEMENTED` and code search works
+as before. `--checkouts-data-dir` is the forge-checkouts data directory as
 mounted here. When forge-checkouts sees it at another path, as in separate
 containers, set `--checkouts-reported-data-dir` to its `--data-dir` there.
 `--request-timeout` bounds every call but `IndexCheckout`,
-`IndexRepository` and `SearchRepository`, which `--index-timeout` bounds;
+`IndexRepository`, `SearchRepository`, `IndexIssues` and
+`SearchUnindexedIssues`, which `--index-timeout` bounds;
 a `SearchRepository` of an existing index searches within
 `--request-timeout`. The connector flags that every service accepts are
 ignored.
@@ -136,6 +145,9 @@ Find them with `GET /v1/checkouts` on forge-checkouts and remove them with
 | Results              | `maxResults`: 100 by default, at most 500                 |
 | Repository checkouts | 4 at once                                                 |
 | Target               | `source` 128 bytes, `repository` 256, `reference` 256     |
+| Issue listing        | 64 MiB, one forge-issues response                         |
+| Issues               | 50000 per `IndexIssues`, 10000 per unindexed search       |
+| Issue                | body 256 KiB, title 1 KiB, URL 2 KiB; larger are skipped  |
 
 A checkout over the index or checkout limits fails `IndexCheckout` with
 `RESOURCE_EXHAUSTED` and leaves the index as it was. An unindexed search
@@ -143,29 +155,39 @@ over 64 MiB reads the files in match order and sets `files.truncated`.
 Indexed and unindexed searches agree whenever the unindexed one is within
 its limits.
 
+forge-issues returns all the issues of a repository in one response. One
+over 64 MiB, or over the issue count, fails with `RESOURCE_EXHAUSTED`, as does
+a forge rate limit; an `IndexIssues` that fails leaves the index without an
+`updatedAt`. Issues over a size limit are skipped and counted in `tooLarge`.
+If large repositories reach these limits, forge-issues needs a paged listing.
+
 ## API
 
 Every call needs `Authorization: Bearer <token>`. The protobuf definition in
 [proto/](proto/forge/search/v1/search.proto) is the source of truth and
 documents every field.
 
-| Method and path                          | Body              | Returns                                                       |
-| ---------------------------------------- | ----------------- | ------------------------------------------------------------- |
-| `POST /v1/indexes/{index}/checkout`      | `checkoutId`      | `index`, `added`, `replaced`, `removed`, `unchanged`, `files` |
-| `GET /v1/indexes`                        |                   | `indexes`                                                     |
-| `GET /v1/indexes/{index}`                |                   | `index`                                                       |
-| `DELETE /v1/indexes/{index}`             |                   | nothing                                                       |
-| `POST /v1/indexes/{index}:search`        | `query`           | `matches`, `state`, `revision`                                |
-| `POST /v1/checkouts/{checkoutId}:search` | `query`           | `matches`, `state`, `revision`, `files`                       |
-| `POST /v1/repositories:index`            | `target`          | as for a checkout, and `upToDate`                             |
-| `POST /v1/repositories:search`           | `target`, `query` | `matches`, `state`, `revision`, and `index` or `files`        |
+| Method and path                          | Body                  | Returns                                                       |
+| ---------------------------------------- | --------------------- | ------------------------------------------------------------- |
+| `POST /v1/indexes/{index}/checkout`      | `checkoutId`          | `index`, `added`, `replaced`, `removed`, `unchanged`, `files` |
+| `GET /v1/indexes`                        |                       | `indexes`                                                     |
+| `GET /v1/indexes/{index}`                |                       | `index`                                                       |
+| `DELETE /v1/indexes/{index}`             |                       | nothing                                                       |
+| `POST /v1/indexes/{index}:search`        | `query`               | `matches`, `state`, `revision`                                |
+| `POST /v1/checkouts/{checkoutId}:search` | `query`               | `matches`, `state`, `revision`, `files`                       |
+| `POST /v1/repositories:index`            | `target`              | as for a checkout, and `upToDate`                             |
+| `POST /v1/repositories:search`           | `target`, `query`     | `matches`, `state`, `revision`, and `index` or `files`        |
+| `POST /v1/issues:index`                  | `repository`          | `index`, counts as for a checkout, `tooLarge`, `syncedAt`     |
+| `POST /v1/issues:searchIndexed`          | `repository`, `query` | `matches`, `state`, `index`                                   |
+| `POST /v1/issues:searchUnindexed`        | `repository`, `query` | `matches`, `state`, `tooLarge`                                |
 
 An index name is 1 to 64 bytes of `a-z`, `0-9`, `.`, `-` and `_`, starts
 with a letter or digit and holds no `..`. An index is `{name, documents,
 bytes, revision, checkoutId, updatedAt, target}`: the files it holds, their
 size, the checkout revision, checkout and time of the last completed
 indexing, and for a repository index its target. The revision is empty
-while an indexing is changing the index.
+while an indexing is changing the index. An issue index has `issues`, its
+repository, and `updatedAt`, the time of its last completed sync, instead.
 
 ```sh
 search() {
@@ -238,6 +260,43 @@ search /v1/repositories:search -d "{\"target\": $TARGET, \"query\": {\"text\": \
   jq -r '.revision, (.matches[] | "\(.path):\(.range.startLine) \(.preview)")'
 ```
 
+### Index a repository's issues
+
+A repository is `{source, repository}`: the forge-issues source ID and the
+repository path. `IndexIssues` lists its open and closed issues through
+forge-issues, once, and syncs them into its index, named `issues-` and 40
+hex digits derived from the repository; `IndexCheckout` refuses such names.
+Calling it again refreshes the index, writing only the issues that changed.
+Each issue is one document: its title, then its body. Comments are not
+indexed. Calls for one repository run one at a time; another, or a
+`DeleteIndex` of the index, fails with `ABORTED` before it reads anything.
+
+```sh
+ISSUES='{"source": "github", "repository": "octo/demo"}'
+search /v1/issues:index -d "{\"repository\": $ISSUES}" |
+  jq '{name: .index.name, added, replaced, removed, unchanged, tooLarge, syncedAt}'
+```
+
+### Search issues
+
+An issue query is `{text, state, maxResults}`: the text as for code, `open`,
+`closed` or empty for both, and the result limit as for code.
+`SearchIndexedIssues` searches the index of the repository, which must
+exist. `SearchUnindexedIssues` lists the issues through forge-issues and
+searches them, keeping nothing. Both return the same matches in the same
+order: by issue number, the title before the body, then by line. Each is
+`{number, title, state, webUrl, field, range, preview, previewColumn}`,
+where `field` is `title` or `body` and the range is within that field. A
+state filter keeps the matches of that state among the first 500 of all
+states, and sets `state.truncated` when there were more.
+
+```sh
+search /v1/issues:searchIndexed -d "{\"repository\": $ISSUES, \"query\": {\"text\": \"crash\", \"state\": \"open\"}}" |
+  jq -r '.matches[] | "#\(.number) \(.field):\(.range.startLine) \(.preview)"'
+search /v1/issues:searchUnindexed -d "{\"repository\": $ISSUES, \"query\": {\"text\": \"crash\"}}" |
+  jq -r '.matches[] | "#\(.number) \(.webUrl)"'
+```
+
 ### Delete an index
 
 Removes the index, then checkpoints the database so that its content leaves
@@ -253,17 +312,19 @@ search /v1/indexes/main -X DELETE
 Errors carry only a status code; they never echo request content, paths or
 tokens.
 
-| Code                  | HTTP | When                                                                                                                                   |
-| --------------------- | ---- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `UNAUTHENTICATED`     | 401  | The token is missing or wrong. Checked before the body is read.                                                                        |
-| `INVALID_ARGUMENT`    | 400  | An index name, checkout ID, target, query or `maxResults` is invalid, or forge-checkouts refuses the target, or the body is malformed. |
-| `NOT_FOUND`           | 404  | The index, or the checkout, source, repository or reference in forge-checkouts, does not exist.                                        |
-| `FAILED_PRECONDITION` | 400  | The checkout is not `ready` or `retained`, is not readable under the checkouts root, or forge-checkouts refuses it in its state.       |
-| `ABORTED`             | 409  | The index is being indexed or deleted, or the checkout changed while it was read.                                                      |
-| `RESOURCE_EXHAUSTED`  | 429  | The request, checkout, repository, index, number of indexes or of repository checkouts is over its limit, or the disk is full.         |
-| `UNAVAILABLE`         | 503  | forge-checkouts cannot be reached or rejects the token, or storage is read-only.                                                       |
-| `DEADLINE_EXCEEDED`   | 504  | The call took too long.                                                                                                                |
-| `INTERNAL`            | 500  | Storage failed, or the checkout journal cannot be written.                                                                             |
+| Code                  | HTTP | When                                                                                                                                                                                               |
+| --------------------- | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `UNAUTHENTICATED`     | 401  | The token is missing or wrong. Checked before the body is read.                                                                                                                                    |
+| `INVALID_ARGUMENT`    | 400  | An index name, checkout ID, target, query or `maxResults` is invalid, or forge-checkouts refuses the target, or forge-issues refuses the repository, or the body is malformed.                     |
+| `NOT_FOUND`           | 404  | The index, or the checkout, source, repository or reference in forge-checkouts, or the repository in forge-issues, does not exist.                                                                 |
+| `FAILED_PRECONDITION` | 400  | The checkout is not `ready` or `retained`, is not readable under the checkouts root, or forge-checkouts refuses it in its state.                                                                   |
+| `PERMISSION_DENIED`   | 403  | The forge refuses forge-issues access to the repository issues.                                                                                                                                    |
+| `ABORTED`             | 409  | The index is being indexed or deleted, or the checkout changed while it was read.                                                                                                                  |
+| `RESOURCE_EXHAUSTED`  | 429  | The request, checkout, repository, index, number of indexes or of repository checkouts is over its limit, or the disk is full. Also a forge-issues listing over its limits, or a forge rate limit. |
+| `UNAVAILABLE`         | 503  | forge-checkouts or forge-issues cannot be reached or rejects the token, or storage is read-only.                                                                                                   |
+| `DEADLINE_EXCEEDED`   | 504  | The call took too long.                                                                                                                                                                            |
+| `UNIMPLEMENTED`       | 501  | An issue call, when no `--issues-addr` is set.                                                                                                                                                     |
+| `INTERNAL`            | 500  | Storage failed, or the checkout journal cannot be written.                                                                                                                                         |
 
 ## License
 

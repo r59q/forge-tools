@@ -32,7 +32,8 @@ func TestSettings(t *testing.T) {
 	if err != nil || s.GRPCAddress != "127.0.0.1:9105" || s.HTTPAddress != "127.0.0.1:8095" ||
 		s.Timeout != 30*time.Second || s.TokenEnv != "FORGE_SEARCH_TOKEN" || s.dataDirectory != "./search-data" ||
 		s.checkoutsAddress != "127.0.0.1:9098" || s.checkoutsInsecure || s.checkoutsTokenEnv != "FORGE_SEARCH_CHECKOUTS_TOKEN" ||
-		s.root.Local != "/checkouts/copies" || s.root.Reported != "" || s.indexTimeout != 10*time.Minute || s.maxIndexes != 32 {
+		s.root.Local != "/checkouts/copies" || s.root.Reported != "" || s.indexTimeout != 10*time.Minute || s.maxIndexes != 32 ||
+		s.issues != (issueSettings{tokenEnv: "FORGE_SEARCH_ISSUES_TOKEN"}) {
 		t.Fatalf("defaults: %+v %v", s, err)
 	}
 
@@ -41,15 +42,21 @@ func TestSettings(t *testing.T) {
 		"FORGE_SEARCH_CHECKOUTS_INSECURE":          "true",
 		"FORGE_SEARCH_CHECKOUTS_REPORTED_DATA_DIR": "/srv/checkouts",
 		"FORGE_SEARCH_MAX_INDEXES":                 "4",
+		"FORGE_SEARCH_ISSUES_ADDR":                 "issues:9090",
+		"FORGE_SEARCH_ISSUES_INSECURE":             "true",
 	}
 	s, err = parse(
-		[]string{"--checkouts-data-dir=/mnt/checkouts", "--checkouts-addr=checkouts:9090", "--checkouts-token-file=/run/token", "--index-timeout=1m"},
+		[]string{
+			"--checkouts-data-dir=/mnt/checkouts", "--checkouts-addr=checkouts:9090", "--checkouts-token-file=/run/token", "--index-timeout=1m",
+			"--issues-token-file=/run/issues",
+		},
 		func(k string) string { return env[k] },
 		io.Discard,
 	)
 	if err != nil || s.dataDirectory != "/data" || !s.checkoutsInsecure || s.checkoutsAddress != "checkouts:9090" ||
 		s.checkoutsTokenFile != "/run/token" || s.checkoutsTokenEnv != "" || s.root.Local != "/mnt/checkouts/copies" ||
-		s.root.Reported != "/srv/checkouts/copies" || s.indexTimeout != time.Minute || s.maxIndexes != 4 {
+		s.root.Reported != "/srv/checkouts/copies" || s.indexTimeout != time.Minute || s.maxIndexes != 4 ||
+		s.issues != (issueSettings{address: "issues:9090", insecure: true, tokenFile: "/run/issues"}) {
 		t.Fatalf("overrides: %+v %v", s, err)
 	}
 
@@ -63,6 +70,8 @@ func TestSettings(t *testing.T) {
 		{"--checkouts-data-dir=/checkouts", "--checkouts-token-file=/a", "--checkouts-token-env=B"},
 		{"--checkouts-data-dir=/checkouts", "--data-dir="},
 		{"--checkouts-data-dir=/checkouts", "--checkouts-addr="},
+		{"--checkouts-data-dir=/checkouts", "--issues-insecure=secret-sentinel"},
+		{"--checkouts-data-dir=/checkouts", "--issues-token-file=/a", "--issues-token-env=B"},
 		{},
 	} {
 		if _, err := parse(args, noEnv, io.Discard); err == nil || strings.Contains(err.Error(), "secret-sentinel") {

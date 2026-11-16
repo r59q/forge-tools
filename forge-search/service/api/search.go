@@ -91,14 +91,22 @@ func searchCheckout(ctx context.Context, root *os.Root, query search.Query, pref
 // codeQuery returns the library query and path prefix of a CodeQuery.
 // The library validates the text and prefix.
 func codeQuery(q *pb.CodeQuery) (search.Query, string, error) {
-	limit := int(q.GetMaxResults())
-	switch {
-	case limit == 0:
-		limit = DefaultResults
-	case limit < 0 || limit > MaxResults:
-		return search.Query{}, "", errBadRequest
+	limit, err := resultLimit(q.GetMaxResults())
+	if err != nil {
+		return search.Query{}, "", err
 	}
 	return search.Query{Text: q.GetText(), Limit: limit}, q.GetPathPrefix(), nil
+}
+
+// resultLimit checks a requested max_results, 0 naming DefaultResults.
+func resultLimit(n int32) (int, error) {
+	switch {
+	case n == 0:
+		return DefaultResults, nil
+	case n < 0 || n > MaxResults:
+		return 0, errBadRequest
+	}
+	return int(n), nil
 }
 
 // canceled returns the context error of a search the context ended, whose
@@ -117,19 +125,23 @@ func matches(found []search.Match) []*pb.CodeMatch {
 	out := make([]*pb.CodeMatch, len(found))
 	for i, m := range found {
 		out[i] = &pb.CodeMatch{
-			Path:    m.Document.ID,
-			Version: m.Document.Version,
-			Range: &pb.Range{
-				StartLine:   count(m.Range.StartLine),
-				StartColumn: count(m.Range.StartColumn),
-				EndLine:     count(m.Range.EndLine),
-				EndColumn:   count(m.Range.EndColumn),
-			},
+			Path:          m.Document.ID,
+			Version:       m.Document.Version,
+			Range:         rangeOf(m.Range),
 			Preview:       m.Preview,
 			PreviewColumn: count(m.PreviewColumn),
 		}
 	}
 	return out
+}
+
+func rangeOf(r search.Range) *pb.Range {
+	return &pb.Range{
+		StartLine:   count(r.StartLine),
+		StartColumn: count(r.StartColumn),
+		EndLine:     count(r.EndLine),
+		EndColumn:   count(r.EndColumn),
+	}
 }
 
 func searchState(state search.State) *pb.SearchState {

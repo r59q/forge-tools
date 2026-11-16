@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/r59q/forge-tools/forge-search/library/checkout"
+	"github.com/r59q/forge-tools/forge-search/library/issue"
 	"github.com/r59q/forge-tools/forge-search/library/search"
 	pb "github.com/r59q/forge-tools/forge-search/service/searchpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -20,10 +21,11 @@ import (
 const KindRecord search.Kind = "checkout-index"
 
 // IndexCheckout syncs a checkout into an index, creating the index first.
-// Names IndexRepository uses, starting with "repo-", are refused.
+// Names IndexRepository and IndexIssues use, starting with "repo-" or
+// "issues-", are refused.
 func (s *Server) IndexCheckout(ctx context.Context, r *pb.IndexCheckoutRequest) (*pb.IndexCheckoutResponse, error) {
 	return call(s, ctx, s.config.IndexTimeout, func(ctx context.Context, engine *search.Engine) (*pb.IndexCheckoutResponse, error) {
-		if strings.HasPrefix(r.GetIndex(), repositoryPrefix) {
+		if reserved(r.GetIndex()) {
 			return nil, errBadRequest
 		}
 
@@ -194,20 +196,20 @@ func (s *Server) status(ctx context.Context, index string) (*pb.Index, error) {
 	if err != nil {
 		return nil, err
 	}
-	records, err := engine.Documents(ctx, index, search.Filter{Kind: KindRecord})
+	own, owned, err := s.ownDocuments(ctx, index)
 	if err != nil {
 		return nil, err
 	}
-	targets, err := engine.Documents(ctx, index, search.Filter{Kind: KindTarget})
-	if err != nil {
-		return nil, err
-	}
+	records, targets := own[KindRecord], own[KindTarget]
 
 	status := &pb.Index{
 		Name:      info.Name,
-		Documents: int64(info.Documents - len(records) - len(targets)),
+		Documents: int64(info.Documents - owned),
 		Bytes:     info.Bytes,
 		Revision:  info.Marker,
+	}
+	if repos := own[KindIssueRepository]; len(repos) > 0 {
+		return s.issueStatus(ctx, status, repos[0].ID)
 	}
 	if len(targets) > 0 {
 		t, err := parseTarget(targets[0].ID)
@@ -227,4 +229,27 @@ func (s *Server) status(ctx context.Context, index string) (*pb.Index, error) {
 	status.CheckoutId = records[0].ID
 	status.UpdatedAt = timestamppb.New(updated)
 	return status, nil
+}
+
+// ownDocuments returns the documents of an index that the server and the
+// issue sync write about it, by kind, and how many there are. Index
+// statuses do not count them.
+func (s *Server) ownDocuments(ctx context.Context, index string) (map[search.Kind][]search.Ref, int, error) {
+	own := map[search.Kind][]search.Ref{}
+	total := 0
+	for _, kind := range []search.Kind{KindRecord, KindTarget, KindIssueRepository, issue.KindSync} {
+		refs, err := s.config.Engine.Documents(ctx, index, search.Filter{Kind: kind})
+		if err != nil {
+			return nil, 0, err
+		}
+		own[kind] = refs
+		total += len(refs)
+	}
+	return own, total, nil
+}
+
+// reserved reports whether an index name belongs to IndexRepository or
+// IndexIssues.
+func reserved(index string) bool {
+	return strings.HasPrefix(index, repositoryPrefix) || strings.HasPrefix(index, issuesPrefix)
 }

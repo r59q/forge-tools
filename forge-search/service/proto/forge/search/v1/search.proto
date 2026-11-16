@@ -7,8 +7,8 @@ import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/r59q/forge-tools/forge-search/service/searchpb";
 
-// SearchService searches the code of forge-checkouts checkouts, indexed or
-// not. An index is a named, durable copy of one checkout's files; indexing a
+// SearchService searches the code of forge-checkouts checkouts and the
+// issues of forge-issues repositories, indexed or not. An index is a named, durable copy of one checkout's files; indexing a
 // checkout again, or another checkout into the same index, changes only the
 // files that differ. Every RPC requires the service token in the
 // Authorization: Bearer header (gRPC metadata).
@@ -23,14 +23,24 @@ option go_package = "github.com/r59q/forge-tools/forge-search/service/searchpb";
 // and the checkout is removed before the call returns. The service never
 // fetches code on its own.
 //
-// Errors carry only a status code: INVALID_ARGUMENT for an invalid field,
-// NOT_FOUND for a missing index or checkout, or an unknown source,
-// repository or reference,
+// A repository's issues are read from forge-issues, in one listing of its
+// open and closed issues, only within an IndexIssues or
+// SearchUnindexedIssues call; the service never fetches issues on its own.
+// Indexed and unindexed searches of the same issues return the same matches
+// in the same order. Without a forge-issues address, those two calls fail
+// with UNIMPLEMENTED and the others still work.
+//
+// Errors carry only a status code: INVALID_ARGUMENT for an invalid field or
+// a source forge-issues rejects, NOT_FOUND for a missing index or
+// checkout, or an unknown source, repository or reference,
+// PERMISSION_DENIED when the forge refuses access,
 // FAILED_PRECONDITION for a checkout that is not ready or not readable here,
 // ABORTED for an index already being indexed or files that changed while
-// read, RESOURCE_EXHAUSTED for a request, checkout or index over a limit,
-// UNAVAILABLE when forge-checkouts or the storage cannot be reached, and
-// DEADLINE_EXCEEDED for a call over its time limit.
+// read, RESOURCE_EXHAUSTED for a request, checkout, issue listing or index
+// over a limit, or a forge rate limit, UNAVAILABLE when forge-checkouts,
+// forge-issues or the storage cannot be reached, UNIMPLEMENTED for an issue
+// call that needs forge-issues without one, and DEADLINE_EXCEEDED for a call
+// over its time limit.
 service SearchService {
   // IndexCheckout syncs a checkout's files into an index, creating the
   // index if needed, and returns what changed. It runs within the call; a
@@ -91,6 +101,32 @@ service SearchService {
       body: "*"
     };
   }
+  // IndexIssues reads a repository's issues and syncs them into the issue
+  // index of that repository, creating it if needed. Calling it again
+  // refreshes the index, changing only the issues that differ. It runs
+  // within the call. POST /v1/issues:index.
+  rpc IndexIssues(IndexIssuesRequest) returns (IndexIssuesResponse) {
+    option (google.api.http) = {
+      post: "/v1/issues:index"
+      body: "*"
+    };
+  }
+  // SearchIndexedIssues searches the issue index of a repository without
+  // reading forge-issues. POST /v1/issues:searchIndexed.
+  rpc SearchIndexedIssues(SearchIndexedIssuesRequest) returns (SearchIndexedIssuesResponse) {
+    option (google.api.http) = {
+      post: "/v1/issues:searchIndexed"
+      body: "*"
+    };
+  }
+  // SearchUnindexedIssues reads a repository's issues and searches them
+  // without an index, keeping nothing. POST /v1/issues:searchUnindexed.
+  rpc SearchUnindexedIssues(SearchUnindexedIssuesRequest) returns (SearchUnindexedIssuesResponse) {
+    option (google.api.http) = {
+      post: "/v1/issues:searchUnindexed"
+      body: "*"
+    };
+  }
 }
 
 // RepositoryTarget names a repository reference on a forge.
@@ -127,6 +163,11 @@ message Index {
   // target is the repository reference of an index IndexRepository made.
   // Its checkout_id names a checkout that has since been removed.
   RepositoryTarget target = 7;
+  // issues is the repository of an index IndexIssues made, which holds
+  // issues rather than files. Its updated_at is when the issue listing of
+  // the last completed IndexIssues was read: it is unset while one runs and
+  // after one fails.
+  IssueRepository issues = 8;
 }
 
 // FileState counts the checkout files left out.
@@ -144,7 +185,8 @@ message FileState {
 // IndexCheckoutRequest names the checkout to index.
 message IndexCheckoutRequest {
   // index is the index name. It is created if it does not exist. Names
-  // starting with "repo-" belong to IndexRepository and are refused.
+  // starting with "repo-" or "issues-" belong to IndexRepository and
+  // IndexIssues and are refused.
   string index = 1;
   // checkout_id is the forge-checkouts checkout ID.
   string checkout_id = 2;
@@ -229,8 +271,8 @@ message SearchState {
   // truncated is set when matches were left out because of max_results, or
   // files because of a size limit.
   bool truncated = 1;
-  // skipped counts files not searched because they hold a NUL byte or are
-  // not valid UTF-8.
+  // skipped counts files or issues not searched because they hold a NUL
+  // byte or are not valid UTF-8.
   int32 skipped = 2;
 }
 
@@ -302,4 +344,94 @@ message SearchRepositoryResponse {
   Index index = 4;
   // files counts the files left out of an unindexed search.
   FileState files = 5;
+}
+
+// IssueRepository names a repository whose issues forge-issues serves.
+message IssueRepository {
+  // source is the forge-issues source ID, with the rules of
+  // RepositoryTarget.source.
+  string source = 1;
+  // repository is the repository path, with the rules of
+  // RepositoryTarget.repository.
+  string repository = 2;
+}
+
+// IssueQuery is what to search for in issue titles and bodies.
+message IssueQuery {
+  // text is matched as CodeQuery.text is, within title and body lines.
+  string text = 1;
+  // state keeps only "open" or "closed" issues; empty keeps both. It
+  // filters the first max_results matches of both states.
+  string state = 2;
+  // max_results is the most matches returned: 1-500, 0 for 100.
+  int32 max_results = 3;
+}
+
+// IssueMatch is one occurrence of the query text in an issue.
+message IssueMatch {
+  int64 number = 1;
+  // title is the issue title, on one line.
+  string title = 2;
+  // state is "open" or "closed".
+  string state = 3;
+  string web_url = 4;
+  // field is "title" or "body", the part of the issue matched.
+  string field = 5;
+  // range covers the matched text, relative to the field.
+  Range range = 6;
+  // preview and preview_column are as in CodeMatch.
+  string preview = 7;
+  int32 preview_column = 8;
+}
+
+// IndexIssuesRequest names the repository whose issues to index.
+message IndexIssuesRequest {
+  IssueRepository repository = 1;
+}
+
+// IndexIssuesResponse is the index after the sync and what it changed.
+message IndexIssuesResponse {
+  Index index = 1;
+  // added, replaced and removed count the issues written; unchanged counts
+  // those left as they were.
+  int32 added = 2;
+  int32 replaced = 3;
+  int32 removed = 4;
+  int32 unchanged = 5;
+  // too_large counts the issues left out because their body is over
+  // 256 KiB, their title over 1 KiB or their web URL over 2 KiB.
+  int32 too_large = 6;
+  // synced_at is when the issue listing the index now holds was read.
+  google.protobuf.Timestamp synced_at = 7;
+}
+
+// SearchIndexedIssuesRequest searches the issue index of a repository.
+message SearchIndexedIssuesRequest {
+  IssueRepository repository = 1;
+  IssueQuery query = 2;
+}
+
+// SearchIndexedIssuesResponse holds the matches by issue number, then
+// title before body, then position.
+message SearchIndexedIssuesResponse {
+  repeated IssueMatch matches = 1;
+  SearchState state = 2;
+  // index is the status of the index searched.
+  Index index = 3;
+}
+
+// SearchUnindexedIssuesRequest searches a repository's issues without an
+// index.
+message SearchUnindexedIssuesRequest {
+  IssueRepository repository = 1;
+  IssueQuery query = 2;
+}
+
+// SearchUnindexedIssuesResponse holds the matches in the order of
+// SearchIndexedIssuesResponse.
+message SearchUnindexedIssuesResponse {
+  repeated IssueMatch matches = 1;
+  SearchState state = 2;
+  // too_large counts the issues left out, as in IndexIssuesResponse.
+  int32 too_large = 3;
 }

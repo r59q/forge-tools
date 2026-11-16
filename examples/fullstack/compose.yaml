@@ -117,8 +117,9 @@ services:
       - "127.0.0.1:8094:8080"
       - "127.0.0.1:9104:9090"
 
-  # Indexes and searches checkouts. It reads checkout files from the checkouts
-  # volume, read-only at /data where checkouts reports their locations.
+  # Indexes and searches checkouts and issues. It reads checkout files from the
+  # checkouts volume, read-only at /data where checkouts reports their
+  # locations, and lists issues through issues.
   search:
     build:
       context: ../..
@@ -132,6 +133,10 @@ services:
       FORGE_SEARCH_CHECKOUTS_TOKEN: ${FORGE_CHECKOUTS_TOKEN:?set in .env}
       FORGE_SEARCH_CHECKOUTS_DATA_DIR: /data
       FORGE_SEARCH_DATA_DIR: /search-data
+      FORGE_SEARCH_ISSUES_ADDR: issues:9090
+      FORGE_SEARCH_ISSUES_INSECURE: "true"
+      # forge-issues has a single bearer token.
+      FORGE_SEARCH_ISSUES_TOKEN: ${FORGE_ISSUES_TOKEN:?set in .env}
     volumes:
       - search-data:/search-data
       - checkouts-data:/data:ro

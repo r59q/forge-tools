@@ -187,6 +187,7 @@ type fixture struct {
 	s         *Server
 	root      string
 	checkouts *fakeCheckouts
+	issues    *fakeIssues
 	journal   *DirJournal
 	store     *sqlite.Store
 }
@@ -210,12 +211,14 @@ func newFixture(t *testing.T, change func(*Config)) *fixture {
 	f := &fixture{
 		root:      root,
 		checkouts: &fakeCheckouts{checkouts: map[string]Checkout{}, root: root, branches: map[Target]branch{}},
+		issues:    &fakeIssues{},
 		journal:   journal,
 		store:     store,
 	}
 	config := Config{
 		Engine:       search.NewEngine(store, search.IndexLimits{}),
 		Checkouts:    f.checkouts,
+		Issues:       f.issues,
 		Journal:      journal,
 		Root:         Root{Local: f.root},
 		Token:        forgeauth.StaticToken(token),
@@ -352,6 +355,12 @@ func route(req proto.Message) (string, string) {
 		return http.MethodPost, "/v1/repositories:index"
 	case *pb.SearchRepositoryRequest:
 		return http.MethodPost, "/v1/repositories:search"
+	case *pb.IndexIssuesRequest:
+		return http.MethodPost, "/v1/issues:index"
+	case *pb.SearchIndexedIssuesRequest:
+		return http.MethodPost, "/v1/issues:searchIndexed"
+	case *pb.SearchUnindexedIssuesRequest:
+		return http.MethodPost, "/v1/issues:searchUnindexed"
 	}
 	panic("no route for " + method(req))
 }
@@ -424,6 +433,8 @@ func restCode(t *testing.T, rec *httptest.ResponseRecorder) codes.Code {
 func httpStatus(code codes.Code) int {
 	return map[codes.Code]int{
 		codes.Unauthenticated:    http.StatusUnauthorized,
+		codes.PermissionDenied:   http.StatusForbidden,
+		codes.Unimplemented:      http.StatusNotImplemented,
 		codes.InvalidArgument:    http.StatusBadRequest,
 		codes.NotFound:           http.StatusNotFound,
 		codes.FailedPrecondition: http.StatusBadRequest,
@@ -447,6 +458,9 @@ func requests() []proto.Message {
 		&pb.SearchCheckoutRequest{CheckoutId: checkoutID, Query: query},
 		&pb.IndexRepositoryRequest{Target: repository.proto()},
 		&pb.SearchRepositoryRequest{Target: repository.proto(), Query: query},
+		&pb.IndexIssuesRequest{Repository: issueRepo},
+		&pb.SearchIndexedIssuesRequest{Repository: issueRepo, Query: &pb.IssueQuery{Text: "crash"}},
+		&pb.SearchUnindexedIssuesRequest{Repository: issueRepo, Query: &pb.IssueQuery{Text: "crash"}},
 	}
 }
 
@@ -457,6 +471,7 @@ func response(req proto.Message) proto.Message {
 		&pb.IndexCheckoutResponse{}, &pb.ListIndexesResponse{}, &pb.GetIndexResponse{},
 		&pb.DeleteIndexResponse{}, &pb.SearchIndexResponse{}, &pb.SearchCheckoutResponse{},
 		&pb.IndexRepositoryResponse{}, &pb.SearchRepositoryResponse{},
+		&pb.IndexIssuesResponse{}, &pb.SearchIndexedIssuesResponse{}, &pb.SearchUnindexedIssuesResponse{},
 	} {
 		if string(m.ProtoReflect().Descriptor().FullName()) == name {
 			return m

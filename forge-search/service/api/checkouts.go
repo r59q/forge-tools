@@ -192,9 +192,18 @@ func (r *Remote) Remove(ctx context.Context, id string) error {
 
 // authorize adds the token to the outgoing metadata of ctx.
 func (r *Remote) authorize(ctx context.Context) (context.Context, error) {
-	token, err := r.token.Token(ctx)
+	ctx, err := outgoing(ctx, r.token)
 	if err != nil {
 		return nil, errUnavailable
+	}
+	return ctx, nil
+}
+
+// outgoing adds the token from credentials to the outgoing metadata of ctx.
+func outgoing(ctx context.Context, credentials forgeauth.Credentials) (context.Context, error) {
+	token, err := credentials.Token(ctx)
+	if err != nil {
+		return nil, err
 	}
 	return metadata.NewOutgoingContext(ctx, metadata.Pairs("authorization", "Bearer "+token)), nil
 }

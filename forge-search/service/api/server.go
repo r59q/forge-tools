@@ -1,6 +1,6 @@
 // Package api exposes the search library over gRPC and generated REST
-// routes: indexes of forge-checkouts checkouts, and searches with or
-// without them.
+// routes: indexes of forge-checkouts checkouts and forge-issues issues, and
+// searches with or without them.
 package api
 
 import (
@@ -14,6 +14,7 @@ import (
 	"github.com/r59q/forge-tools/forge-core/forgeapi/forgeauth"
 	"github.com/r59q/forge-tools/forge-core/servicekit"
 	"github.com/r59q/forge-tools/forge-search/library/checkout"
+	"github.com/r59q/forge-tools/forge-search/library/issue"
 	"github.com/r59q/forge-tools/forge-search/library/search"
 	"github.com/r59q/forge-tools/forge-search/library/sqlite"
 	pb "github.com/r59q/forge-tools/forge-search/service/searchpb"
@@ -64,12 +65,18 @@ type Config struct {
 	// Root is where checkout directories are read.
 	Root Root
 
+	// Issues, when set, lists the issues of IndexIssues and
+	// SearchUnindexedIssues, as RemoteIssues does. Without it those fail
+	// with UNIMPLEMENTED.
+	Issues issue.Reader
+
 	// Token is the service token callers must present.
 	Token forgeauth.Credentials
 
-	// Timeout bounds each RPC but IndexCheckout, IndexRepository and
-	// SearchRepository; IndexTimeout bounds those. A SearchRepository of an
-	// index searches within Timeout.
+	// Timeout bounds each RPC but IndexCheckout, IndexRepository,
+	// SearchRepository, IndexIssues and SearchUnindexedIssues;
+	// IndexTimeout bounds those. A SearchRepository of an index searches
+	// within Timeout.
 	Timeout, IndexTimeout time.Duration
 
 	// MaxIndexes is the most indexes IndexCheckout creates. Zero uses
@@ -205,8 +212,13 @@ func code(err error) codes.Code {
 	switch {
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		return servicekit.ForgeCode(err)
-	case errors.Is(err, errBadRequest), errors.Is(err, search.ErrInvalid), errors.Is(err, ErrRejected):
+	case errors.Is(err, errBadRequest), errors.Is(err, search.ErrInvalid), errors.Is(err, ErrRejected),
+		errors.Is(err, ErrIssuesRejected):
 		return codes.InvalidArgument
+	case errors.Is(err, ErrIssuesDenied):
+		return codes.PermissionDenied
+	case errors.Is(err, errNoIssues):
+		return codes.Unimplemented
 	case errors.Is(err, ErrNotFound), errors.Is(err, search.ErrNotFound):
 		return codes.NotFound
 	case errors.Is(err, search.ErrExists):
@@ -217,11 +229,11 @@ func code(err error) codes.Code {
 	case errors.Is(err, errBusy), errors.Is(err, checkout.ErrChanged):
 		return codes.Aborted
 	case errors.Is(err, errTooMany), errors.Is(err, errCheckoutsBusy), errors.Is(err, ErrTooLarge),
-		errors.Is(err, search.ErrTooLarge),
+		errors.Is(err, ErrIssuesExhausted), errors.Is(err, search.ErrTooLarge),
 		errors.Is(err, search.ErrFull),
 		errors.Is(err, sqlite.ErrDiskFull):
 		return codes.ResourceExhausted
-	case errors.Is(err, errUnavailable), errors.Is(err, sqlite.ErrReadOnly):
+	case errors.Is(err, errUnavailable), errors.Is(err, errIssuesUnavailable), errors.Is(err, sqlite.ErrReadOnly):
 		return codes.Unavailable
 	}
 

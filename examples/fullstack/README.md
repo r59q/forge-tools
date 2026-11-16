@@ -185,15 +185,23 @@ jq -n --rawfile c main.go '{files: [{path: "main.go", content: ($c | @base64)}]}
 ## Code search
 
 The search API listens on `127.0.0.1:8095` (REST) and `127.0.0.1:9105`
-(gRPC), authenticated with `FORGE_SEARCH_TOKEN`. It indexes a checkout into a
-named index and searches it, or searches a checkout without an index; both
-give the same matches. It resolves checkouts through the checkouts service
-with `FORGE_CHECKOUTS_TOKEN` and reads their files from the `checkouts-data`
-volume, mounted read-only at `/data`. The `search-data` volume keeps the
-indexes. It holds no forge credentials and never changes checkouts. See its
-[API reference](../../forge-search/service/README.md#api).
+(gRPC), authenticated with `FORGE_SEARCH_TOKEN`. It indexes a checkout, or a
+repository branch, into an index and searches it, or searches without an
+index; both give the same matches. It resolves checkouts through the
+checkouts service with `FORGE_CHECKOUTS_TOKEN` and reads their files from
+the `checkouts-data` volume, mounted read-only at `/data`. To index or
+search a branch it creates a checkout, which fetches the repository, and
+removes it when the call ends; nothing is fetched in the background. The
+`search-data` volume keeps the indexes and the journal of checkouts still
+to remove. It holds no forge credentials and never changes the files of a
+checkout. See its [API reference](../../forge-search/service/README.md#api).
 
 ```sh
+TARGET='{"source": "connection-id", "repository": "owner/repo"}'
+curl -fsS -H "Authorization: Bearer $FORGE_SEARCH_TOKEN" \
+  http://127.0.0.1:8095/v1/repositories:index -d "{\"target\": $TARGET}"
+curl -fsS -H "Authorization: Bearer $FORGE_SEARCH_TOKEN" \
+  http://127.0.0.1:8095/v1/repositories:search -d "{\"target\": $TARGET, \"query\": {\"text\": \"TODO\"}}"
 curl -fsS -H "Authorization: Bearer $FORGE_SEARCH_TOKEN" \
   http://127.0.0.1:8095/v1/indexes/main/checkout -d "{\"checkoutId\": \"$CHECKOUT\"}"
 curl -fsS -H "Authorization: Bearer $FORGE_SEARCH_TOKEN" \

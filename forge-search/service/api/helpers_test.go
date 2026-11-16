@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -37,6 +38,9 @@ const (
 	otherID    = "fedcba9876543210fedcba9876543210"
 )
 
+// repository is the default branch of a test repository.
+var repository = Target{Source: "github", Repository: "octo/demo"}
+
 // now is the time every test server records.
 var now = time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)
 
@@ -50,12 +54,30 @@ func sample() map[string]string {
 	}
 }
 
-// fakeCheckouts holds the checkouts a test server resolves.
+// fakeCheckouts holds the checkouts a test server resolves, and the
+// branches it checks out.
 type fakeCheckouts struct {
 	mu        sync.Mutex
 	checkouts map[string]Checkout
 	err       error
 	calls     int
+
+	// root holds checkout directories; branches are what Create checks out.
+	root     string
+	branches map[Target]branch
+	next     int
+
+	// createErr and removeErr fail Create and Remove; created and removed
+	// list their IDs; creating, when set, runs in Create before it returns.
+	createErr, removeErr error
+	created, removed     []string
+	creating             func(context.Context)
+}
+
+// branch is the commit and files a fake reference points at.
+type branch struct {
+	revision string
+	files    map[string]string
 }
 
 func (f *fakeCheckouts) Checkout(_ context.Context, id string) (Checkout, error) {
@@ -73,6 +95,53 @@ func (f *fakeCheckouts) Checkout(_ context.Context, id string) (Checkout, error)
 	return c, nil
 }
 
+func (f *fakeCheckouts) Create(ctx context.Context, target Target) (Checkout, error) {
+	f.mu.Lock()
+	hook := f.creating
+	b, ok := f.branches[target]
+	err := f.createErr
+	f.next++
+	id := fmt.Sprintf("%032x", f.next)
+	f.mu.Unlock()
+
+	switch {
+	case err != nil:
+		return Checkout{}, err
+	case !ok:
+		return Checkout{}, ErrNotFound
+	}
+
+	dir := filepath.Join(f.root, id)
+	if err := writeFiles(dir, b.files); err != nil {
+		return Checkout{}, err
+	}
+	c := Checkout{ID: id, Revision: b.revision, State: "ready", Location: dir}
+	f.mu.Lock()
+	f.checkouts[id] = c
+	f.created = append(f.created, id)
+	f.mu.Unlock()
+
+	if hook != nil {
+		hook(ctx)
+	}
+	return c, nil
+}
+
+func (f *fakeCheckouts) Remove(_ context.Context, id string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.removeErr != nil {
+		return f.removeErr
+	}
+	if _, ok := f.checkouts[id]; !ok {
+		return ErrNotFound
+	}
+	delete(f.checkouts, id)
+	f.removed = append(f.removed, id)
+	return os.RemoveAll(filepath.Join(f.root, id))
+}
+
 func (f *fakeCheckouts) set(c Checkout) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -85,11 +154,40 @@ func (f *fakeCheckouts) fail(err error) {
 	f.err = err
 }
 
+// branch points a fake reference at a commit with files.
+func (f *fakeCheckouts) branch(target Target, revision string, files map[string]string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.branches[target] = branch{revision: revision, files: files}
+}
+
+// change runs fn with the fake locked.
+func (f *fakeCheckouts) change(fn func(*fakeCheckouts)) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	fn(f)
+}
+
+// leftovers returns the IDs of created checkouts not yet removed.
+func (f *fakeCheckouts) leftovers() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	var ids []string
+	for _, id := range f.created {
+		if _, ok := f.checkouts[id]; ok {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
 // fixture is a server with real SQLite storage and a checkouts root.
 type fixture struct {
 	s         *Server
 	root      string
 	checkouts *fakeCheckouts
+	journal   *DirJournal
 	store     *sqlite.Store
 }
 
@@ -103,10 +201,22 @@ func newFixture(t *testing.T, change func(*Config)) *fixture {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 
-	f := &fixture{root: t.TempDir(), checkouts: &fakeCheckouts{checkouts: map[string]Checkout{}}, store: store}
+	journal, err := OpenJournal(filepath.Join(t.TempDir(), "checkouts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	root := t.TempDir()
+	f := &fixture{
+		root:      root,
+		checkouts: &fakeCheckouts{checkouts: map[string]Checkout{}, root: root, branches: map[Target]branch{}},
+		journal:   journal,
+		store:     store,
+	}
 	config := Config{
 		Engine:       search.NewEngine(store, search.IndexLimits{}),
 		Checkouts:    f.checkouts,
+		Journal:      journal,
 		Root:         Root{Local: f.root},
 		Token:        forgeauth.StaticToken(token),
 		Timeout:      10 * time.Second,
@@ -128,19 +238,43 @@ func newFixture(t *testing.T, change func(*Config)) *fixture {
 func (f *fixture) add(t *testing.T, id, revision string, files map[string]string) {
 	t.Helper()
 	dir := filepath.Join(f.root, id)
-	if err := os.RemoveAll(dir); err != nil {
+	if err := writeFiles(dir, files); err != nil {
 		t.Fatal(err)
+	}
+	f.checkouts.set(Checkout{ID: id, Revision: revision, State: "ready", Location: dir})
+}
+
+// clean fails the test if a created checkout, or its journal entry, is
+// left.
+func (f *fixture) clean(t *testing.T) {
+	t.Helper()
+	journaled, err := f.journal.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if left := f.checkouts.leftovers(); len(left) > 0 || len(journaled) > 0 {
+		t.Fatalf("checkouts left %v, journaled %v", left, journaled)
+	}
+}
+
+// writeFiles replaces dir with the files.
+func writeFiles(dir string, files map[string]string) error {
+	if err := os.RemoveAll(dir); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
 	}
 	for name, content := range files {
 		path := filepath.Join(dir, filepath.FromSlash(name))
 		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-			t.Fatal(err)
+			return err
 		}
 		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
-			t.Fatal(err)
+			return err
 		}
 	}
-	f.checkouts.set(Checkout{ID: id, Revision: revision, State: "ready", Location: dir})
+	return nil
 }
 
 // transport calls one RPC, named by its request type, returning the status
@@ -214,6 +348,10 @@ func route(req proto.Message) (string, string) {
 		return http.MethodPost, "/v1/indexes/" + url.PathEscape(r.GetIndex()) + ":search"
 	case *pb.SearchCheckoutRequest:
 		return http.MethodPost, "/v1/checkouts/" + url.PathEscape(r.GetCheckoutId()) + ":search"
+	case *pb.IndexRepositoryRequest:
+		return http.MethodPost, "/v1/repositories:index"
+	case *pb.SearchRepositoryRequest:
+		return http.MethodPost, "/v1/repositories:search"
 	}
 	panic("no route for " + method(req))
 }
@@ -307,6 +445,8 @@ func requests() []proto.Message {
 		&pb.DeleteIndexRequest{Index: "main"},
 		&pb.SearchIndexRequest{Index: "main", Query: query},
 		&pb.SearchCheckoutRequest{CheckoutId: checkoutID, Query: query},
+		&pb.IndexRepositoryRequest{Target: repository.proto()},
+		&pb.SearchRepositoryRequest{Target: repository.proto(), Query: query},
 	}
 }
 
@@ -316,6 +456,7 @@ func response(req proto.Message) proto.Message {
 	for _, m := range []proto.Message{
 		&pb.IndexCheckoutResponse{}, &pb.ListIndexesResponse{}, &pb.GetIndexResponse{},
 		&pb.DeleteIndexResponse{}, &pb.SearchIndexResponse{}, &pb.SearchCheckoutResponse{},
+		&pb.IndexRepositoryResponse{}, &pb.SearchRepositoryResponse{},
 	} {
 		if string(m.ProtoReflect().Descriptor().FullName()) == name {
 			return m

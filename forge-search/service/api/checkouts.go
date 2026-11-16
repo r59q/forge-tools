@@ -15,18 +15,38 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// ErrNotFound is returned by Checkouts for a checkout that does not exist.
+// ErrNotFound is returned by Checkouts for a checkout, or a source,
+// repository or reference, that does not exist.
 var ErrNotFound = errors.New("api: checkout not found")
+
+// ErrRejected is returned by Checkouts.Create for a target forge-checkouts
+// refuses as invalid.
+var ErrRejected = errors.New("api: target rejected")
+
+// ErrTooLarge is returned by Checkouts.Create for a repository over a limit
+// of forge-checkouts.
+var ErrTooLarge = errors.New("api: repository too large to check out")
+
+// ErrConflict is returned by Checkouts.Create when forge-checkouts refuses
+// the checkout in its current state.
+var ErrConflict = errors.New("api: checkout conflicts")
 
 // Checkout is what the server needs to know of a forge-checkouts checkout.
 type Checkout struct {
 	ID, Revision, State, Location string
 }
 
-// Checkouts looks up checkouts by ID. Errors other than ErrNotFound and
-// context errors are reported as Unavailable.
+// Checkouts looks up, creates and removes checkouts. Errors other than
+// ErrNotFound, ErrRejected and context errors are reported as Unavailable.
 type Checkouts interface {
+	// Checkout looks up a checkout by ID.
 	Checkout(ctx context.Context, id string) (Checkout, error)
+
+	// Create checks a target out at the current commit of its reference.
+	Create(ctx context.Context, target Target) (Checkout, error)
+
+	// Remove removes a checkout and discards its files.
+	Remove(ctx context.Context, id string) error
 }
 
 // Root is the directory that holds checkout directories, each named by its
@@ -127,22 +147,76 @@ func NewRemote(client checkoutspb.CheckoutsServiceClient, token forgeauth.Creden
 // Checkout returns the checkout with id. Errors never hold the token or the
 // response of forge-checkouts.
 func (r *Remote) Checkout(ctx context.Context, id string) (Checkout, error) {
+	ctx, err := r.authorize(ctx)
+	if err != nil {
+		return Checkout{}, err
+	}
+
+	response, err := r.client.GetCheckout(ctx, &checkoutspb.GetCheckoutRequest{Id: id})
+	if err != nil {
+		return Checkout{}, remoteError(ctx, err)
+	}
+	return checkoutOf(response.GetCheckout()), nil
+}
+
+// Create creates a checkout of target in the default worktree mode.
+func (r *Remote) Create(ctx context.Context, target Target) (Checkout, error) {
+	ctx, err := r.authorize(ctx)
+	if err != nil {
+		return Checkout{}, err
+	}
+
+	response, err := r.client.CreateCheckout(ctx, &checkoutspb.CreateCheckoutRequest{
+		Repository: &checkoutspb.Repository{Source: target.Source, Path: target.Repository},
+		Reference:  target.Reference,
+	})
+	if err != nil {
+		return Checkout{}, remoteError(ctx, err)
+	}
+	return checkoutOf(response.GetCheckout()), nil
+}
+
+// Remove removes the checkout with id, discarding its files.
+func (r *Remote) Remove(ctx context.Context, id string) error {
+	ctx, err := r.authorize(ctx)
+	if err != nil {
+		return err
+	}
+
+	_, err = r.client.RemoveCheckout(ctx, &checkoutspb.RemoveCheckoutRequest{Id: id, Discard: true})
+	if err != nil {
+		return remoteError(ctx, err)
+	}
+	return nil
+}
+
+// authorize adds the token to the outgoing metadata of ctx.
+func (r *Remote) authorize(ctx context.Context) (context.Context, error) {
 	token, err := r.token.Token(ctx)
 	if err != nil {
-		return Checkout{}, errUnavailable
+		return nil, errUnavailable
 	}
+	return metadata.NewOutgoingContext(ctx, metadata.Pairs("authorization", "Bearer "+token)), nil
+}
 
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs("authorization", "Bearer "+token))
-	response, err := r.client.GetCheckout(ctx, &checkoutspb.GetCheckoutRequest{Id: id})
+// remoteError maps an error of forge-checkouts to one that holds none of
+// its message.
+func remoteError(ctx context.Context, err error) error {
 	switch {
 	case ctx.Err() != nil:
-		return Checkout{}, ctx.Err()
+		return ctx.Err()
 	case status.Code(err) == codes.NotFound:
-		return Checkout{}, ErrNotFound
-	case err != nil:
-		return Checkout{}, errUnavailable
+		return ErrNotFound
+	case status.Code(err) == codes.InvalidArgument:
+		return ErrRejected
+	case status.Code(err) == codes.ResourceExhausted:
+		return ErrTooLarge
+	case status.Code(err) == codes.FailedPrecondition:
+		return ErrConflict
 	}
+	return errUnavailable
+}
 
-	c := response.GetCheckout()
-	return Checkout{ID: c.GetId(), Revision: c.GetRevision(), State: c.GetState(), Location: c.GetLocation()}, nil
+func checkoutOf(c *checkoutspb.Checkout) Checkout {
+	return Checkout{ID: c.GetId(), Revision: c.GetRevision(), State: c.GetState(), Location: c.GetLocation()}
 }

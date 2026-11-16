@@ -19,12 +19,14 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	SearchService_IndexCheckout_FullMethodName  = "/forge.search.v1.SearchService/IndexCheckout"
-	SearchService_ListIndexes_FullMethodName    = "/forge.search.v1.SearchService/ListIndexes"
-	SearchService_GetIndex_FullMethodName       = "/forge.search.v1.SearchService/GetIndex"
-	SearchService_DeleteIndex_FullMethodName    = "/forge.search.v1.SearchService/DeleteIndex"
-	SearchService_SearchIndex_FullMethodName    = "/forge.search.v1.SearchService/SearchIndex"
-	SearchService_SearchCheckout_FullMethodName = "/forge.search.v1.SearchService/SearchCheckout"
+	SearchService_IndexCheckout_FullMethodName    = "/forge.search.v1.SearchService/IndexCheckout"
+	SearchService_ListIndexes_FullMethodName      = "/forge.search.v1.SearchService/ListIndexes"
+	SearchService_GetIndex_FullMethodName         = "/forge.search.v1.SearchService/GetIndex"
+	SearchService_DeleteIndex_FullMethodName      = "/forge.search.v1.SearchService/DeleteIndex"
+	SearchService_SearchIndex_FullMethodName      = "/forge.search.v1.SearchService/SearchIndex"
+	SearchService_SearchCheckout_FullMethodName   = "/forge.search.v1.SearchService/SearchCheckout"
+	SearchService_IndexRepository_FullMethodName  = "/forge.search.v1.SearchService/IndexRepository"
+	SearchService_SearchRepository_FullMethodName = "/forge.search.v1.SearchService/SearchRepository"
 )
 
 // SearchServiceClient is the client API for SearchService service.
@@ -42,8 +44,14 @@ const (
 // unindexed searches of the same files return the same matches in the same
 // order.
 //
+// A repository reference is checked out by the service itself, through
+// forge-checkouts, only within an IndexRepository or SearchRepository call,
+// and the checkout is removed before the call returns. The service never
+// fetches code on its own.
+//
 // Errors carry only a status code: INVALID_ARGUMENT for an invalid field,
-// NOT_FOUND for a missing index or checkout,
+// NOT_FOUND for a missing index or checkout, or an unknown source,
+// repository or reference,
 // FAILED_PRECONDITION for a checkout that is not ready or not readable here,
 // ABORTED for an index already being indexed or files that changed while
 // read, RESOURCE_EXHAUSTED for a request, checkout or index over a limit,
@@ -68,6 +76,16 @@ type SearchServiceClient interface {
 	// SearchCheckout reads and searches a checkout's files without an index,
 	// and keeps nothing. POST /v1/checkouts/{checkout_id}:search.
 	SearchCheckout(ctx context.Context, in *SearchCheckoutRequest, opts ...grpc.CallOption) (*SearchCheckoutResponse, error)
+	// IndexRepository checks out a repository reference at its current
+	// commit, syncs it into the index of that reference and removes the
+	// checkout. The service names the index and creates it if needed. An
+	// index already at that commit is left as it is. It runs within the call.
+	// POST /v1/repositories:index.
+	IndexRepository(ctx context.Context, in *IndexRepositoryRequest, opts ...grpc.CallOption) (*IndexRepositoryResponse, error)
+	// SearchRepository searches the index of a repository reference. Without
+	// one, it checks the reference out, searches it unindexed and removes the
+	// checkout. POST /v1/repositories:search.
+	SearchRepository(ctx context.Context, in *SearchRepositoryRequest, opts ...grpc.CallOption) (*SearchRepositoryResponse, error)
 }
 
 type searchServiceClient struct {
@@ -138,6 +156,26 @@ func (c *searchServiceClient) SearchCheckout(ctx context.Context, in *SearchChec
 	return out, nil
 }
 
+func (c *searchServiceClient) IndexRepository(ctx context.Context, in *IndexRepositoryRequest, opts ...grpc.CallOption) (*IndexRepositoryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(IndexRepositoryResponse)
+	err := c.cc.Invoke(ctx, SearchService_IndexRepository_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *searchServiceClient) SearchRepository(ctx context.Context, in *SearchRepositoryRequest, opts ...grpc.CallOption) (*SearchRepositoryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SearchRepositoryResponse)
+	err := c.cc.Invoke(ctx, SearchService_SearchRepository_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SearchServiceServer is the server API for SearchService service.
 // All implementations must embed UnimplementedSearchServiceServer
 // for forward compatibility.
@@ -153,8 +191,14 @@ func (c *searchServiceClient) SearchCheckout(ctx context.Context, in *SearchChec
 // unindexed searches of the same files return the same matches in the same
 // order.
 //
+// A repository reference is checked out by the service itself, through
+// forge-checkouts, only within an IndexRepository or SearchRepository call,
+// and the checkout is removed before the call returns. The service never
+// fetches code on its own.
+//
 // Errors carry only a status code: INVALID_ARGUMENT for an invalid field,
-// NOT_FOUND for a missing index or checkout,
+// NOT_FOUND for a missing index or checkout, or an unknown source,
+// repository or reference,
 // FAILED_PRECONDITION for a checkout that is not ready or not readable here,
 // ABORTED for an index already being indexed or files that changed while
 // read, RESOURCE_EXHAUSTED for a request, checkout or index over a limit,
@@ -179,6 +223,16 @@ type SearchServiceServer interface {
 	// SearchCheckout reads and searches a checkout's files without an index,
 	// and keeps nothing. POST /v1/checkouts/{checkout_id}:search.
 	SearchCheckout(context.Context, *SearchCheckoutRequest) (*SearchCheckoutResponse, error)
+	// IndexRepository checks out a repository reference at its current
+	// commit, syncs it into the index of that reference and removes the
+	// checkout. The service names the index and creates it if needed. An
+	// index already at that commit is left as it is. It runs within the call.
+	// POST /v1/repositories:index.
+	IndexRepository(context.Context, *IndexRepositoryRequest) (*IndexRepositoryResponse, error)
+	// SearchRepository searches the index of a repository reference. Without
+	// one, it checks the reference out, searches it unindexed and removes the
+	// checkout. POST /v1/repositories:search.
+	SearchRepository(context.Context, *SearchRepositoryRequest) (*SearchRepositoryResponse, error)
 	mustEmbedUnimplementedSearchServiceServer()
 }
 
@@ -206,6 +260,12 @@ func (UnimplementedSearchServiceServer) SearchIndex(context.Context, *SearchInde
 }
 func (UnimplementedSearchServiceServer) SearchCheckout(context.Context, *SearchCheckoutRequest) (*SearchCheckoutResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SearchCheckout not implemented")
+}
+func (UnimplementedSearchServiceServer) IndexRepository(context.Context, *IndexRepositoryRequest) (*IndexRepositoryResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method IndexRepository not implemented")
+}
+func (UnimplementedSearchServiceServer) SearchRepository(context.Context, *SearchRepositoryRequest) (*SearchRepositoryResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SearchRepository not implemented")
 }
 func (UnimplementedSearchServiceServer) mustEmbedUnimplementedSearchServiceServer() {}
 func (UnimplementedSearchServiceServer) testEmbeddedByValue()                       {}
@@ -336,6 +396,42 @@ func _SearchService_SearchCheckout_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SearchService_IndexRepository_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(IndexRepositoryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SearchServiceServer).IndexRepository(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SearchService_IndexRepository_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SearchServiceServer).IndexRepository(ctx, req.(*IndexRepositoryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SearchService_SearchRepository_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SearchRepositoryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SearchServiceServer).SearchRepository(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SearchService_SearchRepository_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SearchServiceServer).SearchRepository(ctx, req.(*SearchRepositoryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SearchService_ServiceDesc is the grpc.ServiceDesc for SearchService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -366,6 +462,14 @@ var SearchService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SearchCheckout",
 			Handler:    _SearchService_SearchCheckout_Handler,
+		},
+		{
+			MethodName: "IndexRepository",
+			Handler:    _SearchService_IndexRepository_Handler,
+		},
+		{
+			MethodName: "SearchRepository",
+			Handler:    _SearchService_SearchRepository_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

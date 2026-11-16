@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/r59q/forge-tools/forge-search/library/checkout"
@@ -19,8 +20,13 @@ import (
 const KindRecord search.Kind = "checkout-index"
 
 // IndexCheckout syncs a checkout into an index, creating the index first.
+// Names IndexRepository uses, starting with "repo-", are refused.
 func (s *Server) IndexCheckout(ctx context.Context, r *pb.IndexCheckoutRequest) (*pb.IndexCheckoutResponse, error) {
 	return call(s, ctx, s.config.IndexTimeout, func(ctx context.Context, engine *search.Engine) (*pb.IndexCheckoutResponse, error) {
+		if strings.HasPrefix(r.GetIndex(), repositoryPrefix) {
+			return nil, errBadRequest
+		}
+
 		_, err := engine.Index(ctx, r.GetIndex())
 		exists := err == nil
 		if err != nil && !errors.Is(err, search.ErrNotFound) {
@@ -192,12 +198,23 @@ func (s *Server) status(ctx context.Context, index string) (*pb.Index, error) {
 	if err != nil {
 		return nil, err
 	}
+	targets, err := engine.Documents(ctx, index, search.Filter{Kind: KindTarget})
+	if err != nil {
+		return nil, err
+	}
 
 	status := &pb.Index{
 		Name:      info.Name,
-		Documents: int64(info.Documents - len(records)),
+		Documents: int64(info.Documents - len(records) - len(targets)),
 		Bytes:     info.Bytes,
 		Revision:  info.Marker,
+	}
+	if len(targets) > 0 {
+		t, err := parseTarget(targets[0].ID)
+		if err != nil {
+			return nil, fmt.Errorf("index target: %w", err)
+		}
+		status.Target = t.proto()
 	}
 	if info.Marker == "" || len(records) == 0 {
 		return status, nil

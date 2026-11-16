@@ -23,6 +23,75 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// RepositoryTarget names a repository reference on a forge.
+type RepositoryTarget struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// source is the forge-connector connection ID: 1-128 bytes of A-Z, a-z,
+	// 0-9, "_" and "-".
+	Source string `protobuf:"bytes,1,opt,name=source,proto3" json:"source,omitempty"`
+	// repository is the repository path, such as "owner/name": at most 256
+	// bytes, 2-16 segments of A-Z, a-z, 0-9, ".", "_" and "-", other than "."
+	// and "..".
+	Repository string `protobuf:"bytes,2,opt,name=repository,proto3" json:"repository,omitempty"`
+	// reference is a branch, tag or commit: at most 256 bytes of a valid Git
+	// reference name. Empty, or "HEAD", is the default branch, which
+	// responses name "".
+	Reference     string `protobuf:"bytes,3,opt,name=reference,proto3" json:"reference,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RepositoryTarget) Reset() {
+	*x = RepositoryTarget{}
+	mi := &file_forge_search_v1_search_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RepositoryTarget) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RepositoryTarget) ProtoMessage() {}
+
+func (x *RepositoryTarget) ProtoReflect() protoreflect.Message {
+	mi := &file_forge_search_v1_search_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RepositoryTarget.ProtoReflect.Descriptor instead.
+func (*RepositoryTarget) Descriptor() ([]byte, []int) {
+	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *RepositoryTarget) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+func (x *RepositoryTarget) GetRepository() string {
+	if x != nil {
+		return x.Repository
+	}
+	return ""
+}
+
+func (x *RepositoryTarget) GetReference() string {
+	if x != nil {
+		return x.Reference
+	}
+	return ""
+}
+
 // Index is the status of an index.
 type Index struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -39,14 +108,17 @@ type Index struct {
 	// checkout_id is the checkout of the last completed indexing.
 	CheckoutId string `protobuf:"bytes,5,opt,name=checkout_id,json=checkoutId,proto3" json:"checkout_id,omitempty"`
 	// updated_at is when the last completed indexing finished.
-	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	UpdatedAt *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	// target is the repository reference of an index IndexRepository made.
+	// Its checkout_id names a checkout that has since been removed.
+	Target        *RepositoryTarget `protobuf:"bytes,7,opt,name=target,proto3" json:"target,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Index) Reset() {
 	*x = Index{}
-	mi := &file_forge_search_v1_search_proto_msgTypes[0]
+	mi := &file_forge_search_v1_search_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -58,7 +130,7 @@ func (x *Index) String() string {
 func (*Index) ProtoMessage() {}
 
 func (x *Index) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_search_v1_search_proto_msgTypes[0]
+	mi := &file_forge_search_v1_search_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -71,7 +143,7 @@ func (x *Index) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Index.ProtoReflect.Descriptor instead.
 func (*Index) Descriptor() ([]byte, []int) {
-	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{0}
+	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *Index) GetName() string {
@@ -116,6 +188,13 @@ func (x *Index) GetUpdatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *Index) GetTarget() *RepositoryTarget {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
 // FileState counts the checkout files left out.
 type FileState struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -133,7 +212,7 @@ type FileState struct {
 
 func (x *FileState) Reset() {
 	*x = FileState{}
-	mi := &file_forge_search_v1_search_proto_msgTypes[1]
+	mi := &file_forge_search_v1_search_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -145,7 +224,7 @@ func (x *FileState) String() string {
 func (*FileState) ProtoMessage() {}
 
 func (x *FileState) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_search_v1_search_proto_msgTypes[1]
+	mi := &file_forge_search_v1_search_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -158,7 +237,7 @@ func (x *FileState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileState.ProtoReflect.Descriptor instead.
 func (*FileState) Descriptor() ([]byte, []int) {
-	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{1}
+	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *FileState) GetTruncated() bool {
@@ -185,7 +264,8 @@ func (x *FileState) GetUnsupported() int32 {
 // IndexCheckoutRequest names the checkout to index.
 type IndexCheckoutRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// index is the index name. It is created if it does not exist.
+	// index is the index name. It is created if it does not exist. Names
+	// starting with "repo-" belong to IndexRepository and are refused.
 	Index string `protobuf:"bytes,1,opt,name=index,proto3" json:"index,omitempty"`
 	// checkout_id is the forge-checkouts checkout ID.
 	CheckoutId    string `protobuf:"bytes,2,opt,name=checkout_id,json=checkoutId,proto3" json:"checkout_id,omitempty"`
@@ -195,7 +275,7 @@ type IndexCheckoutRequest struct {
 
 func (x *IndexCheckoutRequest) Reset() {
 	*x = IndexCheckoutRequest{}
-	mi := &file_forge_search_v1_search_proto_msgTypes[2]
+	mi := &file_forge_search_v1_search_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -207,7 +287,7 @@ func (x *IndexCheckoutRequest) String() string {
 func (*IndexCheckoutRequest) ProtoMessage() {}
 
 func (x *IndexCheckoutRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_search_v1_search_proto_msgTypes[2]
+	mi := &file_forge_search_v1_search_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -220,7 +300,7 @@ func (x *IndexCheckoutRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IndexCheckoutRequest.ProtoReflect.Descriptor instead.
 func (*IndexCheckoutRequest) Descriptor() ([]byte, []int) {
-	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{2}
+	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *IndexCheckoutRequest) GetIndex() string {
@@ -255,7 +335,7 @@ type IndexCheckoutResponse struct {
 
 func (x *IndexCheckoutResponse) Reset() {
 	*x = IndexCheckoutResponse{}
-	mi := &file_forge_search_v1_search_proto_msgTypes[3]
+	mi := &file_forge_search_v1_search_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -267,7 +347,7 @@ func (x *IndexCheckoutResponse) String() string {
 func (*IndexCheckoutResponse) ProtoMessage() {}
 
 func (x *IndexCheckoutResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_search_v1_search_proto_msgTypes[3]
+	mi := &file_forge_search_v1_search_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -280,7 +360,7 @@ func (x *IndexCheckoutResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IndexCheckoutResponse.ProtoReflect.Descriptor instead.
 func (*IndexCheckoutResponse) Descriptor() ([]byte, []int) {
-	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{3}
+	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *IndexCheckoutResponse) GetIndex() *Index {
@@ -334,7 +414,7 @@ type ListIndexesRequest struct {
 
 func (x *ListIndexesRequest) Reset() {
 	*x = ListIndexesRequest{}
-	mi := &file_forge_search_v1_search_proto_msgTypes[4]
+	mi := &file_forge_search_v1_search_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -346,7 +426,7 @@ func (x *ListIndexesRequest) String() string {
 func (*ListIndexesRequest) ProtoMessage() {}
 
 func (x *ListIndexesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_search_v1_search_proto_msgTypes[4]
+	mi := &file_forge_search_v1_search_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -359,7 +439,7 @@ func (x *ListIndexesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListIndexesRequest.ProtoReflect.Descriptor instead.
 func (*ListIndexesRequest) Descriptor() ([]byte, []int) {
-	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{4}
+	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{5}
 }
 
 // ListIndexesResponse holds every index, by name.
@@ -372,7 +452,7 @@ type ListIndexesResponse struct {
 
 func (x *ListIndexesResponse) Reset() {
 	*x = ListIndexesResponse{}
-	mi := &file_forge_search_v1_search_proto_msgTypes[5]
+	mi := &file_forge_search_v1_search_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -384,7 +464,7 @@ func (x *ListIndexesResponse) String() string {
 func (*ListIndexesResponse) ProtoMessage() {}
 
 func (x *ListIndexesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_search_v1_search_proto_msgTypes[5]
+	mi := &file_forge_search_v1_search_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -397,7 +477,7 @@ func (x *ListIndexesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListIndexesResponse.ProtoReflect.Descriptor instead.
 func (*ListIndexesResponse) Descriptor() ([]byte, []int) {
-	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{5}
+	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ListIndexesResponse) GetIndexes() []*Index {
@@ -417,7 +497,7 @@ type GetIndexRequest struct {
 
 func (x *GetIndexRequest) Reset() {
 	*x = GetIndexRequest{}
-	mi := &file_forge_search_v1_search_proto_msgTypes[6]
+	mi := &file_forge_search_v1_search_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -429,7 +509,7 @@ func (x *GetIndexRequest) String() string {
 func (*GetIndexRequest) ProtoMessage() {}
 
 func (x *GetIndexRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_search_v1_search_proto_msgTypes[6]
+	mi := &file_forge_search_v1_search_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -442,7 +522,7 @@ func (x *GetIndexRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetIndexRequest.ProtoReflect.Descriptor instead.
 func (*GetIndexRequest) Descriptor() ([]byte, []int) {
-	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{6}
+	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *GetIndexRequest) GetIndex() string {
@@ -462,7 +542,7 @@ type GetIndexResponse struct {
 
 func (x *GetIndexResponse) Reset() {
 	*x = GetIndexResponse{}
-	mi := &file_forge_search_v1_search_proto_msgTypes[7]
+	mi := &file_forge_search_v1_search_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -474,7 +554,7 @@ func (x *GetIndexResponse) String() string {
 func (*GetIndexResponse) ProtoMessage() {}
 
 func (x *GetIndexResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_search_v1_search_proto_msgTypes[7]
+	mi := &file_forge_search_v1_search_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -487,7 +567,7 @@ func (x *GetIndexResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetIndexResponse.ProtoReflect.Descriptor instead.
 func (*GetIndexResponse) Descriptor() ([]byte, []int) {
-	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{7}
+	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *GetIndexResponse) GetIndex() *Index {
@@ -507,7 +587,7 @@ type DeleteIndexRequest struct {
 
 func (x *DeleteIndexRequest) Reset() {
 	*x = DeleteIndexRequest{}
-	mi := &file_forge_search_v1_search_proto_msgTypes[8]
+	mi := &file_forge_search_v1_search_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -519,7 +599,7 @@ func (x *DeleteIndexRequest) String() string {
 func (*DeleteIndexRequest) ProtoMessage() {}
 
 func (x *DeleteIndexRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_search_v1_search_proto_msgTypes[8]
+	mi := &file_forge_search_v1_search_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -532,7 +612,7 @@ func (x *DeleteIndexRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteIndexRequest.ProtoReflect.Descriptor instead.
 func (*DeleteIndexRequest) Descriptor() ([]byte, []int) {
-	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{8}
+	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *DeleteIndexRequest) GetIndex() string {
@@ -551,7 +631,7 @@ type DeleteIndexResponse struct {
 
 func (x *DeleteIndexResponse) Reset() {
 	*x = DeleteIndexResponse{}
-	mi := &file_forge_search_v1_search_proto_msgTypes[9]
+	mi := &file_forge_search_v1_search_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -563,7 +643,7 @@ func (x *DeleteIndexResponse) String() string {
 func (*DeleteIndexResponse) ProtoMessage() {}
 
 func (x *DeleteIndexResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_search_v1_search_proto_msgTypes[9]
+	mi := &file_forge_search_v1_search_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -576,7 +656,7 @@ func (x *DeleteIndexResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteIndexResponse.ProtoReflect.Descriptor instead.
 func (*DeleteIndexResponse) Descriptor() ([]byte, []int) {
-	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{9}
+	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{10}
 }
 
 // CodeQuery is what to search for.
@@ -595,7 +675,7 @@ type CodeQuery struct {
 
 func (x *CodeQuery) Reset() {
 	*x = CodeQuery{}
-	mi := &file_forge_search_v1_search_proto_msgTypes[10]
+	mi := &file_forge_search_v1_search_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -607,7 +687,7 @@ func (x *CodeQuery) String() string {
 func (*CodeQuery) ProtoMessage() {}
 
 func (x *CodeQuery) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_search_v1_search_proto_msgTypes[10]
+	mi := &file_forge_search_v1_search_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -620,7 +700,7 @@ func (x *CodeQuery) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CodeQuery.ProtoReflect.Descriptor instead.
 func (*CodeQuery) Descriptor() ([]byte, []int) {
-	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{10}
+	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *CodeQuery) GetText() string {
@@ -658,7 +738,7 @@ type Range struct {
 
 func (x *Range) Reset() {
 	*x = Range{}
-	mi := &file_forge_search_v1_search_proto_msgTypes[11]
+	mi := &file_forge_search_v1_search_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -670,7 +750,7 @@ func (x *Range) String() string {
 func (*Range) ProtoMessage() {}
 
 func (x *Range) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_search_v1_search_proto_msgTypes[11]
+	mi := &file_forge_search_v1_search_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -683,7 +763,7 @@ func (x *Range) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Range.ProtoReflect.Descriptor instead.
 func (*Range) Descriptor() ([]byte, []int) {
-	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{11}
+	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *Range) GetStartLine() int32 {
@@ -734,7 +814,7 @@ type CodeMatch struct {
 
 func (x *CodeMatch) Reset() {
 	*x = CodeMatch{}
-	mi := &file_forge_search_v1_search_proto_msgTypes[12]
+	mi := &file_forge_search_v1_search_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -746,7 +826,7 @@ func (x *CodeMatch) String() string {
 func (*CodeMatch) ProtoMessage() {}
 
 func (x *CodeMatch) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_search_v1_search_proto_msgTypes[12]
+	mi := &file_forge_search_v1_search_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -759,7 +839,7 @@ func (x *CodeMatch) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CodeMatch.ProtoReflect.Descriptor instead.
 func (*CodeMatch) Descriptor() ([]byte, []int) {
-	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{12}
+	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *CodeMatch) GetPath() string {
@@ -812,7 +892,7 @@ type SearchState struct {
 
 func (x *SearchState) Reset() {
 	*x = SearchState{}
-	mi := &file_forge_search_v1_search_proto_msgTypes[13]
+	mi := &file_forge_search_v1_search_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -824,7 +904,7 @@ func (x *SearchState) String() string {
 func (*SearchState) ProtoMessage() {}
 
 func (x *SearchState) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_search_v1_search_proto_msgTypes[13]
+	mi := &file_forge_search_v1_search_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -837,7 +917,7 @@ func (x *SearchState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchState.ProtoReflect.Descriptor instead.
 func (*SearchState) Descriptor() ([]byte, []int) {
-	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{13}
+	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *SearchState) GetTruncated() bool {
@@ -865,7 +945,7 @@ type SearchIndexRequest struct {
 
 func (x *SearchIndexRequest) Reset() {
 	*x = SearchIndexRequest{}
-	mi := &file_forge_search_v1_search_proto_msgTypes[14]
+	mi := &file_forge_search_v1_search_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -877,7 +957,7 @@ func (x *SearchIndexRequest) String() string {
 func (*SearchIndexRequest) ProtoMessage() {}
 
 func (x *SearchIndexRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_search_v1_search_proto_msgTypes[14]
+	mi := &file_forge_search_v1_search_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -890,7 +970,7 @@ func (x *SearchIndexRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchIndexRequest.ProtoReflect.Descriptor instead.
 func (*SearchIndexRequest) Descriptor() ([]byte, []int) {
-	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{14}
+	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *SearchIndexRequest) GetIndex() string {
@@ -920,7 +1000,7 @@ type SearchIndexResponse struct {
 
 func (x *SearchIndexResponse) Reset() {
 	*x = SearchIndexResponse{}
-	mi := &file_forge_search_v1_search_proto_msgTypes[15]
+	mi := &file_forge_search_v1_search_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -932,7 +1012,7 @@ func (x *SearchIndexResponse) String() string {
 func (*SearchIndexResponse) ProtoMessage() {}
 
 func (x *SearchIndexResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_search_v1_search_proto_msgTypes[15]
+	mi := &file_forge_search_v1_search_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -945,7 +1025,7 @@ func (x *SearchIndexResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchIndexResponse.ProtoReflect.Descriptor instead.
 func (*SearchIndexResponse) Descriptor() ([]byte, []int) {
-	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{15}
+	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *SearchIndexResponse) GetMatches() []*CodeMatch {
@@ -980,7 +1060,7 @@ type SearchCheckoutRequest struct {
 
 func (x *SearchCheckoutRequest) Reset() {
 	*x = SearchCheckoutRequest{}
-	mi := &file_forge_search_v1_search_proto_msgTypes[16]
+	mi := &file_forge_search_v1_search_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -992,7 +1072,7 @@ func (x *SearchCheckoutRequest) String() string {
 func (*SearchCheckoutRequest) ProtoMessage() {}
 
 func (x *SearchCheckoutRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_search_v1_search_proto_msgTypes[16]
+	mi := &file_forge_search_v1_search_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1005,7 +1085,7 @@ func (x *SearchCheckoutRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchCheckoutRequest.ProtoReflect.Descriptor instead.
 func (*SearchCheckoutRequest) Descriptor() ([]byte, []int) {
-	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{16}
+	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *SearchCheckoutRequest) GetCheckoutId() string {
@@ -1037,7 +1117,7 @@ type SearchCheckoutResponse struct {
 
 func (x *SearchCheckoutResponse) Reset() {
 	*x = SearchCheckoutResponse{}
-	mi := &file_forge_search_v1_search_proto_msgTypes[17]
+	mi := &file_forge_search_v1_search_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1049,7 +1129,7 @@ func (x *SearchCheckoutResponse) String() string {
 func (*SearchCheckoutResponse) ProtoMessage() {}
 
 func (x *SearchCheckoutResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_search_v1_search_proto_msgTypes[17]
+	mi := &file_forge_search_v1_search_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1062,7 +1142,7 @@ func (x *SearchCheckoutResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchCheckoutResponse.ProtoReflect.Descriptor instead.
 func (*SearchCheckoutResponse) Descriptor() ([]byte, []int) {
-	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{17}
+	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *SearchCheckoutResponse) GetMatches() []*CodeMatch {
@@ -1093,11 +1173,294 @@ func (x *SearchCheckoutResponse) GetFiles() *FileState {
 	return nil
 }
 
+// IndexRepositoryRequest names the repository reference to index.
+type IndexRepositoryRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Target        *RepositoryTarget      `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IndexRepositoryRequest) Reset() {
+	*x = IndexRepositoryRequest{}
+	mi := &file_forge_search_v1_search_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IndexRepositoryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IndexRepositoryRequest) ProtoMessage() {}
+
+func (x *IndexRepositoryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_forge_search_v1_search_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IndexRepositoryRequest.ProtoReflect.Descriptor instead.
+func (*IndexRepositoryRequest) Descriptor() ([]byte, []int) {
+	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *IndexRepositoryRequest) GetTarget() *RepositoryTarget {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
+// IndexRepositoryResponse is the index after the sync and what it changed.
+type IndexRepositoryResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Index *Index                 `protobuf:"bytes,1,opt,name=index,proto3" json:"index,omitempty"`
+	// added, replaced, removed, unchanged and files are as in
+	// IndexCheckoutResponse. They are zero when up_to_date.
+	Added     int32      `protobuf:"varint,2,opt,name=added,proto3" json:"added,omitempty"`
+	Replaced  int32      `protobuf:"varint,3,opt,name=replaced,proto3" json:"replaced,omitempty"`
+	Removed   int32      `protobuf:"varint,4,opt,name=removed,proto3" json:"removed,omitempty"`
+	Unchanged int32      `protobuf:"varint,5,opt,name=unchanged,proto3" json:"unchanged,omitempty"`
+	Files     *FileState `protobuf:"bytes,6,opt,name=files,proto3" json:"files,omitempty"`
+	// up_to_date is set when the index already held the current commit, so
+	// that no file was read or written.
+	UpToDate      bool `protobuf:"varint,7,opt,name=up_to_date,json=upToDate,proto3" json:"up_to_date,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IndexRepositoryResponse) Reset() {
+	*x = IndexRepositoryResponse{}
+	mi := &file_forge_search_v1_search_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IndexRepositoryResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IndexRepositoryResponse) ProtoMessage() {}
+
+func (x *IndexRepositoryResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_forge_search_v1_search_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IndexRepositoryResponse.ProtoReflect.Descriptor instead.
+func (*IndexRepositoryResponse) Descriptor() ([]byte, []int) {
+	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *IndexRepositoryResponse) GetIndex() *Index {
+	if x != nil {
+		return x.Index
+	}
+	return nil
+}
+
+func (x *IndexRepositoryResponse) GetAdded() int32 {
+	if x != nil {
+		return x.Added
+	}
+	return 0
+}
+
+func (x *IndexRepositoryResponse) GetReplaced() int32 {
+	if x != nil {
+		return x.Replaced
+	}
+	return 0
+}
+
+func (x *IndexRepositoryResponse) GetRemoved() int32 {
+	if x != nil {
+		return x.Removed
+	}
+	return 0
+}
+
+func (x *IndexRepositoryResponse) GetUnchanged() int32 {
+	if x != nil {
+		return x.Unchanged
+	}
+	return 0
+}
+
+func (x *IndexRepositoryResponse) GetFiles() *FileState {
+	if x != nil {
+		return x.Files
+	}
+	return nil
+}
+
+func (x *IndexRepositoryResponse) GetUpToDate() bool {
+	if x != nil {
+		return x.UpToDate
+	}
+	return false
+}
+
+// SearchRepositoryRequest searches a repository reference.
+type SearchRepositoryRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Target        *RepositoryTarget      `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
+	Query         *CodeQuery             `protobuf:"bytes,2,opt,name=query,proto3" json:"query,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SearchRepositoryRequest) Reset() {
+	*x = SearchRepositoryRequest{}
+	mi := &file_forge_search_v1_search_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SearchRepositoryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SearchRepositoryRequest) ProtoMessage() {}
+
+func (x *SearchRepositoryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_forge_search_v1_search_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SearchRepositoryRequest.ProtoReflect.Descriptor instead.
+func (*SearchRepositoryRequest) Descriptor() ([]byte, []int) {
+	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *SearchRepositoryRequest) GetTarget() *RepositoryTarget {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
+func (x *SearchRepositoryRequest) GetQuery() *CodeQuery {
+	if x != nil {
+		return x.Query
+	}
+	return nil
+}
+
+// SearchRepositoryResponse holds the matches in path order, then position.
+type SearchRepositoryResponse struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Matches []*CodeMatch           `protobuf:"bytes,1,rep,name=matches,proto3" json:"matches,omitempty"`
+	State   *SearchState           `protobuf:"bytes,2,opt,name=state,proto3" json:"state,omitempty"`
+	// revision is Index.revision of the index searched, or the commit of the
+	// temporary checkout.
+	Revision string `protobuf:"bytes,3,opt,name=revision,proto3" json:"revision,omitempty"`
+	// index is the status of the index searched. It is unset for an
+	// unindexed search.
+	Index *Index `protobuf:"bytes,4,opt,name=index,proto3" json:"index,omitempty"`
+	// files counts the files left out of an unindexed search.
+	Files         *FileState `protobuf:"bytes,5,opt,name=files,proto3" json:"files,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SearchRepositoryResponse) Reset() {
+	*x = SearchRepositoryResponse{}
+	mi := &file_forge_search_v1_search_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SearchRepositoryResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SearchRepositoryResponse) ProtoMessage() {}
+
+func (x *SearchRepositoryResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_forge_search_v1_search_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SearchRepositoryResponse.ProtoReflect.Descriptor instead.
+func (*SearchRepositoryResponse) Descriptor() ([]byte, []int) {
+	return file_forge_search_v1_search_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *SearchRepositoryResponse) GetMatches() []*CodeMatch {
+	if x != nil {
+		return x.Matches
+	}
+	return nil
+}
+
+func (x *SearchRepositoryResponse) GetState() *SearchState {
+	if x != nil {
+		return x.State
+	}
+	return nil
+}
+
+func (x *SearchRepositoryResponse) GetRevision() string {
+	if x != nil {
+		return x.Revision
+	}
+	return ""
+}
+
+func (x *SearchRepositoryResponse) GetIndex() *Index {
+	if x != nil {
+		return x.Index
+	}
+	return nil
+}
+
+func (x *SearchRepositoryResponse) GetFiles() *FileState {
+	if x != nil {
+		return x.Files
+	}
+	return nil
+}
+
 var File_forge_search_v1_search_proto protoreflect.FileDescriptor
 
 const file_forge_search_v1_search_proto_rawDesc = "" +
 	"\n" +
-	"\x1cforge/search/v1/search.proto\x12\x0fforge.search.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc7\x01\n" +
+	"\x1cforge/search/v1/search.proto\x12\x0fforge.search.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"h\n" +
+	"\x10RepositoryTarget\x12\x16\n" +
+	"\x06source\x18\x01 \x01(\tR\x06source\x12\x1e\n" +
+	"\n" +
+	"repository\x18\x02 \x01(\tR\n" +
+	"repository\x12\x1c\n" +
+	"\treference\x18\x03 \x01(\tR\treference\"\x82\x02\n" +
 	"\x05Index\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
 	"\tdocuments\x18\x02 \x01(\x03R\tdocuments\x12\x14\n" +
@@ -1106,7 +1469,8 @@ const file_forge_search_v1_search_proto_rawDesc = "" +
 	"\vcheckout_id\x18\x05 \x01(\tR\n" +
 	"checkoutId\x129\n" +
 	"\n" +
-	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"h\n" +
+	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x129\n" +
+	"\x06target\x18\a \x01(\v2!.forge.search.v1.RepositoryTargetR\x06target\"h\n" +
 	"\tFileState\x12\x1c\n" +
 	"\ttruncated\x18\x01 \x01(\bR\ttruncated\x12\x1b\n" +
 	"\ttoo_large\x18\x02 \x01(\x05R\btooLarge\x12 \n" +
@@ -1169,14 +1533,36 @@ const file_forge_search_v1_search_proto_rawDesc = "" +
 	"\amatches\x18\x01 \x03(\v2\x1a.forge.search.v1.CodeMatchR\amatches\x122\n" +
 	"\x05state\x18\x02 \x01(\v2\x1c.forge.search.v1.SearchStateR\x05state\x12\x1a\n" +
 	"\brevision\x18\x03 \x01(\tR\brevision\x120\n" +
-	"\x05files\x18\x04 \x01(\v2\x1a.forge.search.v1.FileStateR\x05files2\x81\x06\n" +
+	"\x05files\x18\x04 \x01(\v2\x1a.forge.search.v1.FileStateR\x05files\"S\n" +
+	"\x16IndexRepositoryRequest\x129\n" +
+	"\x06target\x18\x01 \x01(\v2!.forge.search.v1.RepositoryTargetR\x06target\"\x81\x02\n" +
+	"\x17IndexRepositoryResponse\x12,\n" +
+	"\x05index\x18\x01 \x01(\v2\x16.forge.search.v1.IndexR\x05index\x12\x14\n" +
+	"\x05added\x18\x02 \x01(\x05R\x05added\x12\x1a\n" +
+	"\breplaced\x18\x03 \x01(\x05R\breplaced\x12\x18\n" +
+	"\aremoved\x18\x04 \x01(\x05R\aremoved\x12\x1c\n" +
+	"\tunchanged\x18\x05 \x01(\x05R\tunchanged\x120\n" +
+	"\x05files\x18\x06 \x01(\v2\x1a.forge.search.v1.FileStateR\x05files\x12\x1c\n" +
+	"\n" +
+	"up_to_date\x18\a \x01(\bR\bupToDate\"\x86\x01\n" +
+	"\x17SearchRepositoryRequest\x129\n" +
+	"\x06target\x18\x01 \x01(\v2!.forge.search.v1.RepositoryTargetR\x06target\x120\n" +
+	"\x05query\x18\x02 \x01(\v2\x1a.forge.search.v1.CodeQueryR\x05query\"\x80\x02\n" +
+	"\x18SearchRepositoryResponse\x124\n" +
+	"\amatches\x18\x01 \x03(\v2\x1a.forge.search.v1.CodeMatchR\amatches\x122\n" +
+	"\x05state\x18\x02 \x01(\v2\x1c.forge.search.v1.SearchStateR\x05state\x12\x1a\n" +
+	"\brevision\x18\x03 \x01(\tR\brevision\x12,\n" +
+	"\x05index\x18\x04 \x01(\v2\x16.forge.search.v1.IndexR\x05index\x120\n" +
+	"\x05files\x18\x05 \x01(\v2\x1a.forge.search.v1.FileStateR\x05files2\x99\b\n" +
 	"\rSearchService\x12\x87\x01\n" +
 	"\rIndexCheckout\x12%.forge.search.v1.IndexCheckoutRequest\x1a&.forge.search.v1.IndexCheckoutResponse\"'\x82\xd3\xe4\x93\x02!:\x01*\"\x1c/v1/indexes/{index}/checkout\x12m\n" +
 	"\vListIndexes\x12#.forge.search.v1.ListIndexesRequest\x1a$.forge.search.v1.ListIndexesResponse\"\x13\x82\xd3\xe4\x93\x02\r\x12\v/v1/indexes\x12l\n" +
 	"\bGetIndex\x12 .forge.search.v1.GetIndexRequest\x1a!.forge.search.v1.GetIndexResponse\"\x1b\x82\xd3\xe4\x93\x02\x15\x12\x13/v1/indexes/{index}\x12u\n" +
 	"\vDeleteIndex\x12#.forge.search.v1.DeleteIndexRequest\x1a$.forge.search.v1.DeleteIndexResponse\"\x1b\x82\xd3\xe4\x93\x02\x15*\x13/v1/indexes/{index}\x12\x7f\n" +
 	"\vSearchIndex\x12#.forge.search.v1.SearchIndexRequest\x1a$.forge.search.v1.SearchIndexResponse\"%\x82\xd3\xe4\x93\x02\x1f:\x01*\"\x1a/v1/indexes/{index}:search\x12\x90\x01\n" +
-	"\x0eSearchCheckout\x12&.forge.search.v1.SearchCheckoutRequest\x1a'.forge.search.v1.SearchCheckoutResponse\"-\x82\xd3\xe4\x93\x02':\x01*\"\"/v1/checkouts/{checkout_id}:searchB;Z9github.com/r59q/forge-tools/forge-search/service/searchpbb\x06proto3"
+	"\x0eSearchCheckout\x12&.forge.search.v1.SearchCheckoutRequest\x1a'.forge.search.v1.SearchCheckoutResponse\"-\x82\xd3\xe4\x93\x02':\x01*\"\"/v1/checkouts/{checkout_id}:search\x12\x87\x01\n" +
+	"\x0fIndexRepository\x12'.forge.search.v1.IndexRepositoryRequest\x1a(.forge.search.v1.IndexRepositoryResponse\"!\x82\xd3\xe4\x93\x02\x1b:\x01*\"\x16/v1/repositories:index\x12\x8b\x01\n" +
+	"\x10SearchRepository\x12(.forge.search.v1.SearchRepositoryRequest\x1a).forge.search.v1.SearchRepositoryResponse\"\"\x82\xd3\xe4\x93\x02\x1c:\x01*\"\x17/v1/repositories:searchB;Z9github.com/r59q/forge-tools/forge-search/service/searchpbb\x06proto3"
 
 var (
 	file_forge_search_v1_search_proto_rawDescOnce sync.Once
@@ -1190,59 +1576,78 @@ func file_forge_search_v1_search_proto_rawDescGZIP() []byte {
 	return file_forge_search_v1_search_proto_rawDescData
 }
 
-var file_forge_search_v1_search_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
+var file_forge_search_v1_search_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_forge_search_v1_search_proto_goTypes = []any{
-	(*Index)(nil),                  // 0: forge.search.v1.Index
-	(*FileState)(nil),              // 1: forge.search.v1.FileState
-	(*IndexCheckoutRequest)(nil),   // 2: forge.search.v1.IndexCheckoutRequest
-	(*IndexCheckoutResponse)(nil),  // 3: forge.search.v1.IndexCheckoutResponse
-	(*ListIndexesRequest)(nil),     // 4: forge.search.v1.ListIndexesRequest
-	(*ListIndexesResponse)(nil),    // 5: forge.search.v1.ListIndexesResponse
-	(*GetIndexRequest)(nil),        // 6: forge.search.v1.GetIndexRequest
-	(*GetIndexResponse)(nil),       // 7: forge.search.v1.GetIndexResponse
-	(*DeleteIndexRequest)(nil),     // 8: forge.search.v1.DeleteIndexRequest
-	(*DeleteIndexResponse)(nil),    // 9: forge.search.v1.DeleteIndexResponse
-	(*CodeQuery)(nil),              // 10: forge.search.v1.CodeQuery
-	(*Range)(nil),                  // 11: forge.search.v1.Range
-	(*CodeMatch)(nil),              // 12: forge.search.v1.CodeMatch
-	(*SearchState)(nil),            // 13: forge.search.v1.SearchState
-	(*SearchIndexRequest)(nil),     // 14: forge.search.v1.SearchIndexRequest
-	(*SearchIndexResponse)(nil),    // 15: forge.search.v1.SearchIndexResponse
-	(*SearchCheckoutRequest)(nil),  // 16: forge.search.v1.SearchCheckoutRequest
-	(*SearchCheckoutResponse)(nil), // 17: forge.search.v1.SearchCheckoutResponse
-	(*timestamppb.Timestamp)(nil),  // 18: google.protobuf.Timestamp
+	(*RepositoryTarget)(nil),         // 0: forge.search.v1.RepositoryTarget
+	(*Index)(nil),                    // 1: forge.search.v1.Index
+	(*FileState)(nil),                // 2: forge.search.v1.FileState
+	(*IndexCheckoutRequest)(nil),     // 3: forge.search.v1.IndexCheckoutRequest
+	(*IndexCheckoutResponse)(nil),    // 4: forge.search.v1.IndexCheckoutResponse
+	(*ListIndexesRequest)(nil),       // 5: forge.search.v1.ListIndexesRequest
+	(*ListIndexesResponse)(nil),      // 6: forge.search.v1.ListIndexesResponse
+	(*GetIndexRequest)(nil),          // 7: forge.search.v1.GetIndexRequest
+	(*GetIndexResponse)(nil),         // 8: forge.search.v1.GetIndexResponse
+	(*DeleteIndexRequest)(nil),       // 9: forge.search.v1.DeleteIndexRequest
+	(*DeleteIndexResponse)(nil),      // 10: forge.search.v1.DeleteIndexResponse
+	(*CodeQuery)(nil),                // 11: forge.search.v1.CodeQuery
+	(*Range)(nil),                    // 12: forge.search.v1.Range
+	(*CodeMatch)(nil),                // 13: forge.search.v1.CodeMatch
+	(*SearchState)(nil),              // 14: forge.search.v1.SearchState
+	(*SearchIndexRequest)(nil),       // 15: forge.search.v1.SearchIndexRequest
+	(*SearchIndexResponse)(nil),      // 16: forge.search.v1.SearchIndexResponse
+	(*SearchCheckoutRequest)(nil),    // 17: forge.search.v1.SearchCheckoutRequest
+	(*SearchCheckoutResponse)(nil),   // 18: forge.search.v1.SearchCheckoutResponse
+	(*IndexRepositoryRequest)(nil),   // 19: forge.search.v1.IndexRepositoryRequest
+	(*IndexRepositoryResponse)(nil),  // 20: forge.search.v1.IndexRepositoryResponse
+	(*SearchRepositoryRequest)(nil),  // 21: forge.search.v1.SearchRepositoryRequest
+	(*SearchRepositoryResponse)(nil), // 22: forge.search.v1.SearchRepositoryResponse
+	(*timestamppb.Timestamp)(nil),    // 23: google.protobuf.Timestamp
 }
 var file_forge_search_v1_search_proto_depIdxs = []int32{
-	18, // 0: forge.search.v1.Index.updated_at:type_name -> google.protobuf.Timestamp
-	0,  // 1: forge.search.v1.IndexCheckoutResponse.index:type_name -> forge.search.v1.Index
-	1,  // 2: forge.search.v1.IndexCheckoutResponse.files:type_name -> forge.search.v1.FileState
-	0,  // 3: forge.search.v1.ListIndexesResponse.indexes:type_name -> forge.search.v1.Index
-	0,  // 4: forge.search.v1.GetIndexResponse.index:type_name -> forge.search.v1.Index
-	11, // 5: forge.search.v1.CodeMatch.range:type_name -> forge.search.v1.Range
-	10, // 6: forge.search.v1.SearchIndexRequest.query:type_name -> forge.search.v1.CodeQuery
-	12, // 7: forge.search.v1.SearchIndexResponse.matches:type_name -> forge.search.v1.CodeMatch
-	13, // 8: forge.search.v1.SearchIndexResponse.state:type_name -> forge.search.v1.SearchState
-	10, // 9: forge.search.v1.SearchCheckoutRequest.query:type_name -> forge.search.v1.CodeQuery
-	12, // 10: forge.search.v1.SearchCheckoutResponse.matches:type_name -> forge.search.v1.CodeMatch
-	13, // 11: forge.search.v1.SearchCheckoutResponse.state:type_name -> forge.search.v1.SearchState
-	1,  // 12: forge.search.v1.SearchCheckoutResponse.files:type_name -> forge.search.v1.FileState
-	2,  // 13: forge.search.v1.SearchService.IndexCheckout:input_type -> forge.search.v1.IndexCheckoutRequest
-	4,  // 14: forge.search.v1.SearchService.ListIndexes:input_type -> forge.search.v1.ListIndexesRequest
-	6,  // 15: forge.search.v1.SearchService.GetIndex:input_type -> forge.search.v1.GetIndexRequest
-	8,  // 16: forge.search.v1.SearchService.DeleteIndex:input_type -> forge.search.v1.DeleteIndexRequest
-	14, // 17: forge.search.v1.SearchService.SearchIndex:input_type -> forge.search.v1.SearchIndexRequest
-	16, // 18: forge.search.v1.SearchService.SearchCheckout:input_type -> forge.search.v1.SearchCheckoutRequest
-	3,  // 19: forge.search.v1.SearchService.IndexCheckout:output_type -> forge.search.v1.IndexCheckoutResponse
-	5,  // 20: forge.search.v1.SearchService.ListIndexes:output_type -> forge.search.v1.ListIndexesResponse
-	7,  // 21: forge.search.v1.SearchService.GetIndex:output_type -> forge.search.v1.GetIndexResponse
-	9,  // 22: forge.search.v1.SearchService.DeleteIndex:output_type -> forge.search.v1.DeleteIndexResponse
-	15, // 23: forge.search.v1.SearchService.SearchIndex:output_type -> forge.search.v1.SearchIndexResponse
-	17, // 24: forge.search.v1.SearchService.SearchCheckout:output_type -> forge.search.v1.SearchCheckoutResponse
-	19, // [19:25] is the sub-list for method output_type
-	13, // [13:19] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	23, // 0: forge.search.v1.Index.updated_at:type_name -> google.protobuf.Timestamp
+	0,  // 1: forge.search.v1.Index.target:type_name -> forge.search.v1.RepositoryTarget
+	1,  // 2: forge.search.v1.IndexCheckoutResponse.index:type_name -> forge.search.v1.Index
+	2,  // 3: forge.search.v1.IndexCheckoutResponse.files:type_name -> forge.search.v1.FileState
+	1,  // 4: forge.search.v1.ListIndexesResponse.indexes:type_name -> forge.search.v1.Index
+	1,  // 5: forge.search.v1.GetIndexResponse.index:type_name -> forge.search.v1.Index
+	12, // 6: forge.search.v1.CodeMatch.range:type_name -> forge.search.v1.Range
+	11, // 7: forge.search.v1.SearchIndexRequest.query:type_name -> forge.search.v1.CodeQuery
+	13, // 8: forge.search.v1.SearchIndexResponse.matches:type_name -> forge.search.v1.CodeMatch
+	14, // 9: forge.search.v1.SearchIndexResponse.state:type_name -> forge.search.v1.SearchState
+	11, // 10: forge.search.v1.SearchCheckoutRequest.query:type_name -> forge.search.v1.CodeQuery
+	13, // 11: forge.search.v1.SearchCheckoutResponse.matches:type_name -> forge.search.v1.CodeMatch
+	14, // 12: forge.search.v1.SearchCheckoutResponse.state:type_name -> forge.search.v1.SearchState
+	2,  // 13: forge.search.v1.SearchCheckoutResponse.files:type_name -> forge.search.v1.FileState
+	0,  // 14: forge.search.v1.IndexRepositoryRequest.target:type_name -> forge.search.v1.RepositoryTarget
+	1,  // 15: forge.search.v1.IndexRepositoryResponse.index:type_name -> forge.search.v1.Index
+	2,  // 16: forge.search.v1.IndexRepositoryResponse.files:type_name -> forge.search.v1.FileState
+	0,  // 17: forge.search.v1.SearchRepositoryRequest.target:type_name -> forge.search.v1.RepositoryTarget
+	11, // 18: forge.search.v1.SearchRepositoryRequest.query:type_name -> forge.search.v1.CodeQuery
+	13, // 19: forge.search.v1.SearchRepositoryResponse.matches:type_name -> forge.search.v1.CodeMatch
+	14, // 20: forge.search.v1.SearchRepositoryResponse.state:type_name -> forge.search.v1.SearchState
+	1,  // 21: forge.search.v1.SearchRepositoryResponse.index:type_name -> forge.search.v1.Index
+	2,  // 22: forge.search.v1.SearchRepositoryResponse.files:type_name -> forge.search.v1.FileState
+	3,  // 23: forge.search.v1.SearchService.IndexCheckout:input_type -> forge.search.v1.IndexCheckoutRequest
+	5,  // 24: forge.search.v1.SearchService.ListIndexes:input_type -> forge.search.v1.ListIndexesRequest
+	7,  // 25: forge.search.v1.SearchService.GetIndex:input_type -> forge.search.v1.GetIndexRequest
+	9,  // 26: forge.search.v1.SearchService.DeleteIndex:input_type -> forge.search.v1.DeleteIndexRequest
+	15, // 27: forge.search.v1.SearchService.SearchIndex:input_type -> forge.search.v1.SearchIndexRequest
+	17, // 28: forge.search.v1.SearchService.SearchCheckout:input_type -> forge.search.v1.SearchCheckoutRequest
+	19, // 29: forge.search.v1.SearchService.IndexRepository:input_type -> forge.search.v1.IndexRepositoryRequest
+	21, // 30: forge.search.v1.SearchService.SearchRepository:input_type -> forge.search.v1.SearchRepositoryRequest
+	4,  // 31: forge.search.v1.SearchService.IndexCheckout:output_type -> forge.search.v1.IndexCheckoutResponse
+	6,  // 32: forge.search.v1.SearchService.ListIndexes:output_type -> forge.search.v1.ListIndexesResponse
+	8,  // 33: forge.search.v1.SearchService.GetIndex:output_type -> forge.search.v1.GetIndexResponse
+	10, // 34: forge.search.v1.SearchService.DeleteIndex:output_type -> forge.search.v1.DeleteIndexResponse
+	16, // 35: forge.search.v1.SearchService.SearchIndex:output_type -> forge.search.v1.SearchIndexResponse
+	18, // 36: forge.search.v1.SearchService.SearchCheckout:output_type -> forge.search.v1.SearchCheckoutResponse
+	20, // 37: forge.search.v1.SearchService.IndexRepository:output_type -> forge.search.v1.IndexRepositoryResponse
+	22, // 38: forge.search.v1.SearchService.SearchRepository:output_type -> forge.search.v1.SearchRepositoryResponse
+	31, // [31:39] is the sub-list for method output_type
+	23, // [23:31] is the sub-list for method input_type
+	23, // [23:23] is the sub-list for extension type_name
+	23, // [23:23] is the sub-list for extension extendee
+	0,  // [0:23] is the sub-list for field type_name
 }
 
 func init() { file_forge_search_v1_search_proto_init() }
@@ -1256,7 +1661,7 @@ func file_forge_search_v1_search_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_forge_search_v1_search_proto_rawDesc), len(file_forge_search_v1_search_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   18,
+			NumMessages:   23,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

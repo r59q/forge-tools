@@ -30,5 +30,8 @@ review-data/
 # Local checkout data
 checkout-data/
 
+# Local search index data
+search-data/
+
 # Data from before the checkout rename
 workspace-data/

@@ -8,6 +8,8 @@ and symbols. One set of query rules serves two modes.
 - [`library/`](library/README.md): the search model, unindexed search and
   the index engine with its storage interface and an embedded SQLite store,
   as a Go library.
+- [`service/`](service/README.md): indexes and searches the code of
+  forge-checkouts checkouts over REST and gRPC, with durable SQLite indexes.
 
 ## Design
 

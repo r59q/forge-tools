@@ -33,7 +33,7 @@ func TestSettings(t *testing.T) {
 		s.Timeout != 30*time.Second || s.TokenEnv != "FORGE_SEARCH_TOKEN" || s.dataDirectory != "./search-data" ||
 		s.checkoutsAddress != "127.0.0.1:9098" || s.checkoutsInsecure || s.checkoutsTokenEnv != "FORGE_SEARCH_CHECKOUTS_TOKEN" ||
 		s.root.Local != "/checkouts/copies" || s.root.Reported != "" || s.indexTimeout != 10*time.Minute || s.maxIndexes != 32 ||
-		s.issues != (issueSettings{tokenEnv: "FORGE_SEARCH_ISSUES_TOKEN"}) {
+		s.symbolParses != 2 || s.issues != (issueSettings{tokenEnv: "FORGE_SEARCH_ISSUES_TOKEN"}) {
 		t.Fatalf("defaults: %+v %v", s, err)
 	}
 
@@ -42,6 +42,7 @@ func TestSettings(t *testing.T) {
 		"FORGE_SEARCH_CHECKOUTS_INSECURE":          "true",
 		"FORGE_SEARCH_CHECKOUTS_REPORTED_DATA_DIR": "/srv/checkouts",
 		"FORGE_SEARCH_MAX_INDEXES":                 "4",
+		"FORGE_SEARCH_SYMBOL_PARSES":               "3",
 		"FORGE_SEARCH_ISSUES_ADDR":                 "issues:9090",
 		"FORGE_SEARCH_ISSUES_INSECURE":             "true",
 	}
@@ -56,7 +57,7 @@ func TestSettings(t *testing.T) {
 	if err != nil || s.dataDirectory != "/data" || !s.checkoutsInsecure || s.checkoutsAddress != "checkouts:9090" ||
 		s.checkoutsTokenFile != "/run/token" || s.checkoutsTokenEnv != "" || s.root.Local != "/mnt/checkouts/copies" ||
 		s.root.Reported != "/srv/checkouts/copies" || s.indexTimeout != time.Minute || s.maxIndexes != 4 ||
-		s.issues != (issueSettings{address: "issues:9090", insecure: true, tokenFile: "/run/issues"}) {
+		s.symbolParses != 3 || s.issues != (issueSettings{address: "issues:9090", insecure: true, tokenFile: "/run/issues"}) {
 		t.Fatalf("overrides: %+v %v", s, err)
 	}
 
@@ -66,6 +67,8 @@ func TestSettings(t *testing.T) {
 		{"--checkouts-data-dir=/checkouts", "--index-timeout=secret-sentinel"},
 		{"--checkouts-data-dir=/checkouts", "--index-timeout=0s"},
 		{"--checkouts-data-dir=/checkouts", "--max-indexes=0"},
+		{"--checkouts-data-dir=/checkouts", "--symbol-parses=0"},
+		{"--checkouts-data-dir=/checkouts", "--symbol-parses=secret-sentinel"},
 		{"--checkouts-data-dir=/checkouts", "--checkouts-reported-data-dir=secret-sentinel"},
 		{"--checkouts-data-dir=/checkouts", "--checkouts-token-file=/a", "--checkouts-token-env=B"},
 		{"--checkouts-data-dir=/checkouts", "--data-dir="},

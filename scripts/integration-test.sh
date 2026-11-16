@@ -184,6 +184,10 @@ checkout_api "$checkout_url/v1/checkouts/$checkout_id/status" |
   jq -e --arg revision "$revision" '.revision == $revision and (.files | length == 0)' >/dev/null || fail "checkout status"
 checkout_api "$checkout_url/v1/checkouts/$checkout_id/diff" |
   jq -e '(.staged // "") == "" and (.unstaged // "") == ""' >/dev/null || fail "checkout diff"
+# Search reads the ready checkout; the cleanup trap removes it if this fails.
+FORGE_SEARCH_TEST_TOKEN=$(sed -n 's/^FORGE_SEARCH_TOKEN=//p' "$env_file") \
+  FORGE_SEARCH_TEST_CHECKOUT=$checkout_id FORGE_SEARCH_TEST_REVISION=$revision \
+  sh "$(dirname "$0")/search-integration-test.sh"
 second=$(jq -n --arg source "$id" --arg repo "$repo" --arg revision "$revision" \
   '{repository:{source:$source,path:$repo},reference:$revision,mode:"isolated"}' |
   checkout_api "$checkout_url/v1/checkouts" -d @-) || fail "create isolated checkout at commit"

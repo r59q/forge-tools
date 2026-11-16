@@ -11,6 +11,7 @@ import (
 	"github.com/r59q/forge-tools/forge-search/library/checkout"
 	"github.com/r59q/forge-tools/forge-search/library/issue"
 	"github.com/r59q/forge-tools/forge-search/library/search"
+	"github.com/r59q/forge-tools/forge-search/library/symbol"
 	pb "github.com/r59q/forge-tools/forge-search/service/searchpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -76,15 +77,24 @@ func (s *Server) create(ctx context.Context, index string) error {
 	return err
 }
 
-// sync brings the code of an index to a checkout and records it.
+// sync brings the code of an index to a checkout, records it, then brings
+// the definitions to the code.
 func (s *Server) sync(ctx context.Context, root *os.Root, c Checkout, index string) (*pb.IndexCheckoutResponse, error) {
-	engine := s.config.Engine
+	incremental, err := s.clearSymbols(ctx, index)
+	if err != nil {
+		return nil, err
+	}
 
-	result, err := checkout.Sync(ctx, root, engine, index, c.Revision, checkout.Options{})
+	result, err := checkout.Sync(ctx, root, s.config.Engine, index, c.Revision, checkout.Options{})
 	if err != nil {
 		return nil, err
 	}
 	if err := s.record(ctx, index, c.ID); err != nil {
+		return nil, err
+	}
+
+	symbols, err := s.indexSymbols(ctx, index, c.Revision, result.ChangedPaths, result.RemovedPaths, incremental)
+	if err != nil {
 		return nil, err
 	}
 
@@ -100,6 +110,7 @@ func (s *Server) sync(ctx context.Context, root *os.Root, c Checkout, index stri
 		Removed:   count(result.Removed),
 		Unchanged: count(result.Unchanged),
 		Files:     fileState(result.Files),
+		Symbols:   symbols,
 	}, nil
 }
 
@@ -218,6 +229,9 @@ func (s *Server) status(ctx context.Context, index string) (*pb.Index, error) {
 		}
 		status.Target = t.proto()
 	}
+	if status.Symbols, err = s.symbolStatus(ctx, index, info.Marker, own); err != nil {
+		return nil, err
+	}
 	if info.Marker == "" || len(records) == 0 {
 		return status, nil
 	}
@@ -231,13 +245,16 @@ func (s *Server) status(ctx context.Context, index string) (*pb.Index, error) {
 	return status, nil
 }
 
-// ownDocuments returns the documents of an index that the server and the
-// issue sync write about it, by kind, and how many there are. Index
-// statuses do not count them.
+// ownDocuments returns the documents of an index that the server, the
+// issue sync and the symbol pass write about it, by kind, and how many
+// there are. Index statuses do not count them as documents.
 func (s *Server) ownDocuments(ctx context.Context, index string) (map[search.Kind][]search.Ref, int, error) {
 	own := map[search.Kind][]search.Ref{}
 	total := 0
-	for _, kind := range []search.Kind{KindRecord, KindTarget, KindIssueRepository, issue.KindSync} {
+	kinds := []search.Kind{
+		KindRecord, KindTarget, KindIssueRepository, issue.KindSync, KindSymbolRecord, KindSymbolSkipped, symbol.KindSymbol,
+	}
+	for _, kind := range kinds {
 		refs, err := s.config.Engine.Documents(ctx, index, search.Filter{Kind: kind})
 		if err != nil {
 			return nil, 0, err

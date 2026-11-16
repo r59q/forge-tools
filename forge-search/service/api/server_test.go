@@ -27,6 +27,7 @@ func TestNew(t *testing.T) {
 		Token:        forgeauth.StaticToken(token),
 		Timeout:      time.Second,
 		IndexTimeout: time.Second,
+		Analyzer:     analyzer(),
 	}
 	if _, err := New(valid); err != nil {
 		t.Fatal(err)
@@ -44,6 +45,8 @@ func TestNew(t *testing.T) {
 		"relative root":     func(c *Config) { c.Root = Root{Local: "checkouts"} },
 		"unclean root":      func(c *Config) { c.Root = Root{Local: "/checkouts/"} },
 		"relative reported": func(c *Config) { c.Root.Reported = "copies" },
+		"no analyzer":       func(c *Config) { c.Analyzer = nil },
+		"negative parses":   func(c *Config) { c.SymbolParses = -1 },
 	} {
 		config := valid
 		change(&config)

@@ -36,15 +36,11 @@ func (s *Server) IndexRepository(ctx context.Context, r *pb.IndexRepositoryReque
 		}
 		defer done()
 
-		info, err := engine.Index(ctx, index)
+		status, err := s.status(ctx, index)
 		switch {
 		case errors.Is(err, search.ErrNotFound):
 			err = s.create(ctx, index)
-		case err == nil && info.Marker != "" && info.Marker == c.Revision:
-			status, err := s.status(ctx, index)
-			if err != nil {
-				return nil, err
-			}
+		case err == nil && status.GetRevision() == c.Revision && status.GetSymbols().GetComplete():
 			return &pb.IndexRepositoryResponse{Index: status, Files: &pb.FileState{}, UpToDate: true}, nil
 		}
 		if err != nil {
@@ -67,6 +63,7 @@ func (s *Server) IndexRepository(ctx context.Context, r *pb.IndexRepositoryReque
 			Removed:   result.GetRemoved(),
 			Unchanged: result.GetUnchanged(),
 			Files:     result.GetFiles(),
+			Symbols:   result.GetSymbols(),
 		}, nil
 	})
 }

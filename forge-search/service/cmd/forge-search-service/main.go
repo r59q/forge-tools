@@ -23,6 +23,7 @@ import (
 	"github.com/r59q/forge-tools/forge-search/library/sqlite"
 	"github.com/r59q/forge-tools/forge-search/service/api"
 	pb "github.com/r59q/forge-tools/forge-search/service/searchpb"
+	"github.com/r59q/forge-tools/forge-symbols/library/symbols"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
@@ -62,11 +63,12 @@ type settings struct {
 
 	indexTimeout time.Duration
 	maxIndexes   int
+	symbolParses int
 }
 
 func parse(args []string, getenv func(string) string, help io.Writer) (settings, error) {
 	var s settings
-	var checkoutsInsecure, checkoutsData, checkoutsReported, issuesInsecure, indexTimeout, maxIndexes string
+	var checkoutsInsecure, checkoutsData, checkoutsReported, issuesInsecure, indexTimeout, maxIndexes, symbolParses string
 	extra := func(fs *flag.FlagSet, env servicekit.Env) {
 		fs.StringVar(&s.dataDirectory, "data-dir", env("DATA_DIR", "./search-data"), "durable index data directory")
 		fs.StringVar(&s.checkoutsAddress, "checkouts-addr", env("CHECKOUTS_ADDR", "127.0.0.1:9098"), "forge-checkouts gRPC address")
@@ -82,6 +84,8 @@ func parse(args []string, getenv func(string) string, help io.Writer) (settings,
 			"absolute forge-checkouts data directory as forge-checkouts names it, when mounted elsewhere")
 		fs.StringVar(&indexTimeout, "index-timeout", env("INDEX_TIMEOUT", "10m"), "deadline for each checkout indexing")
 		fs.StringVar(&maxIndexes, "max-indexes", env("MAX_INDEXES", strconv.Itoa(api.DefaultMaxIndexes)), "most indexes")
+		fs.StringVar(&symbolParses, "symbol-parses", env("SYMBOL_PARSES", strconv.Itoa(api.DefaultSymbolParses)),
+			"most files parsed for symbols at once, each using up to 256 MiB")
 		issueFlags(fs, env, &s.issues, &issuesInsecure)
 	}
 
@@ -105,6 +109,9 @@ func parse(args []string, getenv func(string) string, help io.Writer) (settings,
 	}
 	if s.maxIndexes, err = strconv.Atoi(maxIndexes); err != nil || s.maxIndexes <= 0 {
 		return settings{}, errors.New("invalid max-indexes")
+	}
+	if s.symbolParses, err = strconv.Atoi(symbolParses); err != nil || s.symbolParses <= 0 {
+		return settings{}, errors.New("invalid symbol-parses")
 	}
 	if s.root, err = root(checkoutsData, checkoutsReported); err != nil {
 		return settings{}, err
@@ -159,6 +166,15 @@ func dial(name, address string, plaintext bool) (*grpc.ClientConn, error) {
 		return nil, fmt.Errorf("invalid %s address", name)
 	}
 	return conn, nil
+}
+
+// indexLimits doubles the default document count and size of an index, so
+// that definitions and their records fit beside code at the sync limits.
+func indexLimits() search.IndexLimits {
+	limits := search.DefaultIndexLimits()
+	limits.Documents *= 2
+	limits.Bytes *= 2
+	return limits
 }
 
 // openData creates the data directory, or checks that an existing one is
@@ -218,13 +234,20 @@ func run(ctx context.Context, s settings, ready func(grpcAddr, httpAddr net.Addr
 		}
 	}()
 
+	analyzer := symbols.New(symbols.Limits{})
+	defer func() {
+		if closeErr := analyzer.Close(context.WithoutCancel(ctx)); err == nil && closeErr != nil {
+			err = errors.New("cannot close symbol analyzer")
+		}
+	}()
+
 	journal, err := api.OpenJournal(filepath.Join(s.dataDirectory, journalDir))
 	if err != nil {
 		return errors.New("cannot open checkout journal")
 	}
 
 	config := api.Config{
-		Engine:       search.NewEngine(store, search.IndexLimits{}),
+		Engine:       search.NewEngine(store, indexLimits()),
 		Checkpoint:   store.Checkpoint,
 		Checkouts:    api.NewRemote(checkoutspb.NewCheckoutsServiceClient(conn), checkoutsToken),
 		Journal:      journal,
@@ -233,6 +256,8 @@ func run(ctx context.Context, s settings, ready func(grpcAddr, httpAddr net.Addr
 		Timeout:      s.Timeout,
 		IndexTimeout: s.indexTimeout,
 		MaxIndexes:   s.maxIndexes,
+		Analyzer:     analyzer,
+		SymbolParses: s.symbolParses,
 	}
 	if issues != nil { // A nil *RemoteIssues is not a nil reader.
 		config.Issues = issues

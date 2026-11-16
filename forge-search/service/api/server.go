@@ -17,6 +17,7 @@ import (
 	"github.com/r59q/forge-tools/forge-search/library/issue"
 	"github.com/r59q/forge-tools/forge-search/library/search"
 	"github.com/r59q/forge-tools/forge-search/library/sqlite"
+	"github.com/r59q/forge-tools/forge-search/library/symbol"
 	pb "github.com/r59q/forge-tools/forge-search/service/searchpb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -65,6 +66,14 @@ type Config struct {
 	// Root is where checkout directories are read.
 	Root Root
 
+	// Analyzer extracts the definitions of code files. Its limits bound
+	// each parse; New bounds how many run at once.
+	Analyzer symbol.Analyzer
+
+	// SymbolParses is the most files analyzed at once, across all calls.
+	// Zero uses DefaultSymbolParses.
+	SymbolParses int
+
 	// Issues, when set, lists the issues of IndexIssues and
 	// SearchUnindexedIssues, as RemoteIssues does. Without it those fail
 	// with UNIMPLEMENTED.
@@ -94,6 +103,9 @@ type Server struct {
 	pb.UnimplementedSearchServiceServer
 	config Config
 
+	// analyzer is Config.Analyzer, bounded by Config.SymbolParses.
+	analyzer symbol.Analyzer
+
 	// mu guards busy, the indexes an RPC is changing, and orders index
 	// creation against the MaxIndexes check.
 	// It also guards live, the temporary checkouts calls are using.
@@ -110,7 +122,8 @@ type Server struct {
 // New returns a server for config.
 func New(config Config) (*Server, error) {
 	valid := config.Engine != nil && config.Checkouts != nil && config.Journal != nil && config.Token != nil &&
-		config.Timeout > 0 && config.IndexTimeout > 0 && config.MaxIndexes >= 0 && config.Root.valid()
+		config.Timeout > 0 && config.IndexTimeout > 0 && config.MaxIndexes >= 0 && config.Root.valid() &&
+		config.Analyzer != nil && config.SymbolParses >= 0
 	if !valid {
 		return nil, ErrInvalid
 	}
@@ -118,15 +131,19 @@ func New(config Config) (*Server, error) {
 	if config.MaxIndexes == 0 {
 		config.MaxIndexes = DefaultMaxIndexes
 	}
+	if config.SymbolParses == 0 {
+		config.SymbolParses = DefaultSymbolParses
+	}
 	if config.Now == nil {
 		config.Now = time.Now
 	}
 
 	return &Server{
-		config: config,
-		busy:   map[string]bool{},
-		live:   map[string]bool{},
-		slots:  make(chan struct{}, MaxTemporaryCheckouts),
+		config:   config,
+		analyzer: newBoundedAnalyzer(config.Analyzer, config.SymbolParses),
+		busy:     map[string]bool{},
+		live:     map[string]bool{},
+		slots:    make(chan struct{}, MaxTemporaryCheckouts),
 	}, nil
 }
 

@@ -22,6 +22,29 @@ const (
 	failed
 )
 
+// SkipReason says why the symbols of a document were left out.
+type SkipReason string
+
+// The reasons a document is counted in Skipped, one per field.
+const (
+	SkipUnsupported SkipReason = "unsupported"
+	SkipTooLarge    SkipReason = "tooLarge"
+	SkipFailed      SkipReason = "failed"
+)
+
+// reason returns the exported form of a skip.
+func (s skip) reason() SkipReason {
+	switch s {
+	case unsupported:
+		return SkipUnsupported
+	case tooLarge:
+		return SkipTooLarge
+	case failed:
+		return SkipFailed
+	}
+	return ""
+}
+
 func (s *Skipped) add(reason skip) {
 	switch reason {
 	case unsupported:

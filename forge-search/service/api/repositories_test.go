@@ -61,10 +61,12 @@ func indexRepository(t *testing.T, f *fixture, tr transport) []proto.Message {
 
 	first := must[*pb.IndexRepositoryResponse](t, tr, index)
 	status := &pb.Index{
-		Name: name, Documents: 3, Bytes: size(files), Revision: "rev1",
-		CheckoutId: created(1), UpdatedAt: updated, Target: repository.proto(),
+		Name: name, Documents: 3, Bytes: size(files) + f.symbolBytes(t, name), Revision: "rev1",
+		CheckoutId: created(1), UpdatedAt: updated, Target: repository.proto(), Symbols: indexSymbols(3, 0),
 	}
-	equal(t, "first", first, &pb.IndexRepositoryResponse{Index: status, Added: 3, Files: &pb.FileState{}})
+	equal(t, "first", first, &pb.IndexRepositoryResponse{
+		Index: status, Added: 3, Files: &pb.FileState{}, Symbols: passOf(3, 3, 0, 0, true),
+	})
 
 	again := must[*pb.IndexRepositoryResponse](t, tr, index)
 	equal(t, "again", again, &pb.IndexRepositoryResponse{Index: status, Files: &pb.FileState{}, UpToDate: true})
@@ -74,10 +76,12 @@ func indexRepository(t *testing.T, f *fixture, tr transport) []proto.Message {
 	f.checkouts.branch(repository, "rev2", files)
 	moved := must[*pb.IndexRepositoryResponse](t, tr, index)
 	status = &pb.Index{
-		Name: name, Documents: 2, Bytes: size(files), Revision: "rev2",
-		CheckoutId: created(3), UpdatedAt: updated, Target: repository.proto(),
+		Name: name, Documents: 2, Bytes: size(files) + f.symbolBytes(t, name), Revision: "rev2",
+		CheckoutId: created(3), UpdatedAt: updated, Target: repository.proto(), Symbols: indexSymbols(2, 0),
 	}
-	equal(t, "moved", moved, &pb.IndexRepositoryResponse{Index: status, Removed: 1, Replaced: 1, Unchanged: 1, Files: &pb.FileState{}})
+	equal(t, "moved", moved, &pb.IndexRepositoryResponse{
+		Index: status, Removed: 1, Replaced: 1, Unchanged: 1, Files: &pb.FileState{}, Symbols: passOf(1, 1, 1, 0, false),
+	})
 
 	list := must[*pb.ListIndexesResponse](t, tr, &pb.ListIndexesRequest{})
 	equal(t, "list", list, &pb.ListIndexesResponse{Indexes: []*pb.Index{status}})

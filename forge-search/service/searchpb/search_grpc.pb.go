@@ -30,6 +30,8 @@ const (
 	SearchService_IndexIssues_FullMethodName           = "/forge.search.v1.SearchService/IndexIssues"
 	SearchService_SearchIndexedIssues_FullMethodName   = "/forge.search.v1.SearchService/SearchIndexedIssues"
 	SearchService_SearchUnindexedIssues_FullMethodName = "/forge.search.v1.SearchService/SearchUnindexedIssues"
+	SearchService_SearchIndexSymbols_FullMethodName    = "/forge.search.v1.SearchService/SearchIndexSymbols"
+	SearchService_SearchCheckoutSymbols_FullMethodName = "/forge.search.v1.SearchService/SearchCheckoutSymbols"
 )
 
 // SearchServiceClient is the client API for SearchService service.
@@ -51,6 +53,12 @@ const (
 // forge-checkouts, only within an IndexRepository or SearchRepository call,
 // and the checkout is removed before the call returns. The service never
 // fetches code on its own.
+//
+// Indexing code also indexes its definitions, such as functions, methods
+// and types, found with the forge-symbols library in the service itself.
+// Index.symbols tells whether they are complete for the index revision.
+// Indexed and unindexed symbol searches of the same files return the same
+// definitions in the same order.
 //
 // A repository's issues are read from forge-issues, in one listing of its
 // open and closed issues, only within an IndexIssues or
@@ -110,6 +118,14 @@ type SearchServiceClient interface {
 	// SearchUnindexedIssues reads a repository's issues and searches them
 	// without an index, keeping nothing. POST /v1/issues:searchUnindexed.
 	SearchUnindexedIssues(ctx context.Context, in *SearchUnindexedIssuesRequest, opts ...grpc.CallOption) (*SearchUnindexedIssuesResponse, error)
+	// SearchIndexSymbols searches the definitions of the files an index
+	// holds by name. IndexCheckout and IndexRepository maintain them.
+	// POST /v1/indexes/{index}/symbols:search.
+	SearchIndexSymbols(ctx context.Context, in *SearchIndexSymbolsRequest, opts ...grpc.CallOption) (*SearchIndexSymbolsResponse, error)
+	// SearchCheckoutSymbols reads a checkout's files, finds their
+	// definitions and searches them by name without an index, keeping
+	// nothing. POST /v1/checkouts/{checkout_id}/symbols:search.
+	SearchCheckoutSymbols(ctx context.Context, in *SearchCheckoutSymbolsRequest, opts ...grpc.CallOption) (*SearchCheckoutSymbolsResponse, error)
 }
 
 type searchServiceClient struct {
@@ -230,6 +246,26 @@ func (c *searchServiceClient) SearchUnindexedIssues(ctx context.Context, in *Sea
 	return out, nil
 }
 
+func (c *searchServiceClient) SearchIndexSymbols(ctx context.Context, in *SearchIndexSymbolsRequest, opts ...grpc.CallOption) (*SearchIndexSymbolsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SearchIndexSymbolsResponse)
+	err := c.cc.Invoke(ctx, SearchService_SearchIndexSymbols_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *searchServiceClient) SearchCheckoutSymbols(ctx context.Context, in *SearchCheckoutSymbolsRequest, opts ...grpc.CallOption) (*SearchCheckoutSymbolsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SearchCheckoutSymbolsResponse)
+	err := c.cc.Invoke(ctx, SearchService_SearchCheckoutSymbols_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SearchServiceServer is the server API for SearchService service.
 // All implementations must embed UnimplementedSearchServiceServer
 // for forward compatibility.
@@ -249,6 +285,12 @@ func (c *searchServiceClient) SearchUnindexedIssues(ctx context.Context, in *Sea
 // forge-checkouts, only within an IndexRepository or SearchRepository call,
 // and the checkout is removed before the call returns. The service never
 // fetches code on its own.
+//
+// Indexing code also indexes its definitions, such as functions, methods
+// and types, found with the forge-symbols library in the service itself.
+// Index.symbols tells whether they are complete for the index revision.
+// Indexed and unindexed symbol searches of the same files return the same
+// definitions in the same order.
 //
 // A repository's issues are read from forge-issues, in one listing of its
 // open and closed issues, only within an IndexIssues or
@@ -308,6 +350,14 @@ type SearchServiceServer interface {
 	// SearchUnindexedIssues reads a repository's issues and searches them
 	// without an index, keeping nothing. POST /v1/issues:searchUnindexed.
 	SearchUnindexedIssues(context.Context, *SearchUnindexedIssuesRequest) (*SearchUnindexedIssuesResponse, error)
+	// SearchIndexSymbols searches the definitions of the files an index
+	// holds by name. IndexCheckout and IndexRepository maintain them.
+	// POST /v1/indexes/{index}/symbols:search.
+	SearchIndexSymbols(context.Context, *SearchIndexSymbolsRequest) (*SearchIndexSymbolsResponse, error)
+	// SearchCheckoutSymbols reads a checkout's files, finds their
+	// definitions and searches them by name without an index, keeping
+	// nothing. POST /v1/checkouts/{checkout_id}/symbols:search.
+	SearchCheckoutSymbols(context.Context, *SearchCheckoutSymbolsRequest) (*SearchCheckoutSymbolsResponse, error)
 	mustEmbedUnimplementedSearchServiceServer()
 }
 
@@ -350,6 +400,12 @@ func (UnimplementedSearchServiceServer) SearchIndexedIssues(context.Context, *Se
 }
 func (UnimplementedSearchServiceServer) SearchUnindexedIssues(context.Context, *SearchUnindexedIssuesRequest) (*SearchUnindexedIssuesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SearchUnindexedIssues not implemented")
+}
+func (UnimplementedSearchServiceServer) SearchIndexSymbols(context.Context, *SearchIndexSymbolsRequest) (*SearchIndexSymbolsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SearchIndexSymbols not implemented")
+}
+func (UnimplementedSearchServiceServer) SearchCheckoutSymbols(context.Context, *SearchCheckoutSymbolsRequest) (*SearchCheckoutSymbolsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SearchCheckoutSymbols not implemented")
 }
 func (UnimplementedSearchServiceServer) mustEmbedUnimplementedSearchServiceServer() {}
 func (UnimplementedSearchServiceServer) testEmbeddedByValue()                       {}
@@ -570,6 +626,42 @@ func _SearchService_SearchUnindexedIssues_Handler(srv interface{}, ctx context.C
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SearchService_SearchIndexSymbols_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SearchIndexSymbolsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SearchServiceServer).SearchIndexSymbols(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SearchService_SearchIndexSymbols_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SearchServiceServer).SearchIndexSymbols(ctx, req.(*SearchIndexSymbolsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SearchService_SearchCheckoutSymbols_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SearchCheckoutSymbolsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SearchServiceServer).SearchCheckoutSymbols(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SearchService_SearchCheckoutSymbols_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SearchServiceServer).SearchCheckoutSymbols(ctx, req.(*SearchCheckoutSymbolsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SearchService_ServiceDesc is the grpc.ServiceDesc for SearchService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -620,6 +712,14 @@ var SearchService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SearchUnindexedIssues",
 			Handler:    _SearchService_SearchUnindexedIssues_Handler,
+		},
+		{
+			MethodName: "SearchIndexSymbols",
+			Handler:    _SearchService_SearchIndexSymbols_Handler,
+		},
+		{
+			MethodName: "SearchCheckoutSymbols",
+			Handler:    _SearchService_SearchCheckoutSymbols_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

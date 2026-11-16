@@ -58,8 +58,13 @@ func indexCheckout(t *testing.T, f *fixture, tr transport) []proto.Message {
 	updated := timestamppb.New(now)
 
 	first := must[*pb.IndexCheckoutResponse](t, tr, index)
-	status := &pb.Index{Name: "main", Documents: 3, Bytes: size(files), Revision: "rev1", CheckoutId: checkoutID, UpdatedAt: updated}
-	equal(t, "first", first, &pb.IndexCheckoutResponse{Index: status, Added: 3, Files: &pb.FileState{}})
+	status := &pb.Index{
+		Name: "main", Documents: 3, Bytes: size(files) + f.symbolBytes(t, "main"), Revision: "rev1",
+		CheckoutId: checkoutID, UpdatedAt: updated, Symbols: indexSymbols(3, 0),
+	}
+	equal(t, "first", first, &pb.IndexCheckoutResponse{
+		Index: status, Added: 3, Files: &pb.FileState{}, Symbols: passOf(3, 3, 0, 0, true),
+	})
 
 	get := must[*pb.GetIndexResponse](t, tr, &pb.GetIndexRequest{Index: "main"})
 	equal(t, "get", get, &pb.GetIndexResponse{Index: status})
@@ -67,7 +72,9 @@ func indexCheckout(t *testing.T, f *fixture, tr transport) []proto.Message {
 	equal(t, "list", list, &pb.ListIndexesResponse{Indexes: []*pb.Index{status}})
 
 	again := must[*pb.IndexCheckoutResponse](t, tr, index)
-	equal(t, "again", again, &pb.IndexCheckoutResponse{Index: status, Unchanged: 3, Files: &pb.FileState{}})
+	equal(t, "again", again, &pb.IndexCheckoutResponse{
+		Index: status, Unchanged: 3, Files: &pb.FileState{}, Symbols: passOf(0, 0, 0, 0, false),
+	})
 
 	// rev2 changes one file, removes one and adds one.
 	files["lib/greet.go"] += "\n// Greet is stable.\n"
@@ -75,18 +82,25 @@ func indexCheckout(t *testing.T, f *fixture, tr transport) []proto.Message {
 	files["cmd/serve.go"] = "package main\n\nfunc serve() { lib.Greet(\"server\") }\n"
 	f.add(t, checkoutID, "rev2", files)
 	changed := must[*pb.IndexCheckoutResponse](t, tr, index)
-	status = &pb.Index{Name: "main", Documents: 3, Bytes: size(files), Revision: "rev2", CheckoutId: checkoutID, UpdatedAt: updated}
+	status = &pb.Index{
+		Name: "main", Documents: 3, Bytes: size(files) + f.symbolBytes(t, "main"), Revision: "rev2",
+		CheckoutId: checkoutID, UpdatedAt: updated, Symbols: indexSymbols(3, 0),
+	}
 	equal(t, "changed", changed, &pb.IndexCheckoutResponse{
 		Index: status, Added: 1, Replaced: 1, Removed: 1, Unchanged: 1, Files: &pb.FileState{},
+		Symbols: passOf(2, 2, 1, 0, false),
 	})
 
 	// Another checkout replaces the content of the index.
 	other := map[string]string{"README.md": "Greet people.\n", "lib/greet.go": files["lib/greet.go"]}
 	f.add(t, otherID, "rev3", other)
 	replaced := must[*pb.IndexCheckoutResponse](t, tr, &pb.IndexCheckoutRequest{Index: "main", CheckoutId: otherID})
-	status = &pb.Index{Name: "main", Documents: 2, Bytes: size(other), Revision: "rev3", CheckoutId: otherID, UpdatedAt: updated}
+	status = &pb.Index{
+		Name: "main", Documents: 2, Bytes: size(other) + f.symbolBytes(t, "main"), Revision: "rev3",
+		CheckoutId: otherID, UpdatedAt: updated, Symbols: indexSymbols(1, 1),
+	}
 	equal(t, "other checkout", replaced, &pb.IndexCheckoutResponse{
-		Index: status, Added: 1, Removed: 2, Unchanged: 1, Files: &pb.FileState{},
+		Index: status, Added: 1, Removed: 2, Unchanged: 1, Files: &pb.FileState{}, Symbols: passOf(0, 0, 2, 1, false),
 	})
 
 	found := must[*pb.SearchIndexResponse](t, tr, &pb.SearchIndexRequest{Index: "main", Query: &pb.CodeQuery{Text: "Greet"}})

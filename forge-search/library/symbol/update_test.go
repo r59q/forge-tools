@@ -2,6 +2,7 @@ package symbol
 
 import (
 	"context"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -34,7 +35,7 @@ func TestUpdateStoresSymbols(t *testing.T) {
 
 	result := mustUpdate(t, analyzer, engine, Change{Source: testSource, Documents: corpus()[:3]})
 	want := UpdateResult{Stored: 3, Symbols: 7}
-	if result != want {
+	if !reflect.DeepEqual(result, want) {
 		t.Errorf("Update = %+v, want %+v", result, want)
 	}
 
@@ -69,7 +70,7 @@ func TestUpdateReplacesAndRemovesSymbols(t *testing.T) {
 		Removed: []string{"c.go", "never-stored.go"},
 	})
 	want := UpdateResult{Stored: 2, Symbols: 2, Removed: 2}
-	if result != want {
+	if !reflect.DeepEqual(result, want) {
 		t.Errorf("Update = %+v, want %+v", result, want)
 	}
 
@@ -100,8 +101,17 @@ func TestUpdateClearsDocumentsThatAreSkipped(t *testing.T) {
 		doc("d.go", "@function Gone UNSUPPORTED"),
 	}})
 
-	want := UpdateResult{Removed: 4, Skipped: Skipped{Unsupported: 2, TooLarge: 1, Failed: 1}}
-	if result != want {
+	want := UpdateResult{
+		Removed: 4,
+		Skipped: Skipped{Unsupported: 2, TooLarge: 1, Failed: 1},
+		SkippedPaths: []SkippedPath{
+			{Path: "a.go", Reason: SkipUnsupported},
+			{Path: "b.go", Reason: SkipFailed},
+			{Path: "c.go", Reason: SkipTooLarge},
+			{Path: "d.go", Reason: SkipUnsupported},
+		},
+	}
+	if !reflect.DeepEqual(result, want) {
 		t.Errorf("Update = %+v, want %+v", result, want)
 	}
 	if got := stored(t, engine, "Gone"); len(got) != 0 {

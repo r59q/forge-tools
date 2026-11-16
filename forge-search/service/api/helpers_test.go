@@ -19,7 +19,9 @@ import (
 	"github.com/r59q/forge-tools/forge-core/forgeapi/forgeauth"
 	"github.com/r59q/forge-tools/forge-search/library/search"
 	"github.com/r59q/forge-tools/forge-search/library/sqlite"
+	"github.com/r59q/forge-tools/forge-search/library/symbol"
 	pb "github.com/r59q/forge-tools/forge-search/service/searchpb"
+	"github.com/r59q/forge-tools/forge-symbols/library/symbols"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -43,6 +45,10 @@ var repository = Target{Source: "github", Repository: "octo/demo"}
 
 // now is the time every test server records.
 var now = time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)
+
+// analyzer is the symbol analyzer of every test server. Its runtime is
+// shared, as it compiles each grammar once.
+var analyzer = sync.OnceValue(func() *symbols.Analyzer { return symbols.New(symbols.Limits{}) })
 
 // sample is a small checkout: Greet is defined in one file and called from
 // two others.
@@ -225,6 +231,7 @@ func newFixture(t *testing.T, change func(*Config)) *fixture {
 		Timeout:      10 * time.Second,
 		IndexTimeout: 10 * time.Second,
 		Now:          func() time.Time { return now },
+		Analyzer:     analyzer(),
 	}
 	if change != nil {
 		change(&config)
@@ -361,6 +368,10 @@ func route(req proto.Message) (string, string) {
 		return http.MethodPost, "/v1/issues:searchIndexed"
 	case *pb.SearchUnindexedIssuesRequest:
 		return http.MethodPost, "/v1/issues:searchUnindexed"
+	case *pb.SearchIndexSymbolsRequest:
+		return http.MethodPost, "/v1/indexes/" + url.PathEscape(r.GetIndex()) + "/symbols:search"
+	case *pb.SearchCheckoutSymbolsRequest:
+		return http.MethodPost, "/v1/checkouts/" + url.PathEscape(r.GetCheckoutId()) + "/symbols:search"
 	}
 	panic("no route for " + method(req))
 }
@@ -461,6 +472,8 @@ func requests() []proto.Message {
 		&pb.IndexIssuesRequest{Repository: issueRepo},
 		&pb.SearchIndexedIssuesRequest{Repository: issueRepo, Query: &pb.IssueQuery{Text: "crash"}},
 		&pb.SearchUnindexedIssuesRequest{Repository: issueRepo, Query: &pb.IssueQuery{Text: "crash"}},
+		&pb.SearchIndexSymbolsRequest{Index: "main", Query: &pb.SymbolQuery{Text: "Greet"}},
+		&pb.SearchCheckoutSymbolsRequest{CheckoutId: checkoutID, Query: &pb.SymbolQuery{Text: "Greet"}},
 	}
 }
 
@@ -472,6 +485,7 @@ func response(req proto.Message) proto.Message {
 		&pb.DeleteIndexResponse{}, &pb.SearchIndexResponse{}, &pb.SearchCheckoutResponse{},
 		&pb.IndexRepositoryResponse{}, &pb.SearchRepositoryResponse{},
 		&pb.IndexIssuesResponse{}, &pb.SearchIndexedIssuesResponse{}, &pb.SearchUnindexedIssuesResponse{},
+		&pb.SearchIndexSymbolsResponse{}, &pb.SearchCheckoutSymbolsResponse{},
 	} {
 		if string(m.ProtoReflect().Descriptor().FullName()) == name {
 			return m
@@ -494,5 +508,33 @@ func equal(t *testing.T, name string, got, want proto.Message) {
 	t.Helper()
 	if !proto.Equal(got, want) {
 		t.Errorf("%s:\n got %v\nwant %v", name, got, want)
+	}
+}
+
+// symbolBytes returns the content size of the definitions an index holds.
+func (f *fixture) symbolBytes(t *testing.T, index string) int64 {
+	t.Helper()
+	var n int64
+	err := f.s.config.Engine.Read(context.Background(), index, "", search.Filter{Kind: symbol.KindSymbol}, func(d search.Document) bool {
+		n += int64(len(d.Content))
+		return true
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+// indexSymbols is the complete symbol state of an index with documents
+// files holding definitions and unsupported files without.
+func indexSymbols(documents int64, unsupported int32) *pb.IndexSymbols {
+	return &pb.IndexSymbols{Complete: true, Documents: documents, Skipped: &pb.SymbolFileState{Unsupported: unsupported}}
+}
+
+// passOf is a symbol pass that left out unsupported files only.
+func passOf(stored, definitions, removed, unsupported int32, full bool) *pb.SymbolPass {
+	return &pb.SymbolPass{
+		Stored: stored, Definitions: definitions, Removed: removed,
+		Skipped: &pb.SymbolFileState{Unsupported: unsupported}, Full: full,
 	}
 }

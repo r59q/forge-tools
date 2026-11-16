@@ -196,7 +196,10 @@ removes it when the call ends; nothing is fetched in the background. The
 to remove. It holds no forge credentials and never changes the files of a
 checkout. It also indexes and searches the issues of a repository, listed
 through the issues service with `FORGE_ISSUES_TOKEN` when called, never in
-the background. See its
+the background. Code indexing also extracts the definitions of Go, Java,
+JavaScript, TypeScript and Python files, searchable by name with or without
+an index. Each of the `FORGE_SEARCH_SYMBOL_PARSES` parses at once may use up
+to 256 MiB. See its
 [API reference](../../forge-search/service/README.md#api).
 
 ```sh
@@ -209,6 +212,8 @@ curl -fsS -H "Authorization: Bearer $FORGE_SEARCH_TOKEN" \
   http://127.0.0.1:8095/v1/indexes/main/checkout -d "{\"checkoutId\": \"$CHECKOUT\"}"
 curl -fsS -H "Authorization: Bearer $FORGE_SEARCH_TOKEN" \
   http://127.0.0.1:8095/v1/indexes/main:search -d '{"query": {"text": "TODO"}}'
+curl -fsS -H "Authorization: Bearer $FORGE_SEARCH_TOKEN" \
+  http://127.0.0.1:8095/v1/indexes/main/symbols:search -d '{"query": {"text": "Handler", "kind": "function"}}'
 curl -fsS -H "Authorization: Bearer $FORGE_SEARCH_TOKEN" \
   http://127.0.0.1:8095/v1/issues:index -d "{\"repository\": $TARGET}"
 curl -fsS -H "Authorization: Bearer $FORGE_SEARCH_TOKEN" \

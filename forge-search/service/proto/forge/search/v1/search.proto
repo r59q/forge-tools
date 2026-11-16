@@ -1,0 +1,220 @@
+syntax = "proto3";
+
+package forge.search.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/r59q/forge-tools/forge-search/service/searchpb";
+
+// SearchService searches the code of forge-checkouts checkouts, indexed or
+// not. An index is a named, durable copy of one checkout's files; indexing a
+// checkout again, or another checkout into the same index, changes only the
+// files that differ. Every RPC requires the service token in the
+// Authorization: Bearer header (gRPC metadata).
+//
+// Checkouts are named by their forge-checkouts ID and must be ready or
+// retained. Matches name files by their path in the checkout. Indexed and
+// unindexed searches of the same files return the same matches in the same
+// order.
+//
+// Errors carry only a status code: INVALID_ARGUMENT for an invalid field,
+// NOT_FOUND for a missing index or checkout,
+// FAILED_PRECONDITION for a checkout that is not ready or not readable here,
+// ABORTED for an index already being indexed or files that changed while
+// read, RESOURCE_EXHAUSTED for a request, checkout or index over a limit,
+// UNAVAILABLE when forge-checkouts or the storage cannot be reached, and
+// DEADLINE_EXCEEDED for a call over its time limit.
+service SearchService {
+  // IndexCheckout syncs a checkout's files into an index, creating the
+  // index if needed, and returns what changed. It runs within the call; a
+  // call that ends early keeps what it wrote, and the next one continues.
+  // POST /v1/indexes/{index}/checkout.
+  rpc IndexCheckout(IndexCheckoutRequest) returns (IndexCheckoutResponse) {
+    option (google.api.http) = {
+      post: "/v1/indexes/{index}/checkout"
+      body: "*"
+    };
+  }
+  // ListIndexes returns every index, by name. GET /v1/indexes.
+  rpc ListIndexes(ListIndexesRequest) returns (ListIndexesResponse) {
+    option (google.api.http) = {get: "/v1/indexes"};
+  }
+  // GetIndex returns the status of one index. GET /v1/indexes/{index}.
+  rpc GetIndex(GetIndexRequest) returns (GetIndexResponse) {
+    option (google.api.http) = {get: "/v1/indexes/{index}"};
+  }
+  // DeleteIndex removes an index and its content.
+  // DELETE /v1/indexes/{index}.
+  rpc DeleteIndex(DeleteIndexRequest) returns (DeleteIndexResponse) {
+    option (google.api.http) = {delete: "/v1/indexes/{index}"};
+  }
+  // SearchIndex searches the code held by an index.
+  // POST /v1/indexes/{index}:search.
+  rpc SearchIndex(SearchIndexRequest) returns (SearchIndexResponse) {
+    option (google.api.http) = {
+      post: "/v1/indexes/{index}:search"
+      body: "*"
+    };
+  }
+  // SearchCheckout reads and searches a checkout's files without an index,
+  // and keeps nothing. POST /v1/checkouts/{checkout_id}:search.
+  rpc SearchCheckout(SearchCheckoutRequest) returns (SearchCheckoutResponse) {
+    option (google.api.http) = {
+      post: "/v1/checkouts/{checkout_id}:search"
+      body: "*"
+    };
+  }
+}
+
+// Index is the status of an index.
+message Index {
+  // name is 1-64 bytes of a-z, 0-9, ".", "_" and "-", starting with a
+  // letter or digit, without "..".
+  string name = 1;
+  // documents is the number of files the index holds.
+  int64 documents = 2;
+  // bytes is the content size of those files.
+  int64 bytes = 3;
+  // revision is the checkout revision of the last completed indexing. It is
+  // empty before one, and while an indexing changes the index.
+  string revision = 4;
+  // checkout_id is the checkout of the last completed indexing.
+  string checkout_id = 5;
+  // updated_at is when the last completed indexing finished.
+  google.protobuf.Timestamp updated_at = 6;
+}
+
+// FileState counts the checkout files left out.
+message FileState {
+  // truncated is set when files were not read because of the total size
+  // limit of an unindexed search.
+  bool truncated = 1;
+  // too_large counts files over 1 MiB.
+  int32 too_large = 2;
+  // unsupported counts symlinks, special files and paths that cannot be
+  // document IDs.
+  int32 unsupported = 3;
+}
+
+// IndexCheckoutRequest names the checkout to index.
+message IndexCheckoutRequest {
+  // index is the index name. It is created if it does not exist.
+  string index = 1;
+  // checkout_id is the forge-checkouts checkout ID.
+  string checkout_id = 2;
+}
+
+// IndexCheckoutResponse is the index after the sync and what it changed.
+message IndexCheckoutResponse {
+  Index index = 1;
+  // added, replaced and removed count the files written; unchanged counts
+  // those left as they were.
+  int32 added = 2;
+  int32 replaced = 3;
+  int32 removed = 4;
+  int32 unchanged = 5;
+  // files counts the files left out of the index.
+  FileState files = 6;
+}
+
+// ListIndexesRequest has no fields.
+message ListIndexesRequest {}
+
+// ListIndexesResponse holds every index, by name.
+message ListIndexesResponse {
+  repeated Index indexes = 1;
+}
+
+// GetIndexRequest names an index.
+message GetIndexRequest {
+  string index = 1;
+}
+
+// GetIndexResponse is the status of the index.
+message GetIndexResponse {
+  Index index = 1;
+}
+
+// DeleteIndexRequest names an index.
+message DeleteIndexRequest {
+  string index = 1;
+}
+
+// DeleteIndexResponse has no fields.
+message DeleteIndexResponse {}
+
+// CodeQuery is what to search for.
+message CodeQuery {
+  // text is matched literally and case-sensitively within lines: 1-256
+  // bytes of UTF-8, without NUL, "\r" or "\n".
+  string text = 1;
+  // path_prefix keeps only files whose path starts with it, such as "cmd/".
+  string path_prefix = 2;
+  // max_results is the most matches returned: 1-500, 0 for 100.
+  int32 max_results = 3;
+}
+
+// Range uses one-based lines and UTF-16 columns, with an exclusive end
+// column. Lines end at "\n".
+message Range {
+  int32 start_line = 1;
+  int32 start_column = 2;
+  int32 end_line = 3;
+  int32 end_column = 4;
+}
+
+// CodeMatch is one occurrence of the query text.
+message CodeMatch {
+  // path is the file's path in the checkout, with "/" separators.
+  string path = 1;
+  // version is the hex SHA-256 of the file content.
+  string version = 2;
+  // range covers the matched text.
+  Range range = 3;
+  // preview is the matching line, at most 240 UTF-16 units; text cut at
+  // either end is marked with "…".
+  string preview = 4;
+  // preview_column is the column where the preview text starts.
+  int32 preview_column = 5;
+}
+
+// SearchState describes an incomplete search.
+message SearchState {
+  // truncated is set when matches were left out because of max_results, or
+  // files because of a size limit.
+  bool truncated = 1;
+  // skipped counts files not searched because they hold a NUL byte or are
+  // not valid UTF-8.
+  int32 skipped = 2;
+}
+
+// SearchIndexRequest searches an index.
+message SearchIndexRequest {
+  string index = 1;
+  CodeQuery query = 2;
+}
+
+// SearchIndexResponse holds the matches in path order, then position.
+message SearchIndexResponse {
+  repeated CodeMatch matches = 1;
+  SearchState state = 2;
+  // revision is Index.revision as read just before the search.
+  string revision = 3;
+}
+
+// SearchCheckoutRequest searches a checkout without an index.
+message SearchCheckoutRequest {
+  string checkout_id = 1;
+  CodeQuery query = 2;
+}
+
+// SearchCheckoutResponse holds the matches in path order, then position.
+message SearchCheckoutResponse {
+  repeated CodeMatch matches = 1;
+  SearchState state = 2;
+  // revision is the checkout revision.
+  string revision = 3;
+  // files counts the files left out of the search.
+  FileState files = 4;
+}

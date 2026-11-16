@@ -153,6 +153,9 @@ revision, err := checkout.Revision(ctx, engine, "checkout-1")
 - A file that changes while it is read returns `ErrChanged`; one that cannot
   be opened returns `ErrUnreadable`. Errors name root-relative paths, never
   host paths or content.
+- `Options.Prefix` limits `Read` and `Search` to the paths that start with
+  it, as `Filter.IDPrefix` does for an index, and visits only the
+  directories that can hold them. `Sync` rejects it.
 
 | Limit        | `Read`, `Search` | `Sync` | Exceeded                             |
 | ------------ | ---------------- | ------ | ------------------------------------ |

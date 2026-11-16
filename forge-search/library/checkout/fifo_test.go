@@ -23,7 +23,7 @@ func TestReadSkipsFIFO(t *testing.T) {
 
 func TestReadFileReplacedByFIFODoesNotBlock(t *testing.T) {
 	dir, root := checkout(t, map[string]string{"pipe": "file"})
-	listed, err := list(context.Background(), root, DefaultLimits())
+	listed, err := list(context.Background(), root, DefaultLimits(), "")
 	if err != nil {
 		t.Fatal(err)
 	}

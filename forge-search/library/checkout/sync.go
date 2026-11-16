@@ -56,7 +56,7 @@ type SyncResult struct {
 // out, and removed from the index, as Read does.
 func Sync(ctx context.Context, root *os.Root, engine *search.Engine, index, revision string, options Options) (SyncResult, error) {
 	limits := options.Limits.withDefaults(DefaultSyncLimits())
-	if err := checkSync(options.Source, revision); err != nil {
+	if err := checkSync(options, revision); err != nil {
 		return SyncResult{}, err
 	}
 
@@ -65,7 +65,7 @@ func Sync(ctx context.Context, root *os.Root, engine *search.Engine, index, revi
 		return SyncResult{}, err
 	}
 
-	listed, err := list(ctx, root, limits)
+	listed, err := list(ctx, root, limits, "")
 	if err != nil {
 		return SyncResult{}, err
 	}
@@ -102,9 +102,12 @@ func Revision(ctx context.Context, engine *search.Engine, index string) (string,
 	return info.Marker, nil
 }
 
-func checkSync(source, revision string) error {
-	if !validName(source) {
+func checkSync(options Options, revision string) error {
+	if !validName(options.Source) {
 		return fmt.Errorf("source: %w", search.ErrInvalid)
+	}
+	if options.Prefix != "" {
+		return fmt.Errorf("prefix: %w", search.ErrInvalid)
 	}
 	validRevision := len(revision) <= search.MaxMarkerBytes && validName(revision)
 	if !validRevision {

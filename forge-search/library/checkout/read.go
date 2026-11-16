@@ -44,8 +44,11 @@ func Read(ctx context.Context, root *os.Root, options Options) (Tree, error) {
 	if !validName(options.Source) {
 		return Tree{}, fmt.Errorf("source: %w", search.ErrInvalid)
 	}
+	if !validName(options.Prefix) {
+		return Tree{}, fmt.Errorf("prefix: %w", search.ErrInvalid)
+	}
 
-	listed, err := list(ctx, root, limits)
+	listed, err := list(ctx, root, limits, options.Prefix)
 	if err != nil {
 		return Tree{}, err
 	}

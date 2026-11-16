@@ -80,6 +80,11 @@ type Options struct {
 	// Source is the Ref.Source of every document, such as a checkout ID.
 	Source string `json:"source,omitempty"`
 
+	// Prefix limits Read and Search to the files whose path starts with it,
+	// as search.Filter.IDPrefix does, such as "cmd/". Only directories that
+	// can hold such files are visited. Sync rejects it.
+	Prefix string `json:"prefix,omitempty"`
+
 	// Limits bound the work. Zero fields use the default.
 	Limits Limits `json:"limits"`
 }

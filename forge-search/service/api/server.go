@@ -41,6 +41,7 @@ var (
 	errNotReady    = errors.New("api: checkout is not ready")
 	errNotReadable = errors.New("api: checkout is not readable here")
 	errUnavailable = errors.New("api: checkouts service unavailable")
+	errJournal     = errors.New("api: cannot journal a checkout")
 )
 
 // Config holds what a Server needs.
@@ -52,8 +53,13 @@ type Config struct {
 	// content leaves the storage files, as sqlite.Store.Checkpoint does.
 	Checkpoint func(context.Context) error
 
-	// Checkouts resolves checkout IDs.
+	// Checkouts resolves checkout IDs, and creates and removes the
+	// checkouts of repository references.
 	Checkouts Checkouts
+
+	// Journal records the checkouts the server created until it removes
+	// them.
+	Journal Journal
 
 	// Root is where checkout directories are read.
 	Root Root
@@ -61,7 +67,9 @@ type Config struct {
 	// Token is the service token callers must present.
 	Token forgeauth.Credentials
 
-	// Timeout bounds each RPC but IndexCheckout; IndexTimeout bounds that.
+	// Timeout bounds each RPC but IndexCheckout, IndexRepository and
+	// SearchRepository; IndexTimeout bounds those. A SearchRepository of an
+	// index searches within Timeout.
 	Timeout, IndexTimeout time.Duration
 
 	// MaxIndexes is the most indexes IndexCheckout creates. Zero uses
@@ -81,13 +89,20 @@ type Server struct {
 
 	// mu guards busy, the indexes an RPC is changing, and orders index
 	// creation against the MaxIndexes check.
+	// It also guards live, the temporary checkouts calls are using.
 	mu   sync.Mutex
 	busy map[string]bool
+	live map[string]bool
+
+	// slots holds one value per temporary checkout, and sweeping is held
+	// by the one running Sweep.
+	slots    chan struct{}
+	sweeping sync.Mutex
 }
 
 // New returns a server for config.
 func New(config Config) (*Server, error) {
-	valid := config.Engine != nil && config.Checkouts != nil && config.Token != nil &&
+	valid := config.Engine != nil && config.Checkouts != nil && config.Journal != nil && config.Token != nil &&
 		config.Timeout > 0 && config.IndexTimeout > 0 && config.MaxIndexes >= 0 && config.Root.valid()
 	if !valid {
 		return nil, ErrInvalid
@@ -100,7 +115,12 @@ func New(config Config) (*Server, error) {
 		config.Now = time.Now
 	}
 
-	return &Server{config: config, busy: map[string]bool{}}, nil
+	return &Server{
+		config: config,
+		busy:   map[string]bool{},
+		live:   map[string]bool{},
+		slots:  make(chan struct{}, MaxTemporaryCheckouts),
+	}, nil
 }
 
 // GRPCOptions returns the options a gRPC server for s needs: a receive
@@ -185,7 +205,7 @@ func code(err error) codes.Code {
 	switch {
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		return servicekit.ForgeCode(err)
-	case errors.Is(err, errBadRequest), errors.Is(err, search.ErrInvalid):
+	case errors.Is(err, errBadRequest), errors.Is(err, search.ErrInvalid), errors.Is(err, ErrRejected):
 		return codes.InvalidArgument
 	case errors.Is(err, ErrNotFound), errors.Is(err, search.ErrNotFound):
 		return codes.NotFound
@@ -195,7 +215,8 @@ func code(err error) codes.Code {
 		return codes.FailedPrecondition
 	case errors.Is(err, errBusy), errors.Is(err, checkout.ErrChanged):
 		return codes.Aborted
-	case errors.Is(err, errTooMany), errors.Is(err, search.ErrTooLarge), errors.Is(err, search.ErrFull),
+	case errors.Is(err, errTooMany), errors.Is(err, errCheckoutsBusy), errors.Is(err, search.ErrTooLarge),
+		errors.Is(err, search.ErrFull),
 		errors.Is(err, sqlite.ErrDiskFull):
 		return codes.ResourceExhausted
 	case errors.Is(err, errUnavailable), errors.Is(err, sqlite.ErrReadOnly):

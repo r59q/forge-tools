@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"math"
+	"os"
 
 	"github.com/r59q/forge-tools/forge-search/library/checkout"
 	"github.com/r59q/forge-tools/forge-search/library/search"
@@ -27,11 +28,8 @@ func (s *Server) SearchIndex(ctx context.Context, r *pb.SearchIndexRequest) (*pb
 		if err != nil {
 			return nil, err
 		}
-		results, err := engine.Search(ctx, r.GetIndex(), query, search.Filter{Kind: search.KindCode, IDPrefix: prefix})
+		results, err := s.searchIndex(ctx, r.GetIndex(), query, prefix)
 		if err != nil {
-			return nil, err
-		}
-		if err := canceled(ctx, results.State); err != nil {
 			return nil, err
 		}
 
@@ -57,11 +55,8 @@ func (s *Server) SearchCheckout(ctx context.Context, r *pb.SearchCheckoutRequest
 		}
 		defer func() { _ = root.Close() }()
 
-		results, err := checkout.Search(ctx, root, query, checkout.Options{Prefix: prefix})
+		results, err := searchCheckout(ctx, root, query, prefix)
 		if err != nil {
-			return nil, err
-		}
-		if err := canceled(ctx, results.State); err != nil {
 			return nil, err
 		}
 
@@ -72,6 +67,25 @@ func (s *Server) SearchCheckout(ctx context.Context, r *pb.SearchCheckoutRequest
 			Files:    fileState(results.Files),
 		}, nil
 	})
+}
+
+// searchIndex searches the code of an index, failing if ctx ends first.
+func (s *Server) searchIndex(ctx context.Context, index string, query search.Query, prefix string) (search.Results, error) {
+	results, err := s.config.Engine.Search(ctx, index, query, search.Filter{Kind: search.KindCode, IDPrefix: prefix})
+	if err != nil {
+		return search.Results{}, err
+	}
+	return results, canceled(ctx, results.State)
+}
+
+// searchCheckout searches the code of a checkout directory, failing if ctx
+// ends first.
+func searchCheckout(ctx context.Context, root *os.Root, query search.Query, prefix string) (checkout.Results, error) {
+	results, err := checkout.Search(ctx, root, query, checkout.Options{Prefix: prefix})
+	if err != nil {
+		return checkout.Results{}, err
+	}
+	return results, canceled(ctx, results.State)
 }
 
 // codeQuery returns the library query and path prefix of a CodeQuery.

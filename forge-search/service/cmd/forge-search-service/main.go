@@ -35,6 +35,10 @@ const readTimeout = 15 * time.Second
 // directory.
 const copies = "copies"
 
+// journalDir is the directory, in the data directory, that lists the checkouts
+// the service created and has not removed.
+const journalDir = "checkouts"
+
 // settings are the shared service settings plus storage and forge-checkouts
 // settings.
 type settings struct {
@@ -199,10 +203,16 @@ func run(ctx context.Context, s settings, ready func(grpcAddr, httpAddr net.Addr
 		}
 	}()
 
+	journal, err := api.OpenJournal(filepath.Join(s.dataDirectory, journalDir))
+	if err != nil {
+		return errors.New("cannot open checkout journal")
+	}
+
 	service, err := api.New(api.Config{
 		Engine:       search.NewEngine(store, search.IndexLimits{}),
 		Checkpoint:   store.Checkpoint,
 		Checkouts:    api.NewRemote(checkoutspb.NewCheckoutsServiceClient(conn), checkoutsToken),
+		Journal:      journal,
 		Root:         s.root,
 		Token:        token,
 		Timeout:      s.Timeout,
@@ -212,6 +222,10 @@ func run(ctx context.Context, s settings, ready func(grpcAddr, httpAddr net.Addr
 	if err != nil {
 		return errors.New("cannot initialize API")
 	}
+
+	// Remove the checkouts an earlier run left, as far as forge-checkouts
+	// answers in time.
+	service.Sweep(ctx)
 
 	handler, err := service.REST(ctx)
 	if err != nil {

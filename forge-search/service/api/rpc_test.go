@@ -375,9 +375,11 @@ func (f *fakeService) GetCheckout(ctx context.Context, r *checkoutspb.GetCheckou
 	return nil, status.Error(codes.NotFound, "no checkout")
 }
 
-func TestRemote(t *testing.T) {
+// serveCheckouts serves a fake forge-checkouts in process and returns a
+// connection to it and the server.
+func serveCheckouts(t *testing.T, service *fakeService) (*grpc.ClientConn, *grpc.Server) {
+	t.Helper()
 	listener := bufconn.Listen(1 << 20)
-	service := &fakeService{authorization: make(chan string, 10)}
 	g := grpc.NewServer()
 	checkoutspb.RegisterCheckoutsServiceServer(g, service)
 	go func() { _ = g.Serve(listener) }()
@@ -391,6 +393,12 @@ func TestRemote(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = conn.Close() })
+	return conn, g
+}
+
+func TestRemote(t *testing.T) {
+	service := &fakeService{authorization: make(chan string, 10)}
+	conn, g := serveCheckouts(t, service)
 
 	ctx := context.Background()
 	remote := NewRemote(checkoutspb.NewCheckoutsServiceClient(conn), forgeauth.StaticToken("checkouts-token"))
@@ -427,5 +435,69 @@ func TestRemote(t *testing.T) {
 	g.Stop()
 	if _, err := remote.Checkout(ctx, checkoutID); !errors.Is(err, errUnavailable) {
 		t.Fatalf("stopped: %v", err)
+	}
+}
+
+// CreateCheckout knows the default branch of github octo/demo, refuses the
+// source "bad" and fails for the reference "broken".
+func (f *fakeService) CreateCheckout(_ context.Context, r *checkoutspb.CreateCheckoutRequest) (*checkoutspb.CreateCheckoutResponse, error) {
+	repo := r.GetRepository()
+	switch {
+	case repo.GetSource() == "bad":
+		return nil, status.Error(codes.InvalidArgument, "bad source /data/x")
+	case r.GetReference() == "broken":
+		return nil, status.Error(codes.Internal, "git failed in /data/repos")
+	case repo.GetSource() != "github" || repo.GetPath() != "octo/demo" || r.GetReference() != "" || r.GetMode() != "":
+		return nil, status.Error(codes.NotFound, "no repository")
+	}
+	return &checkoutspb.CreateCheckoutResponse{Checkout: &checkoutspb.Checkout{
+		Id: checkoutID, Revision: "rev1", State: "ready", Location: "/data/copies/" + checkoutID,
+	}}, nil
+}
+
+// RemoveCheckout removes checkoutID, if discarding.
+func (f *fakeService) RemoveCheckout(_ context.Context, r *checkoutspb.RemoveCheckoutRequest) (*checkoutspb.RemoveCheckoutResponse, error) {
+	switch {
+	case !r.GetDiscard():
+		return nil, status.Error(codes.FailedPrecondition, "modified")
+	case r.GetId() != checkoutID:
+		return nil, status.Error(codes.NotFound, "no checkout")
+	}
+	return &checkoutspb.RemoveCheckoutResponse{}, nil
+}
+
+func TestRemoteCreateRemove(t *testing.T) {
+	conn, _ := serveCheckouts(t, &fakeService{authorization: make(chan string, 10)})
+
+	ctx := context.Background()
+	remote := NewRemote(checkoutspb.NewCheckoutsServiceClient(conn), forgeauth.StaticToken("checkouts-token"))
+
+	c, err := remote.Create(ctx, repository)
+	if err != nil || c != (Checkout{ID: checkoutID, Revision: "rev1", State: "ready", Location: "/data/copies/" + checkoutID}) {
+		t.Fatalf("create: %+v %v", c, err)
+	}
+	for target, want := range map[Target]error{
+		{Source: "bad", Repository: "octo/demo"}:                         ErrRejected,
+		{Source: "github", Repository: "octo/other"}:                     ErrNotFound,
+		{Source: "github", Repository: "octo/demo", Reference: "broken"}: errUnavailable,
+	} {
+		if _, err := remote.Create(ctx, target); !errors.Is(err, want) {
+			t.Errorf("create %+v: %v, want %v", target, err, want)
+		}
+	}
+
+	if err := remote.Remove(ctx, checkoutID); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	if err := remote.Remove(ctx, otherID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("remove missing: %v", err)
+	}
+
+	noToken := NewRemote(checkoutspb.NewCheckoutsServiceClient(conn), forgeauth.EnvToken("FORGE_SEARCH_TEST_UNSET_TOKEN"))
+	if _, err := noToken.Create(ctx, repository); !errors.Is(err, errUnavailable) {
+		t.Fatalf("no token: %v", err)
+	}
+	if err := noToken.Remove(ctx, checkoutID); !errors.Is(err, errUnavailable) {
+		t.Fatalf("no token: %v", err)
 	}
 }

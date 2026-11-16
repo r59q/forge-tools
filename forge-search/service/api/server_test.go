@@ -22,6 +22,7 @@ func TestNew(t *testing.T) {
 	valid := Config{
 		Engine:       search.NewEngine(&search.MemoryStore{}, search.IndexLimits{}),
 		Checkouts:    &fakeCheckouts{},
+		Journal:      &DirJournal{dir: "/journal"},
 		Root:         Root{Local: "/checkouts"},
 		Token:        forgeauth.StaticToken(token),
 		Timeout:      time.Second,
@@ -34,6 +35,7 @@ func TestNew(t *testing.T) {
 	for name, change := range map[string]func(*Config){
 		"no engine":         func(c *Config) { c.Engine = nil },
 		"no checkouts":      func(c *Config) { c.Checkouts = nil },
+		"no journal":        func(c *Config) { c.Journal = nil },
 		"no token":          func(c *Config) { c.Token = nil },
 		"no timeout":        func(c *Config) { c.Timeout = 0 },
 		"no index timeout":  func(c *Config) { c.IndexTimeout = 0 },
@@ -66,8 +68,8 @@ func TestAuthentication(t *testing.T) {
 			}
 		}
 	}
-	if f.checkouts.calls != 0 {
-		t.Fatalf("%d checkout lookups", f.checkouts.calls)
+	if f.checkouts.calls != 0 || len(f.checkouts.created) != 0 {
+		t.Fatalf("%d checkout lookups, %d created", f.checkouts.calls, len(f.checkouts.created))
 	}
 }
 

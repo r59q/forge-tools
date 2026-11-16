@@ -264,7 +264,8 @@ func (x *FileState) GetUnsupported() int32 {
 // IndexCheckoutRequest names the checkout to index.
 type IndexCheckoutRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// index is the index name. It is created if it does not exist.
+	// index is the index name. It is created if it does not exist. Names
+	// starting with "repo-" belong to IndexRepository and are refused.
 	Index string `protobuf:"bytes,1,opt,name=index,proto3" json:"index,omitempty"`
 	// checkout_id is the forge-checkouts checkout ID.
 	CheckoutId    string `protobuf:"bytes,2,opt,name=checkout_id,json=checkoutId,proto3" json:"checkout_id,omitempty"`

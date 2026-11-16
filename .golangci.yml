@@ -62,6 +62,8 @@ linters:
               desc: libraries must not import services
             - pkg: "github.com/r59q/forge-tools/forge-search/service"
               desc: libraries must not import services
+            - pkg: "github.com/r59q/forge-tools/forge-evidence/service"
+              desc: libraries must not import services
         core-no-tools:
           files:
             - "**/forge-core/**"
@@ -94,6 +96,8 @@ linters:
               desc: forge-core must not depend on any tool
             - pkg: "github.com/r59q/forge-tools/forge-search"
               desc: forge-core must not depend on any tool
+            - pkg: "github.com/r59q/forge-tools/forge-evidence"
+              desc: forge-core must not depend on any tool
         connector-no-tools:
           files:
             - "**/forge-connector/**"
@@ -124,6 +128,8 @@ linters:
               desc: forge-connector knows no tool domain
             - pkg: "github.com/r59q/forge-tools/forge-search"
               desc: forge-connector knows no tool domain
+            - pkg: "github.com/r59q/forge-tools/forge-evidence"
+              desc: forge-connector knows no tool domain
         actions-no-other-tools:
           files:
             - "**/forge-actions/**"
@@ -151,6 +157,8 @@ linters:
             - pkg: "github.com/r59q/forge-tools/forge-symbols"
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-search"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-evidence"
               desc: tools must not depend on each other
         changes-no-other-tools:
           files:
@@ -180,6 +188,8 @@ linters:
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-search"
               desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-evidence"
+              desc: tools must not depend on each other
         checkouts-no-other-tools:
           files:
             - "**/forge-checkouts/**"
@@ -207,6 +217,8 @@ linters:
             - pkg: "github.com/r59q/forge-tools/forge-symbols"
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-search"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-evidence"
               desc: tools must not depend on each other
         code-no-other-tools:
           files:
@@ -236,6 +248,8 @@ linters:
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-search"
               desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-evidence"
+              desc: tools must not depend on each other
         issues-no-other-tools:
           files:
             - "**/forge-issues/**"
@@ -263,6 +277,8 @@ linters:
             - pkg: "github.com/r59q/forge-tools/forge-symbols"
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-search"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-evidence"
               desc: tools must not depend on each other
         repositories-no-other-tools:
           files:
@@ -292,6 +308,8 @@ linters:
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-search"
               desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-evidence"
+              desc: tools must not depend on each other
         review-no-other-tools:
           files:
             - "**/forge-review/**"
@@ -319,6 +337,8 @@ linters:
             - pkg: "github.com/r59q/forge-tools/forge-symbols"
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-search"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-evidence"
               desc: tools must not depend on each other
         explorer-no-other-tools:
           files:
@@ -348,6 +368,8 @@ linters:
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-search"
               desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-evidence"
+              desc: tools must not depend on each other
         pipeprint-no-other-tools:
           files:
             - "**/forge-pipeprint/**"
@@ -375,6 +397,8 @@ linters:
             - pkg: "github.com/r59q/forge-tools/forge-symbols"
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-search"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-evidence"
               desc: tools must not depend on each other
         reactor-no-other-tools:
           files:
@@ -404,6 +428,8 @@ linters:
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-search"
               desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-evidence"
+              desc: tools must not depend on each other
         symbols-no-other-tools:
           files:
             - "**/forge-symbols/**"
@@ -432,6 +458,8 @@ linters:
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-search"
               desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-evidence"
+              desc: tools must not depend on each other
         # forge-search combines checkouts, issues and symbols, so only those are allowed.
         search-no-other-tools:
           files:
@@ -455,6 +483,38 @@ linters:
               desc: forge-search may only combine forge-checkouts, forge-issues and forge-symbols
             - pkg: "github.com/r59q/forge-tools/forge-reactor"
               desc: forge-search may only combine forge-checkouts, forge-issues and forge-symbols
+            - pkg: "github.com/r59q/forge-tools/forge-evidence"
+              desc: forge-search may only combine forge-checkouts, forge-issues and forge-symbols
+        evidence-no-other-tools:
+          files:
+            - "**/forge-evidence/**"
+          deny:
+            - pkg: "github.com/r59q/forge-tools/forge-explorer"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-actions"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-changes"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-checkouts"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-code"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-issues"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-repositories"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-review"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-tools-management"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-pipeprint"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-reactor"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-symbols"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-search"
+              desc: tools must not depend on each other
     dupl:
       threshold: 150
     funlen:

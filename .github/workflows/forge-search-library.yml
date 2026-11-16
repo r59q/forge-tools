@@ -7,6 +7,7 @@ on:
     paths:
       - forge-search/library/**
       - forge-issues/library/**
+      - forge-symbols/library/**
       - forge-core/forgeapi/**
       - .github/workflows/forge-search-library.yml
       - .github/workflows/reusable-go.yml
@@ -15,6 +16,7 @@ on:
     paths:
       - forge-search/library/**
       - forge-issues/library/**
+      - forge-symbols/library/**
       - forge-core/forgeapi/**
       - .github/workflows/forge-search-library.yml
       - .github/workflows/reusable-go.yml

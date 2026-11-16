@@ -84,6 +84,7 @@ Errors never contain document content.
 | `Remove`           | Deletes a document, or returns `ErrNotFound`      |
 | `Documents`        | Lists identities and versions, without content    |
 | `Search`           | Finds a query in the documents a filter selects   |
+| `Read`             | Visits the documents that may hold a text         |
 
 - An index name is 1 to 64 bytes of `a-z`, `0-9`, `.`, `-` and `_`, starts
   with a letter or digit and holds no `..`. Any other name returns
@@ -238,6 +239,81 @@ writes it only when it completes, so a reader error, a store error or a
 cancellation leaves the repository marked as not synced, and `LastSynced`
 returns zero until a later sync converges. Syncs of one repository into one
 index must not overlap.
+
+## Symbols
+
+Package `symbol`, imported from
+`github.com/r59q/forge-tools/forge-search/library/symbol`, finds definitions
+in code documents by name: functions, methods, types and the like, as the
+[forge-symbols library](../../forge-symbols/library/README.md) reports them.
+`Search` analyzes the documents a call carries and stores nothing, `Update`
+stores the symbols of changed documents in an index and drops those of
+removed ones, and `SearchIndex` searches what it stored.
+
+```go
+analyzer := symbols.New(symbols.Limits{})
+defer analyzer.Close(ctx)
+
+results, err := symbol.Search(ctx, analyzer, documents,
+	symbol.Query{Text: "Handler", Filter: symbol.Filter{Kind: "function"}}, symbol.Limits{})
+for _, found := range results.Symbols {
+	fmt.Println(found.Document.ID, found.Name, found.Kind, found.NameRange, found.Preview)
+}
+
+result, err := symbol.Update(ctx, analyzer, engine, "checkout-1",
+	symbol.Change{Source: "checkout-1", Documents: changed, Removed: removedPaths}, symbol.Limits{})
+results, err = symbol.SearchIndex(ctx, engine, "checkout-1", symbol.Query{Text: "Handler"}, symbol.Limits{})
+```
+
+- A query matches symbol names that contain its text, literally and
+  case-sensitively, or equal it with `Exact`. The text follows the matching
+  rules. Filters select by source, path, path prefix, kind and language.
+- Symbols come by source and path, compared as bytes, then in declaration
+  order. `Query.Limit` keeps the first ones.
+- Each symbol has its name, kind, language, the range of its name and of the
+  whole definition, and its container, such as the type of a method. Ranges
+  follow the matching rules.
+- The preview is the declaration line: the line of the name, from the start
+  of the definition when it starts on that line, to its end when it ends
+  there, without leading indentation. It follows the preview rules for
+  length and `…`, and `PreviewColumn` is the column where it starts. A
+  preview is a hint for display, never code to run.
+- The language comes from the path, as `symbols.DetectLanguage` finds it.
+  `symbols.Languages` lists the supported languages; the forge-symbols README
+  lists their extensions. Other documents, and binary ones, are skipped and
+  counted in `Skipped.Unsupported`, without an error.
+- Errors name no content and no host paths.
+
+| Limit        | `Search` | `Update` | Exceeded                                   |
+| ------------ | -------- | -------- | ------------------------------------------ |
+| `FileBytes`  | 1 MiB    | 1 MiB    | Document skipped, counted in `TooLarge`    |
+| `Symbols`    | 10000    | 10000    | Document skipped, counted in `TooLarge`    |
+| `Files`      | 1000     | 10000    | `ErrTooLarge`, before anything is analyzed |
+| `TotalBytes` | 16 MiB   | 256 MiB  | `ErrTooLarge`, before anything is analyzed |
+| `Results`    | 1000     | 1000     | `Truncated` is set                         |
+
+Zero fields use the default. `Files` and `TotalBytes` count only the
+documents that would be analyzed. A document whose analysis times out or runs
+out of memory is counted in `Skipped.Failed`, and one whose symbols take more
+than `MaxRecordBytes` in `TooLarge`. Names, kinds and containers over 256
+bytes, or with line breaks, are left out. A context that ends returns the
+symbols found so far with `State.Canceled`.
+
+### Symbol index
+
+`Update` stores one document of kind `symbol` for each code document with
+symbols, with the same source, ID and version; its content is one line per
+symbol, the name, a tab and the rest of the record. `SearchIndex` reads the
+documents whose content holds the query with `Engine.Read`, so it uses the
+index terms and sees each document as one update left it. Literal searches
+of the same index filter by kind to leave symbols out.
+
+A changed document replaces its symbols; one with no symbols, or skipped,
+removes them. Removed paths drop theirs, and paths never stored are
+ignored. Other kinds and sources are left alone, and `DeleteIndex` removes
+everything. The caller creates the index and passes what changed, such as
+the paths of a checkout sync. The modes agree when the update and the search
+use the same analyzer and `FileBytes` and `Symbols` limits.
 
 ## Storage
 

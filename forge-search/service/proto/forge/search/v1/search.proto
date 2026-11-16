@@ -18,8 +18,14 @@ option go_package = "github.com/r59q/forge-tools/forge-search/service/searchpb";
 // unindexed searches of the same files return the same matches in the same
 // order.
 //
+// A repository reference is checked out by the service itself, through
+// forge-checkouts, only within an IndexRepository or SearchRepository call,
+// and the checkout is removed before the call returns. The service never
+// fetches code on its own.
+//
 // Errors carry only a status code: INVALID_ARGUMENT for an invalid field,
-// NOT_FOUND for a missing index or checkout,
+// NOT_FOUND for a missing index or checkout, or an unknown source,
+// repository or reference,
 // FAILED_PRECONDITION for a checkout that is not ready or not readable here,
 // ABORTED for an index already being indexed or files that changed while
 // read, RESOURCE_EXHAUSTED for a request, checkout or index over a limit,
@@ -65,6 +71,41 @@ service SearchService {
       body: "*"
     };
   }
+  // IndexRepository checks out a repository reference at its current
+  // commit, syncs it into the index of that reference and removes the
+  // checkout. The service names the index and creates it if needed. An
+  // index already at that commit is left as it is. It runs within the call.
+  // POST /v1/repositories:index.
+  rpc IndexRepository(IndexRepositoryRequest) returns (IndexRepositoryResponse) {
+    option (google.api.http) = {
+      post: "/v1/repositories:index"
+      body: "*"
+    };
+  }
+  // SearchRepository searches the index of a repository reference. Without
+  // one, it checks the reference out, searches it unindexed and removes the
+  // checkout. POST /v1/repositories:search.
+  rpc SearchRepository(SearchRepositoryRequest) returns (SearchRepositoryResponse) {
+    option (google.api.http) = {
+      post: "/v1/repositories:search"
+      body: "*"
+    };
+  }
+}
+
+// RepositoryTarget names a repository reference on a forge.
+message RepositoryTarget {
+  // source is the forge-connector connection ID: 1-128 bytes of A-Z, a-z,
+  // 0-9, "_" and "-".
+  string source = 1;
+  // repository is the repository path, such as "owner/name": at most 256
+  // bytes, 2-16 segments of A-Z, a-z, 0-9, ".", "_" and "-", other than "."
+  // and "..".
+  string repository = 2;
+  // reference is a branch, tag or commit: at most 256 bytes of a valid Git
+  // reference name. Empty, or "HEAD", is the default branch, which
+  // responses name "".
+  string reference = 3;
 }
 
 // Index is the status of an index.
@@ -83,6 +124,9 @@ message Index {
   string checkout_id = 5;
   // updated_at is when the last completed indexing finished.
   google.protobuf.Timestamp updated_at = 6;
+  // target is the repository reference of an index IndexRepository made.
+  // Its checkout_id names a checkout that has since been removed.
+  RepositoryTarget target = 7;
 }
 
 // FileState counts the checkout files left out.
@@ -217,4 +261,44 @@ message SearchCheckoutResponse {
   string revision = 3;
   // files counts the files left out of the search.
   FileState files = 4;
+}
+
+// IndexRepositoryRequest names the repository reference to index.
+message IndexRepositoryRequest {
+  RepositoryTarget target = 1;
+}
+
+// IndexRepositoryResponse is the index after the sync and what it changed.
+message IndexRepositoryResponse {
+  Index index = 1;
+  // added, replaced, removed, unchanged and files are as in
+  // IndexCheckoutResponse. They are zero when up_to_date.
+  int32 added = 2;
+  int32 replaced = 3;
+  int32 removed = 4;
+  int32 unchanged = 5;
+  FileState files = 6;
+  // up_to_date is set when the index already held the current commit, so
+  // that no file was read or written.
+  bool up_to_date = 7;
+}
+
+// SearchRepositoryRequest searches a repository reference.
+message SearchRepositoryRequest {
+  RepositoryTarget target = 1;
+  CodeQuery query = 2;
+}
+
+// SearchRepositoryResponse holds the matches in path order, then position.
+message SearchRepositoryResponse {
+  repeated CodeMatch matches = 1;
+  SearchState state = 2;
+  // revision is Index.revision of the index searched, or the commit of the
+  // temporary checkout.
+  string revision = 3;
+  // index is the status of the index searched. It is unset for an
+  // unindexed search.
+  Index index = 4;
+  // files counts the files left out of an unindexed search.
+  FileState files = 5;
 }

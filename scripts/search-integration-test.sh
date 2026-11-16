@@ -1,6 +1,7 @@
 #!/bin/sh
 # Smoke test of the search service: index a ready checkout, search the index
-# and the checkout without it with the same query, index the default branch
+# and the checkout without it with the same query, for text and definitions,
+# index the default branch
 # of its repository and search it with and without that index, index and
 # search the issues of the repository the same way, then delete the indexes. FORGE_SEARCH_TEST_TOKEN, FORGE_SEARCH_TEST_CHECKOUT (a ready
 # checkout of the default branch), FORGE_SEARCH_TEST_REVISION (its revision),
@@ -68,6 +69,34 @@ printf '%s\n%s\n' "$indexed" "$unindexed" |
     $a.matches == $b.matches and ($a.state // {}) == ($b.state // {})' >/dev/null ||
   fail "indexed and unindexed searches differ"
 echo "ok: search finds the same matches with and without the index"
+
+# Definitions exist only in files of a language forge-symbols supports, which
+# the repository may lack.
+status=$(api "$url/v1/indexes/$index") || fail "get index symbols"
+printf '%s\n' "$status" | jq -e '.index.symbols.complete == true' >/dev/null ||
+  fail "index symbols incomplete"
+if printf '%s\n' "$status" | jq -e '(.index.symbols.documents // "0" | tonumber) == 0' >/dev/null; then
+  echo "skip: $FORGE_SEARCH_TEST_REPOSITORY has no definitions in a supported language"
+else
+  indexed=$(jq -n "$query" | api "$url/v1/indexes/$index/symbols:search" -d @-) || fail "search index symbols"
+  unindexed=$(jq -n "$query" |
+    curl -sS -H "Authorization: Bearer $FORGE_SEARCH_TEST_TOKEN" -w '\n%{http_code}' \
+      "$url/v1/checkouts/$FORGE_SEARCH_TEST_CHECKOUT/symbols:search" -d @-) || fail "search checkout symbols"
+  code=$(printf '%s\n' "$unindexed" | tail -n 1)
+  unindexed=$(printf '%s\n' "$unindexed" | sed '$d')
+  if [ "$code" = 429 ]; then
+    echo "skip: checkout is over the unindexed symbol search limits"
+  else
+    [ "$code" = 200 ] || fail "search checkout symbols: HTTP $code"
+    printf '%s\n%s\n' "$indexed" "$unindexed" |
+      jq -s -e --arg r "$FORGE_SEARCH_TEST_REVISION" '.[0] as $a | .[1] as $b |
+        ($a.symbols | length) > 0 and $a.revision == $r and $a.complete == true and $b.revision == $r and
+        $a.symbols == $b.symbols and ($a.truncated // false) == ($b.truncated // false) and
+        all($a.symbols[]; .name != "" and .kind != "" and .language != "" and .nameRange.startLine > 0)' \
+        >/dev/null || fail "indexed and unindexed symbol searches differ"
+    echo "ok: search finds the same definitions with and without the index"
+  fi
+fi
 
 # Repository indexes check the default branch out and remove the checkout,
 # so the checkouts of the source must be the caller's alone afterwards.

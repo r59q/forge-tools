@@ -36,6 +36,16 @@ type UpdateResult struct {
 	// Skipped counts the documents left out, which the index holds no
 	// symbols for.
 	Skipped Skipped `json:"skipped"`
+
+	// SkippedPaths lists the documents counted in Skipped, in path order,
+	// so that a caller can keep track of them. It is nil when none was.
+	SkippedPaths []SkippedPath `json:"skippedPaths,omitempty"`
+}
+
+// SkippedPath is a document whose symbols were left out, and why.
+type SkippedPath struct {
+	Path   string     `json:"path"`
+	Reason SkipReason `json:"reason"`
 }
 
 // Update brings the stored symbols of a source in an index in step with a
@@ -103,7 +113,7 @@ type updater struct {
 func (u *updater) apply(ctx context.Context, x extractor, item planned) error {
 	path := item.document.ID
 	if item.skipped != kept {
-		u.result.Skipped.add(item.skipped)
+		u.skip(path, item.skipped)
 		return u.drop(ctx, path)
 	}
 
@@ -111,7 +121,7 @@ func (u *updater) apply(ctx context.Context, x extractor, item planned) error {
 	if err != nil {
 		return err
 	}
-	u.result.Skipped.add(extracted.skipped)
+	u.skip(path, extracted.skipped)
 	if len(extracted.symbols) == 0 {
 		return u.drop(ctx, path)
 	}
@@ -125,6 +135,15 @@ func (u *updater) apply(ctx context.Context, x extractor, item planned) error {
 	u.result.Stored++
 	u.result.Symbols += len(extracted.symbols)
 	return nil
+}
+
+// skip counts and lists a document left out for reason, if it was.
+func (u *updater) skip(path string, reason skip) {
+	if reason == kept {
+		return
+	}
+	u.result.Skipped.add(reason)
+	u.result.SkippedPaths = append(u.result.SkippedPaths, SkippedPath{Path: path, Reason: reason.reason()})
 }
 
 // drop removes the stored symbols of a path, if the index holds any.

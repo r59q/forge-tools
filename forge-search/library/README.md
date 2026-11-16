@@ -312,8 +312,9 @@ index terms and sees each document as one update left it. Literal searches
 of the same index filter by kind to leave symbols out.
 
 A changed document replaces its symbols; one with no symbols, or skipped,
-removes them. Removed paths drop theirs, and paths never stored are
-ignored. Other kinds and sources are left alone, and `DeleteIndex` removes
+removes them. `UpdateResult.SkippedPaths` names each skipped document and
+why, so a caller can keep totals across updates. Removed paths drop theirs,
+and paths never stored are ignored. Other kinds and sources are left alone, and `DeleteIndex` removes
 everything. The caller creates the index and passes what changed, such as
 the paths of a checkout sync. The modes agree when the update and the search
 use the same analyzer and `FileBytes` and `Symbols` limits.

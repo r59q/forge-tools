@@ -21,12 +21,15 @@ func Run(t *testing.T, open func(t *testing.T) agent.Store) {
 	t.Run("output", func(t *testing.T) { testOutput(t, open(t)) })
 }
 
-var repo = workspace.Repository{Source: "github", Path: "r59q/forge-tools"}
+// repository is the repository of checkout samples.
+func repository() workspace.Repository {
+	return workspace.Repository{Source: "github", Path: "r59q/forge-tools"}
+}
 
 func sample(id string, created time.Time) agent.Agent {
 	return agent.Agent{
 		ID: id, Client: "claude", Model: "opus", State: agent.StateIdle,
-		Workspace: workspace.Workspace{Kind: workspace.KindCheckout, Path: "/data/copies/x", Checkout: "x", Repository: repo},
+		Workspace: workspace.Workspace{Kind: workspace.KindCheckout, Path: "/data/copies/x", Checkout: "x", Repository: repository()},
 		Policy:    adapter.Policy{Mode: adapter.ModeEdit, Ask: true},
 		Limits:    agent.Limits{TurnTimeout: time.Minute, MaxEvents: 3},
 		Session:   "s1", Turns: 2, CreatedAt: created.UTC(), UpdatedAt: created.UTC(),
@@ -61,7 +64,7 @@ func testAgents(t *testing.T, s agent.Store) {
 		"all":        {agent.Filter{}, "ba"},
 		"state":      {agent.Filter{State: agent.StateRunning}, "b"},
 		"parent":     {agent.Filter{Parent: "b"}, "a"},
-		"repository": {agent.Filter{Repository: repo}, "b"},
+		"repository": {agent.Filter{Repository: repository()}, "b"},
 		"none":       {agent.Filter{State: agent.StateFailed}, ""},
 	} {
 		list, err := s.List(ctx, c.f)

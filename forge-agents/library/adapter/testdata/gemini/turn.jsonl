@@ -1,0 +1,13 @@
+{"type":"init","timestamp":"2026-11-17T10:00:00.000Z","session_id":"c3d4e5f6-a7b8-4c9d-8e0f-1a2b3c4d5e6f","model":"gemini-2.5-pro"}
+{"type":"message","timestamp":"2026-11-17T10:00:00.010Z","role":"user","content":"How many tests are there?"}
+{"type":"message","timestamp":"2026-11-17T10:00:01.000Z","role":"assistant","content":"I'll count ","delta":true}
+{"type":"message","timestamp":"2026-11-17T10:00:01.100Z","role":"assistant","content":"the tests.","delta":true}
+{"type":"tool_use","timestamp":"2026-11-17T10:00:01.200Z","tool_name":"run_shell_command","tool_id":"run_shell_command-1","parameters":{"command":"grep -c '^func Test' main_test.go"}}
+{"type":"tool_result","timestamp":"2026-11-17T10:00:01.900Z","tool_id":"run_shell_command-1","status":"success","output":"3"}
+{"type":"tool_use","timestamp":"2026-11-17T10:00:02.000Z","tool_name":"ask_user","tool_id":"ask_user-2","parameters":{"question":"Count benchmarks too?"}}
+{"type":"tool_result","timestamp":"2026-11-17T10:00:05.000Z","tool_id":"ask_user-2","status":"success","output":"No, only tests."}
+{"type":"tool_use","timestamp":"2026-11-17T10:00:05.100Z","tool_name":"read_file","tool_id":"read_file-3","parameters":{"absolute_path":"/work/missing.go"}}
+{"type":"tool_result","timestamp":"2026-11-17T10:00:05.200Z","tool_id":"read_file-3","status":"error","error":{"type":"file_not_found","message":"File not found: /work/missing.go"}}
+{"type":"message","timestamp":"2026-11-17T10:00:06.000Z","role":"assistant","content":"There are 3 tests ","delta":true}
+{"type":"message","timestamp":"2026-11-17T10:00:06.100Z","role":"assistant","content":"in main_test.go.","delta":true}
+{"type":"result","timestamp":"2026-11-17T10:00:06.200Z","status":"success","stats":{"total_tokens":2495,"input_tokens":2400,"output_tokens":95,"cached":1200,"duration_ms":6200,"tool_calls":3}}

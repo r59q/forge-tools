@@ -16,6 +16,7 @@
 **/search-data
 **/workspace-data
 **/reactor-data
+**/agents-data
 
 # Explorer importer staging and browser reports are not production assets.
 **/nudaui/.staging

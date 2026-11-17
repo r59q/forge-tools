@@ -1,0 +1,15 @@
+{
+  "session": "0a7e9d5c-1b2f-4c3d-8e9f-a0b1c2d3e4f5",
+  "result": true,
+  "events": [
+    {
+      "kind": "error",
+      "text": "API Error: 529 overloaded"
+    },
+    {
+      "kind": "result",
+      "text": "API Error: 529 overloaded",
+      "status": "error"
+    }
+  ]
+}

@@ -1,0 +1,68 @@
+name: forge-agents-service
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - forge-agents/service/**
+      - forge-agents/library/**
+      - forge-checkouts/service/**
+      - forge-checkouts/library/**
+      - forge-connector/library/**
+      - forge-core/forgeapi/**
+      - forge-core/servicekit/**
+      - .dockerignore
+      - .github/workflows/forge-agents-service.yml
+      - buf.yaml
+      - buf.lock
+      - .github/workflows/reusable-*.yml
+  pull_request:
+    paths:
+      - forge-agents/service/**
+      - forge-agents/library/**
+      - forge-checkouts/service/**
+      - forge-checkouts/library/**
+      - forge-connector/library/**
+      - forge-core/forgeapi/**
+      - forge-core/servicekit/**
+      - .dockerignore
+      - .github/workflows/forge-agents-service.yml
+      - buf.yaml
+      - buf.lock
+      - .github/workflows/reusable-*.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: ./.github/workflows/reusable-go.yml
+    with:
+      dir: forge-agents/service
+
+  proto:
+    uses: ./.github/workflows/reusable-proto.yml
+    with:
+      dir: forge-agents/service
+
+  # Pull requests build the image without pushing or registry access.
+  image:
+    if: github.event_name == 'pull_request'
+    needs: test
+    uses: ./.github/workflows/reusable-docker.yml
+    with:
+      image: forge-agents-service
+      dockerfile: forge-agents/service/Dockerfile
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+    needs: test
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/reusable-docker.yml
+    with:
+      image: forge-agents-service
+      dockerfile: forge-agents/service/Dockerfile
+      push: true

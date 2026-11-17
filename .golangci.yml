@@ -64,6 +64,8 @@ linters:
               desc: libraries must not import services
             - pkg: "github.com/r59q/forge-tools/forge-evidence/service"
               desc: libraries must not import services
+            - pkg: "github.com/r59q/forge-tools/forge-agents/service"
+              desc: libraries must not import services
         core-no-tools:
           files:
             - "**/forge-core/**"
@@ -98,6 +100,8 @@ linters:
               desc: forge-core must not depend on any tool
             - pkg: "github.com/r59q/forge-tools/forge-evidence"
               desc: forge-core must not depend on any tool
+            - pkg: "github.com/r59q/forge-tools/forge-agents"
+              desc: forge-core must not depend on any tool
         connector-no-tools:
           files:
             - "**/forge-connector/**"
@@ -130,6 +134,8 @@ linters:
               desc: forge-connector knows no tool domain
             - pkg: "github.com/r59q/forge-tools/forge-evidence"
               desc: forge-connector knows no tool domain
+            - pkg: "github.com/r59q/forge-tools/forge-agents"
+              desc: forge-connector knows no tool domain
         actions-no-other-tools:
           files:
             - "**/forge-actions/**"
@@ -159,6 +165,8 @@ linters:
             - pkg: "github.com/r59q/forge-tools/forge-search"
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-evidence"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-agents"
               desc: tools must not depend on each other
         changes-no-other-tools:
           files:
@@ -190,6 +198,8 @@ linters:
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-evidence"
               desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-agents"
+              desc: tools must not depend on each other
         checkouts-no-other-tools:
           files:
             - "**/forge-checkouts/**"
@@ -219,6 +229,8 @@ linters:
             - pkg: "github.com/r59q/forge-tools/forge-search"
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-evidence"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-agents"
               desc: tools must not depend on each other
         code-no-other-tools:
           files:
@@ -250,6 +262,8 @@ linters:
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-evidence"
               desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-agents"
+              desc: tools must not depend on each other
         issues-no-other-tools:
           files:
             - "**/forge-issues/**"
@@ -279,6 +293,8 @@ linters:
             - pkg: "github.com/r59q/forge-tools/forge-search"
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-evidence"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-agents"
               desc: tools must not depend on each other
         repositories-no-other-tools:
           files:
@@ -310,6 +326,8 @@ linters:
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-evidence"
               desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-agents"
+              desc: tools must not depend on each other
         review-no-other-tools:
           files:
             - "**/forge-review/**"
@@ -339,6 +357,8 @@ linters:
             - pkg: "github.com/r59q/forge-tools/forge-search"
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-evidence"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-agents"
               desc: tools must not depend on each other
         explorer-no-other-tools:
           files:
@@ -370,6 +390,8 @@ linters:
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-evidence"
               desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-agents"
+              desc: tools must not depend on each other
         pipeprint-no-other-tools:
           files:
             - "**/forge-pipeprint/**"
@@ -400,6 +422,8 @@ linters:
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-evidence"
               desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-agents"
+              desc: tools must not depend on each other
         reactor-no-other-tools:
           files:
             - "**/forge-reactor/**"
@@ -429,6 +453,8 @@ linters:
             - pkg: "github.com/r59q/forge-tools/forge-search"
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-evidence"
+              desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-agents"
               desc: tools must not depend on each other
         symbols-no-other-tools:
           files:
@@ -461,6 +487,8 @@ linters:
             - pkg: "github.com/r59q/forge-tools/forge-evidence"
               desc: tools must not depend on each other
         # forge-search combines checkouts, issues and symbols, so only those are allowed.
+            - pkg: "github.com/r59q/forge-tools/forge-agents"
+              desc: tools must not depend on each other
         search-no-other-tools:
           files:
             - "**/forge-search/**"
@@ -484,6 +512,8 @@ linters:
             - pkg: "github.com/r59q/forge-tools/forge-reactor"
               desc: forge-search may only combine forge-checkouts, forge-issues and forge-symbols
             - pkg: "github.com/r59q/forge-tools/forge-evidence"
+              desc: forge-search may only combine forge-checkouts, forge-issues and forge-symbols
+            - pkg: "github.com/r59q/forge-tools/forge-agents"
               desc: forge-search may only combine forge-checkouts, forge-issues and forge-symbols
         evidence-no-other-tools:
           files:
@@ -515,6 +545,39 @@ linters:
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-search"
               desc: tools must not depend on each other
+            - pkg: "github.com/r59q/forge-tools/forge-agents"
+              desc: tools must not depend on each other
+        # forge-agents runs agents in forge-checkouts worktrees, so only that tool is allowed.
+        agents-no-other-tools:
+          files:
+            - "**/forge-agents/**"
+          deny:
+            - pkg: "github.com/r59q/forge-tools/forge-explorer"
+              desc: forge-agents may only combine forge-checkouts
+            - pkg: "github.com/r59q/forge-tools/forge-actions"
+              desc: forge-agents may only combine forge-checkouts
+            - pkg: "github.com/r59q/forge-tools/forge-changes"
+              desc: forge-agents may only combine forge-checkouts
+            - pkg: "github.com/r59q/forge-tools/forge-code"
+              desc: forge-agents may only combine forge-checkouts
+            - pkg: "github.com/r59q/forge-tools/forge-issues"
+              desc: forge-agents may only combine forge-checkouts
+            - pkg: "github.com/r59q/forge-tools/forge-repositories"
+              desc: forge-agents may only combine forge-checkouts
+            - pkg: "github.com/r59q/forge-tools/forge-review"
+              desc: forge-agents may only combine forge-checkouts
+            - pkg: "github.com/r59q/forge-tools/forge-tools-management"
+              desc: forge-agents may only combine forge-checkouts
+            - pkg: "github.com/r59q/forge-tools/forge-pipeprint"
+              desc: forge-agents may only combine forge-checkouts
+            - pkg: "github.com/r59q/forge-tools/forge-reactor"
+              desc: forge-agents may only combine forge-checkouts
+            - pkg: "github.com/r59q/forge-tools/forge-symbols"
+              desc: forge-agents may only combine forge-checkouts
+            - pkg: "github.com/r59q/forge-tools/forge-search"
+              desc: forge-agents may only combine forge-checkouts
+            - pkg: "github.com/r59q/forge-tools/forge-evidence"
+              desc: forge-agents may only combine forge-checkouts
     dupl:
       threshold: 150
     funlen:

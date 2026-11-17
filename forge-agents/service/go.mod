@@ -5,7 +5,7 @@ go 1.27
 require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.3
 	github.com/r59q/forge-tools/forge-agents/library v0.0.0
-	github.com/r59q/forge-tools/forge-checkouts/service v0.0.0-00010101000000-000000000000
+	github.com/r59q/forge-tools/forge-checkouts/service v0.0.0
 	github.com/r59q/forge-tools/forge-core/forgeapi v0.0.0
 	github.com/r59q/forge-tools/forge-core/servicekit v0.0.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20250929231259-57b25ae835d4

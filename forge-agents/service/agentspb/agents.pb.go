@@ -1680,7 +1680,8 @@ func (x *ListEventsRequest) GetLimit() int32 {
 	return 0
 }
 
-// ListEventsResponse holds events in sequence order; fewer than limit means
+// ListEventsResponse holds events in sequence order. Pages are also capped
+// at 4 MiB, so they may hold fewer than limit events; an empty page means
 // the caller has caught up.
 type ListEventsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`

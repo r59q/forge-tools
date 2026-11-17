@@ -286,7 +286,8 @@ message ListEventsRequest {
   int64 after = 2;
   int32 limit = 3;
 }
-// ListEventsResponse holds events in sequence order; fewer than limit means
+// ListEventsResponse holds events in sequence order. Pages are also capped
+// at 4 MiB, so they may hold fewer than limit events; an empty page means
 // the caller has caught up.
 message ListEventsResponse {
   repeated Event events = 1;

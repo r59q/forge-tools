@@ -1,0 +1,311 @@
+syntax = "proto3";
+package forge.agents.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/r59q/forge-tools/forge-agents/service/agentspb";
+
+// AgentsService runs headless sessions of the Claude Code, Codex and Gemini
+// CLIs. All RPCs require a bearer service token. Errors carry only a status
+// code; why a turn failed is in the agent's error and its transcript.
+service AgentsService {
+  // CreateAgent prepares a workspace and records a new agent in state created.
+  // No client runs until the first message.
+  rpc CreateAgent(CreateAgentRequest) returns (CreateAgentResponse) {
+    option (google.api.http) = {
+      post: "/v1/agents"
+      body: "*"
+      response_body: "agent"
+    };
+  }
+  // GetAgent reads one agent.
+  rpc GetAgent(GetAgentRequest) returns (GetAgentResponse) {
+    option (google.api.http) = {
+      get: "/v1/agents/{id}"
+      response_body: "agent"
+    };
+  }
+  // ListAgents lists agents oldest first, filtered by every field that is set.
+  rpc ListAgents(ListAgentsRequest) returns (ListAgentsResponse) {
+    option (google.api.http) = {get: "/v1/agents"};
+  }
+  // SendMessage records a user message and starts a turn answering it. The
+  // agent must be created or idle. It returns once the turn has started.
+  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse) {
+    option (google.api.http) = {
+      post: "/v1/agents/{id}/messages"
+      body: "*"
+      response_body: "agent"
+    };
+  }
+  // AnswerInput answers a pending input request, which resumes the turn.
+  rpc AnswerInput(AnswerInputRequest) returns (AnswerInputResponse) {
+    option (google.api.http) = {
+      post: "/v1/agents/{id}/inputs/{request_id}"
+      body: "*"
+      response_body: "agent"
+    };
+  }
+  // CancelTurn kills the running client and returns the agent to idle. An
+  // agent without a turn is returned unchanged.
+  rpc CancelTurn(CancelTurnRequest) returns (CancelTurnResponse) {
+    option (google.api.http) = {
+      post: "/v1/agents/{id}/cancel"
+      body: "*"
+      response_body: "agent"
+    };
+  }
+  // StopAgent kills any running client and stops the agent for good. Its
+  // transcript and workspace are kept.
+  rpc StopAgent(StopAgentRequest) returns (StopAgentResponse) {
+    option (google.api.http) = {
+      post: "/v1/agents/{id}/stop"
+      body: "*"
+      response_body: "agent"
+    };
+  }
+  // DeleteAgent stops an agent and removes it with its transcript. Scratch
+  // workspaces are removed; a checkout only when remove_checkout is set, and
+  // forge-checkouts refuses one with uncommitted changes.
+  rpc DeleteAgent(DeleteAgentRequest) returns (DeleteAgentResponse) {
+    option (google.api.http) = {delete: "/v1/agents/{id}"};
+  }
+  // ListEvents reads a transcript page: up to limit events after sequence
+  // number after.
+  rpc ListEvents(ListEventsRequest) returns (ListEventsResponse) {
+    option (google.api.http) = {get: "/v1/agents/{id}/events"};
+  }
+  // StreamEvents sends the events after sequence number after, then each new
+  // event as it is recorded. It ends once the agent is stopped or failed and
+  // every event was sent, when the agent is deleted, or at the stream
+  // timeout; callers resume from the last sequence number they saw. Over
+  // REST it is GET /v1/agents/{id}/stream, one JSON StreamEventsResponse per
+  // line.
+  rpc StreamEvents(StreamEventsRequest) returns (stream StreamEventsResponse);
+  // GetTurnOutput reads the raw client output of one of the latest turns,
+  // kept apart from the transcript for debugging. Credentials are masked.
+  rpc GetTurnOutput(GetTurnOutputRequest) returns (GetTurnOutputResponse) {
+    option (google.api.http) = {
+      get: "/v1/agents/{id}/turns/{turn}/output"
+      response_body: "output"
+    };
+  }
+}
+
+// Repository names a forge-checkouts repository: local_path alone, or a
+// connector source and repository path.
+message Repository {
+  string local_path = 1;
+  string source = 2;
+  string path = 3;
+}
+
+// WorkspaceSpec asks for the directory the client runs in. Kind is scratch
+// (default, an empty directory forge-agents owns), path (an existing
+// directory below a configured root) or checkout (a new forge-checkouts
+// worktree of repository at reference; empty reference is the remote HEAD).
+message WorkspaceSpec {
+  string kind = 1;
+  string path = 2;
+  Repository repository = 3;
+  string reference = 4;
+}
+
+// Workspace is the prepared directory. Checkout is the forge-checkouts
+// checkout ID of a checkout workspace. Path is host-local.
+message Workspace {
+  string kind = 1;
+  string path = 2;
+  string checkout = 3;
+  Repository repository = 4;
+  string reference = 5;
+}
+
+// Policy decides what the client may do without asking. Mode is read_only
+// (default), edit or full. Ask turns permission requests into input
+// requests; only Claude Code can pause for them, so other clients reject it
+// and their mode decides up front.
+message Policy {
+  string mode = 1;
+  bool ask = 2;
+}
+
+// Limits bound one agent. Unset values take the service bounds, which they
+// may not exceed.
+message Limits {
+  google.protobuf.Duration turn_timeout = 1;
+  int64 max_events = 2;
+}
+
+// Agent is one conversation with one client CLI. State is created, running,
+// idle, waiting_input, stopped or failed. Session is the client's own
+// session ID, resumed by the next turn. Error is why the latest turn failed.
+message Agent {
+  string id = 1;
+  // Client is claude, codex or gemini.
+  string client = 2;
+  string model = 3;
+  string effort = 4;
+  Workspace workspace = 5;
+  Policy policy = 6;
+  Limits limits = 7;
+  string parent = 8;
+  string state = 9;
+  string session = 10;
+  int32 turns = 11;
+  string error = 12;
+  google.protobuf.Timestamp created_at = 13;
+  google.protobuf.Timestamp updated_at = 14;
+}
+
+// Usage is the token use and cost a client reported for a turn.
+message Usage {
+  int64 input_tokens = 1;
+  int64 output_tokens = 2;
+  int64 cached_tokens = 3;
+  double cost_usd = 4;
+}
+
+// Event is one transcript entry. Kind is message, tool_call, tool_result,
+// input_request, input_answer, usage, error or result. Role (user, assistant
+// or reasoning) is set on messages; request_kind (question or permission)
+// on input requests; status (success, error, cancelled, timeout, stopped or
+// limit) on results. Input is JSON. Truncated marks text or input cut to the
+// event size limit.
+message Event {
+  int64 seq = 1;
+  google.protobuf.Timestamp time = 2;
+  int32 turn = 3;
+  string kind = 4;
+  string role = 5;
+  string text = 6;
+  string tool_id = 7;
+  string tool_name = 8;
+  string input = 9;
+  bool is_error = 10;
+  string request_id = 11;
+  string request_kind = 12;
+  bool allow = 13;
+  string status = 14;
+  Usage usage = 15;
+  bool truncated = 16;
+}
+
+// TurnOutput is a turn's raw client output, as bytes (base64 in JSON), each
+// cut to the output limit when truncated is set.
+message TurnOutput {
+  bytes stdout = 1;
+  bytes stderr = 2;
+  bool truncated = 3;
+}
+
+// CreateAgentRequest describes the agent. Model and effort are passed to
+// the client; empty uses its default. Parent is an existing agent.
+message CreateAgentRequest {
+  string client = 1;
+  string model = 2;
+  string effort = 3;
+  WorkspaceSpec workspace = 4;
+  Policy policy = 5;
+  Limits limits = 6;
+  string parent = 7;
+}
+// CreateAgentResponse carries the created agent.
+message CreateAgentResponse {
+  Agent agent = 1;
+}
+// GetAgentRequest selects an agent.
+message GetAgentRequest {
+  string id = 1;
+}
+// GetAgentResponse carries the agent.
+message GetAgentResponse {
+  Agent agent = 1;
+}
+// ListAgentsRequest filters by state, parent and the repository of
+// checkout workspaces.
+message ListAgentsRequest {
+  string state = 1;
+  string parent = 2;
+  Repository repository = 3;
+}
+// ListAgentsResponse lists agents oldest first.
+message ListAgentsResponse {
+  repeated Agent agents = 1;
+}
+// SendMessageRequest carries the user's message.
+message SendMessageRequest {
+  string id = 1;
+  string text = 2;
+}
+// SendMessageResponse carries the agent, now running.
+message SendMessageResponse {
+  Agent agent = 1;
+}
+// AnswerInputRequest answers a question with text, or a permission request
+// with allow, where text may explain a denial.
+message AnswerInputRequest {
+  string id = 1;
+  string request_id = 2;
+  string text = 3;
+  bool allow = 4;
+}
+// AnswerInputResponse carries the agent.
+message AnswerInputResponse {
+  Agent agent = 1;
+}
+// CancelTurnRequest selects an agent.
+message CancelTurnRequest {
+  string id = 1;
+}
+// CancelTurnResponse carries the agent.
+message CancelTurnResponse {
+  Agent agent = 1;
+}
+// StopAgentRequest selects an agent.
+message StopAgentRequest {
+  string id = 1;
+}
+// StopAgentResponse carries the stopped agent.
+message StopAgentResponse {
+  Agent agent = 1;
+}
+// DeleteAgentRequest removes a checkout workspace only when remove_checkout
+// is true.
+message DeleteAgentRequest {
+  string id = 1;
+  bool remove_checkout = 2;
+}
+// DeleteAgentResponse is empty on success.
+message DeleteAgentResponse {}
+// ListEventsRequest pages a transcript. Limit 0 or over 1000 reads 1000.
+message ListEventsRequest {
+  string id = 1;
+  int64 after = 2;
+  int32 limit = 3;
+}
+// ListEventsResponse holds events in sequence order; fewer than limit means
+// the caller has caught up.
+message ListEventsResponse {
+  repeated Event events = 1;
+}
+// StreamEventsRequest starts after sequence number after; 0 is the start.
+message StreamEventsRequest {
+  string id = 1;
+  int64 after = 2;
+}
+// StreamEventsResponse carries one event.
+message StreamEventsResponse {
+  Event event = 1;
+}
+// GetTurnOutputRequest selects a turn, counted from 1.
+message GetTurnOutputRequest {
+  string id = 1;
+  int32 turn = 2;
+}
+// GetTurnOutputResponse carries the output.
+message GetTurnOutputResponse {
+  TurnOutput output = 1;
+}

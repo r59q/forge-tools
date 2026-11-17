@@ -433,9 +433,11 @@ times are as above. Indexed times are right after filling, and after a
 | Three-letter word, in 644 documents  | 11 ms   | 11 ms              | 1.4x    |
 | Two bytes, in 3 documents            | 20 ms   | 20 ms              | 0.13x   |
 
-The target of 10x is not met. A search pays for SQLite's full-text query
-and for reading every candidate's content from the database, which
-`MemoryStore` hands over in memory. A two-byte query reads all 32 MiB.
+The target of 10x is not met against documents already in memory. A search
+pays for SQLite's full-text query and for reading every candidate's content
+from the database, which `MemoryStore` hands over in memory. A two-byte
+query reads all 32 MiB. Against an unindexed search of a checkout, as the
+service runs it, the target is met: see [Checkouts](#checkouts).
 
 Filling the index takes 12 s. The database file is then 80 MiB, with up to
 65 MiB more in the write-ahead log, and 85 MiB after `Checkpoint`.
@@ -449,3 +451,21 @@ broker:
 | Alone                        | 2.4 ms      | 2.4 ms         |
 | 6 at a time, wall per search | 0.55 ms     | 2.4 ms         |
 | During updates, 115 per s    | 5.3 ms      | 9.0 ms         |
+
+### Checkouts
+
+`CGO_ENABLED=0 go test ./checkout -run '^$' -bench . -cpu 6` on the same
+host and corpus, written to a directory on an SSD, warm in the page cache.
+Both modes run as the service runs them. Unindexed, `checkout.Search` walks
+the directory, reads and hashes every file and searches it. Indexed, the
+tree was synced into an SQLite store, checkpointed, and `Engine.Search`
+searches it.
+
+| Query                                | Unindexed | Indexed | Speedup |
+| ------------------------------------ | --------- | ------- | ------- |
+| Identifier, in 3 documents           | 85 ms     | 330 µs  | 260x    |
+| Line of common words, in 1 document  | 100 ms    | 5.5 ms  | 18x     |
+| Two bytes, in 3 documents            | 85 ms     | 21 ms   | 4x      |
+
+The target of 10x on a selective query is met. Even the two-byte query
+gains, because the index already holds every file's content and version.

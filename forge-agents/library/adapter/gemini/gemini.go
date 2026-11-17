@@ -32,7 +32,7 @@ func (Adapter) Check(model, effort string, policy adapter.Policy) error {
 	if err := adapter.CheckEffort(effort); err != nil {
 		return err
 	}
-	return policy.Check()
+	return policy.CheckUpFront()
 }
 
 // Command builds `gemini` for a turn. Without --prompt and with standard

@@ -29,7 +29,7 @@ func (Adapter) Check(model, effort string, policy adapter.Policy) error {
 	if err := adapter.CheckEffort(effort, "none", "minimal", "low", "medium", "high", "xhigh"); err != nil {
 		return err
 	}
-	return policy.Check()
+	return policy.CheckUpFront()
 }
 
 // Command builds `codex exec` for a turn, or `codex exec resume` for a

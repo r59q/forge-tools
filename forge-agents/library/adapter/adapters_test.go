@@ -202,6 +202,9 @@ func TestCheck(t *testing.T) {
 		{gemini.Name, "", "high", ok, false},
 		{gemini.Name, "a b", "", ok, false},
 		{claude.Name, "", "", adapter.Policy{Mode: "root"}, false},
+		{claude.Name, "", "", adapter.Policy{Mode: adapter.ModeReadOnly, Ask: true}, true},
+		{codex.Name, "", "", adapter.Policy{Mode: adapter.ModeReadOnly, Ask: true}, false},
+		{gemini.Name, "", "", adapter.Policy{Mode: adapter.ModeEdit, Ask: true}, false},
 	}
 	for _, c := range cases {
 		if err := adapters[c.client].Check(c.model, c.effort, c.policy); (err == nil) != c.valid {

@@ -40,6 +40,15 @@ func (p Policy) Check() error {
 	return fmt.Errorf("%w: policy mode %q is not read_only, edit or full", ErrInvalid, p.Mode)
 }
 
+// CheckUpFront validates p for a client that cannot pause for permission,
+// so its mode must decide everything up front.
+func (p Policy) CheckUpFront() error {
+	if p.Ask {
+		return fmt.Errorf("%w: this client cannot pause for permission; the policy mode decides up front", ErrInvalid)
+	}
+	return p.Check()
+}
+
 // Tool names the forge-agents MCP server offers clients.
 const (
 	ServerName   = "forge-agents"

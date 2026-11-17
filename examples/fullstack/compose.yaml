@@ -146,6 +146,33 @@ services:
       - "127.0.0.1:8095:8080"
       - "127.0.0.1:9105:9090"
 
+  # Runs headless Claude Code, Codex and Gemini CLI agents in scratch
+  # directories or checkouts worktrees. Worktrees link to their repository by
+  # absolute path, so the checkouts volume is mounted read-write at /data,
+  # where checkouts has it. It holds no forge credentials.
+  agents:
+    build:
+      context: ../..
+      dockerfile: forge-agents/service/Dockerfile
+    restart: unless-stopped
+    environment:
+      FORGE_AGENTS_TOKEN: ${FORGE_AGENTS_TOKEN:?set in .env}
+      FORGE_AGENTS_CHECKOUTS_ADDR: checkouts:9090
+      FORGE_AGENTS_CHECKOUTS_INSECURE: "true"
+      # forge-checkouts has a single bearer token.
+      FORGE_AGENTS_CHECKOUTS_TOKEN: ${FORGE_CHECKOUTS_TOKEN:?set in .env}
+      FORGE_AGENTS_CHECKOUTS_DATA_DIR: /data
+      # Client credentials; set those of the clients you use in .env.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    volumes:
+      - agents-data:/agents-data
+      - checkouts-data:/data
+    ports:
+      - "127.0.0.1:8096:8080"
+      - "127.0.0.1:9106:9090"
+
   # Queues reactor deliveries. Subscribers consume and acknowledge here. The
   # fixed hostname keeps the node name, and so its data, across recreation.
   rabbitmq:
@@ -225,5 +252,6 @@ volumes:
   rabbitmq-data:
   reactor-data:
   search-data:
+  agents-data:
   checkouts-data:
     name: ${FORGE_CHECKOUTS_DATA_VOLUME:-${COMPOSE_PROJECT_NAME}_checkouts-data}

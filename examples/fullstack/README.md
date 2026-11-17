@@ -10,6 +10,7 @@ Runs the whole stack with Docker Compose: the
 [pipeprint service](../../forge-pipeprint/service/), the
 [symbols service](../../forge-symbols/service/), the
 [search service](../../forge-search/service/), the
+[agents service](../../forge-agents/service/), the
 [reactor service](../../forge-reactor/service/) with RabbitMQ and the
 [management interface](../../forge-tools-management/). You connect forges in
 the browser.
@@ -44,13 +45,14 @@ updating this example. It never changes existing values.
 | `FORGE_ISSUES_CONNECTOR_TOKEN`       | Lets the issues service use connections through the proxy.       |
 | `FORGE_ISSUES_TOKEN`                 | Lets management call the issues service.                         |
 | `FORGE_CHECKOUTS_CONNECTOR_TOKEN`    | Lets checkouts fetch repositories through the proxy.             |
-| `FORGE_CHECKOUTS_TOKEN`              | Authenticates checkout REST/gRPC callers, including search.      |
+| `FORGE_CHECKOUTS_TOKEN`              | Authenticates checkout callers, including search and agents.     |
 | `FORGE_ACTIONS_CONNECTOR_TOKEN`      | Lets actions read pipelines through the proxy.                   |
 | `FORGE_EXPLORER_TOKEN`              | Authenticates local explorer REST/gRPC callers.                   |
 | `FORGE_ACTIONS_TOKEN`                | Authenticates actions REST/gRPC callers and management.          |
 | `FORGE_PIPEPRINT_TOKEN`              | Authenticates pipeprint REST/gRPC callers.                       |
 | `FORGE_SYMBOLS_TOKEN`                | Authenticates symbols REST/gRPC callers.                         |
 | `FORGE_SEARCH_TOKEN`                 | Authenticates search REST/gRPC callers.                          |
+| `FORGE_AGENTS_TOKEN`                 | Authenticates agents REST/gRPC callers.                          |
 | `FORGE_REACTOR_TOKEN`                | Authenticates reactor REST/gRPC callers and management.          |
 | `FORGE_REACTOR_CONNECTOR_TOKEN`      | Lets the reactor poll branches and register webhooks.            |
 | `FORGE_REACTOR_RABBITMQ_PASSWORD`    | RabbitMQ password of user `reactor`, for the reactor and you.    |
@@ -93,7 +95,7 @@ To skip the manual steps, set `GITHUB_TOKEN` or `FORGEJO_TOKEN` before
 
 ## Notes
 
-- Management, checkouts, actions, explorer, pipeprint, symbols, search, the reactor and RabbitMQ are reachable from the host, on `127.0.0.1`. The other
+- Management, checkouts, actions, explorer, pipeprint, symbols, search, agents, the reactor and RabbitMQ are reachable from the host, on `127.0.0.1`. The other
   services talk over the Compose network in plaintext; use TLS endpoints
   for remote access.
 - All operators see what the connected accounts can see. Management grants
@@ -218,6 +220,30 @@ curl -fsS -H "Authorization: Bearer $FORGE_SEARCH_TOKEN" \
   http://127.0.0.1:8095/v1/issues:index -d "{\"repository\": $TARGET}"
 curl -fsS -H "Authorization: Bearer $FORGE_SEARCH_TOKEN" \
   http://127.0.0.1:8095/v1/issues:searchIndexed -d "{\"repository\": $TARGET, \"query\": {\"text\": \"crash\", \"state\": \"open\"}}"
+```
+
+## Agents
+
+The agents API listens on `127.0.0.1:8096` (REST) and `127.0.0.1:9106`
+(gRPC), authenticated with `FORGE_AGENTS_TOKEN`. It runs headless Claude
+Code, Codex and Gemini CLI sessions, turn by turn, in a scratch directory or
+a new checkouts worktree, and keeps one transcript per agent in the
+`agents-data` volume. Set `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` or
+`GEMINI_API_KEY` in `.env` for the clients you use and recreate the
+container. It creates worktrees through the checkouts service with
+`FORGE_CHECKOUTS_TOKEN` and works in them on the `checkouts-data` volume,
+mounted read-write at `/data`. It never commits or pushes and holds no
+forge credentials; deleting an agent keeps its worktree unless
+`remove_checkout=true`. See its
+[API reference](../../forge-agents/service/README.md#api).
+
+```sh
+AUTH="Authorization: Bearer $FORGE_AGENTS_TOKEN"
+curl -fsS -H "$AUTH" http://127.0.0.1:8096/v1/agents -d '{"client": "claude",
+  "workspace": {"kind": "checkout", "repository": {"source": "connection-id", "path": "owner/repo"}},
+  "policy": {"mode": "edit"}}'
+curl -fsS -H "$AUTH" http://127.0.0.1:8096/v1/agents/$AGENT/messages -d '{"text": "Explain the build"}'
+curl -fsSN -H "$AUTH" "http://127.0.0.1:8096/v1/agents/$AGENT/stream?after=0"
 ```
 
 ## Forge events

@@ -18,8 +18,8 @@ const (
 	resultLimit   = 100000
 )
 
-// needle is text that only a few documents of the corpus hold.
-const needle = "QX7_needle_QX7"
+// Needle is the identifier that three documents of the Corpus hold.
+const Needle = "QX7_needle_QX7"
 
 // Corpus returns generated text documents of about the given total and
 // document size. Words follow a skewed distribution, as in code: a few are
@@ -34,7 +34,7 @@ func Corpus(totalBytes, documentBytes int) []search.Document {
 	for index := range documents {
 		var content strings.Builder
 		if index%(count/3+1) == count/6 {
-			content.WriteString("const " + needle + " = true\n")
+			content.WriteString("const " + Needle + " = true\n")
 		}
 		for content.Len() < documentBytes {
 			line(&content, random, words)
@@ -102,10 +102,10 @@ func Benchmark(b *testing.B, open Open) {
 	}
 
 	queries := []struct{ name, text string }{
-		{"identifier", needle},
+		{"identifier", Needle},
 		{"phrase", lastLine(documents[len(documents)/2])},
 		{"word", words[len(words)-1]},
-		{"short", needle[:2]},
+		{"short", Needle[:2]},
 	}
 	limits := search.Limits{Documents: len(documents), TotalBytes: 2 * corpusBytes, Results: resultLimit}
 

@@ -1,0 +1,23 @@
+{
+  "session": "c3d4e5f6-a7b8-4c9d-8e0f-1a2b3c4d5e70",
+  "result": true,
+  "events": [
+    {
+      "kind": "error",
+      "text": "Loop detected, stopping execution"
+    },
+    {
+      "kind": "usage",
+      "usage": {}
+    },
+    {
+      "kind": "error",
+      "text": "Reached max session turns"
+    },
+    {
+      "kind": "result",
+      "text": "Reached max session turns",
+      "status": "error"
+    }
+  ]
+}

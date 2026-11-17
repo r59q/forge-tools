@@ -27,8 +27,8 @@ const (
 // the user as input requests, for clients that can pause for them; other
 // clients deny what Mode does not allow.
 type Policy struct {
-	Mode string
-	Ask  bool
+	Mode string `json:"mode"`
+	Ask  bool   `json:"ask,omitzero"`
 }
 
 // Check reports whether p names a known mode.

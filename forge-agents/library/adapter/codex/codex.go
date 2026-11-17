@@ -16,7 +16,7 @@ import (
 const Name = "codex"
 
 // TokenEnv carries the MCP server token, so it never appears in arguments.
-const TokenEnv = "FORGE_AGENTS_MCP_TOKEN"
+const TokenEnv = "FORGE_AGENTS_MCP_TOKEN" //nolint:gosec // G101: an environment variable name, not a credential.
 
 // Adapter drives Codex.
 type Adapter struct{}

@@ -25,7 +25,7 @@ type Local struct {
 
 // Run starts cmd and waits for it.
 func (l Local) Run(ctx context.Context, cmd Command, stdout func(io.Reader)) (Exit, error) {
-	c := exec.CommandContext(ctx, cmd.Path, cmd.Args...) //nolint:gosec // the operator configures client binaries; arguments are built by adapters.
+	c := exec.CommandContext(ctx, cmd.Path, cmd.Args...) //nolint:gosec // operator-configured binary; adapters build the arguments.
 	c.Dir = cmd.Dir
 	c.Env = cmd.Env
 	c.Stdin = bytes.NewReader(cmd.Stdin)

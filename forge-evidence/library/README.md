@@ -22,8 +22,9 @@ id, file, err := evidence.ParsePath(path)
 ```
 
 Import `github.com/r59q/forge-tools/forge-evidence/library/evidence`.
-From this directory: `CGO_ENABLED=0 go build ./...`, `go vet ./...`,
-`go test -race ./...`, `go mod tidy -diff`.
+[Storage](#storage) keeps entries through the `storage` and `folder`
+packages. From this directory: `CGO_ENABLED=0 go build ./...`,
+`go vet ./...`, `go test -race ./...`, `go mod tidy -diff`.
 
 ## Entries
 
@@ -175,3 +176,78 @@ download Git LFS content, so evidence cannot move there either.
 
 Match them with `errors.Is`. Errors name the field and the reason, and a
 file's position or a byte offset, but never metadata values or file content.
+
+## Storage
+
+Storage is a strategy. Package `storage` holds the boundary, `Store`, that
+every strategy implements:
+
+| Method     | Does                                                         |
+| ---------- | ------------------------------------------------------------ |
+| `Add`      | Stores a new entry from a `Draft`: its fields and file bytes |
+| `Entry`    | Returns the metadata of an entry                             |
+| `ReadFile` | Returns the bytes of one file listed in an entry's metadata  |
+
+Callers name entries by `ID` and files by name, never by a path or object
+key, so a strategy, such as a future S3 one, can be swapped without changing
+them. `Draft.Entry` computes each file's size and SHA-256. Listing and
+validating entries will be added to `Store`.
+
+| Error           | Meaning                                                 |
+| --------------- | ------------------------------------------------------- |
+| `ErrExist`      | `Add` of an entry that already exists                   |
+| `ErrNotExist`   | A missing entry, or a file not listed in its metadata   |
+| `ErrUnreadable` | Storage that cannot be read or written, or that changed |
+
+Strategies also return `evidence.ErrInvalid`, `ErrVersion` and
+`ErrTooLarge`. Match all of them with `errors.Is`.
+
+### Repository folder
+
+Package `folder` keeps entries in the `.evidence/` folder of a repository
+checkout, in the [layout](#layout) and [metadata format](#metadata-format)
+above. The caller supplies the repository root, any folder:
+
+```go
+store, err := folder.Open(checkoutDir, evidence.Limits{})
+defer store.Close()
+
+entry, err := store.Add(ctx, storage.Draft{
+	Name:    "unit-tests",
+	Title:   "Unit tests pass",
+	Kind:    evidence.KindTestResult,
+	Subject: evidence.Subject{Commit: commit},
+	Files:   []storage.Content{{Name: "junit.xml", Data: report}},
+})
+
+entry, err = store.Entry(ctx, entry.ID())
+report, err = store.ReadFile(ctx, entry.ID(), "junit.xml")
+```
+
+- **Add** checks the draft and encodes its metadata before it touches the
+  folder, then creates `.evidence/` and the commit folder when missing. It
+  writes the files, then `entry.json`, to a hidden `.add-*` folder beside the
+  entry folder and renames it into place. An existing entry returns
+  `ErrExist` and is left as it is. A failed `Add` leaves no entry; it may
+  leave empty folders. The same entry always gives the same files.
+- **Entry** reads `entry.json` and checks that it names the entry of its
+  folder. A folder without it is not an entry.
+- **ReadFile** returns the bytes as they were added, after checking their
+  size and SHA-256 against the metadata.
+- **Confined.** Names are checked before the folder is touched. Every read
+  and write stays inside `.evidence/`: no symlink is followed, not even
+  `.evidence/` itself or one pointing inside the folder, and special files,
+  such as FIFOs, are not read.
+- **No Git.** It does not commit, push or check that the subject commit
+  exists. Errors name paths relative to the root, never host paths or file
+  content.
+
+| Limit           | `Add`                   | `Entry`, `ReadFile`                      |
+| --------------- | ----------------------- | ---------------------------------------- |
+| `MetadataBytes` | Encoded metadata        | `entry.json` size, before it is read     |
+| `FileBytes`     | Each file's bytes       | Recorded sizes; `ReadFile` file size too |
+| `Files`         | Files in the draft      | Files in the metadata                    |
+| `EntryBytes`    | Sum of the files' bytes | Sum of the recorded sizes                |
+
+Sizes on disk are checked before content is read, and an exceeded limit
+returns `ErrTooLarge`; nothing is truncated.

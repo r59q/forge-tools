@@ -1,0 +1,41 @@
+name: forge-chat-frontend
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - forge-chat/frontend/**
+      - eslint.rules.mjs
+      - .github/workflows/forge-chat-frontend.yml
+  pull_request:
+    paths:
+      - forge-chat/frontend/**
+      - eslint.rules.mjs
+      - .github/workflows/forge-chat-frontend.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: forge-chat/frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: forge-chat/frontend/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm run lint
+      - run: npm test
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
+      - run: npm pack --dry-run

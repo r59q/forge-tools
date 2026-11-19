@@ -35,3 +35,6 @@ search-data/
 
 # Data from before the checkout rename
 workspace-data/
+
+# Standalone chat metadata
+chat-data/

@@ -5,6 +5,7 @@ version: v2
 modules:
   - path: forge-actions/service/proto
   - path: forge-agents/service/proto
+  - path: forge-chat/service/proto
   - path: forge-changes/service/proto
   - path: forge-checkouts/service/proto
   - path: forge-explorer/service/proto

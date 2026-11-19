@@ -25,6 +25,24 @@ linters:
   settings:
     depguard:
       rules:
+        chat-no-other-tools:
+          list-mode: lax
+          files:
+            - "**/forge-chat/**"
+          allow:
+            - "github.com/r59q/forge-tools/forge-chat"
+            - "github.com/r59q/forge-tools/forge-core"
+            - "github.com/r59q/forge-tools/forge-agents"
+          deny:
+            - pkg: "github.com/r59q/forge-tools/forge-"
+              desc: forge-chat depends on the forge-agents API
+        no-chat-dependency:
+          files:
+            - "**/forge-*/**"
+            - "!**/forge-chat/**"
+          deny:
+            - pkg: "github.com/r59q/forge-tools/forge-chat"
+              desc: forge-chat is a presentation tool
         library-no-transport:
           files:
             - "**/forge-*/library/**"

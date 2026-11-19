@@ -52,7 +52,7 @@ func TestDiskFull(t *testing.T) {
 	}
 }
 
-func TestCheckpointDropsRemovedTerms(t *testing.T) {
+func TestRemoveDropsTermsAtCommit(t *testing.T) {
 	ctx, dir := t.Context(), t.TempDir()
 	store := open(t, dir)
 	defer func() { _ = store.Close() }()
@@ -69,9 +69,6 @@ func TestCheckpointDropsRemovedTerms(t *testing.T) {
 	token := tokens(id, terms)
 
 	held := func() bool {
-		if err := store.Checkpoint(ctx); err != nil {
-			t.Fatal(err)
-		}
 		content, err := os.ReadFile(filepath.Join(dir, FileName))
 		if err != nil {
 			t.Fatal(err)
@@ -97,7 +94,7 @@ func TestCheckpointDropsRemovedTerms(t *testing.T) {
 func TestNewerSchema(t *testing.T) {
 	dir := t.TempDir()
 	store := open(t, dir)
-	if _, err := store.writer.ExecContext(t.Context(), "PRAGMA user_version = 2"); err != nil {
+	if _, err := store.writer.ExecContext(t.Context(), "PRAGMA user_version = 999"); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.Close(); err != nil {
@@ -130,5 +127,47 @@ func TestReopenKeepsSchema(t *testing.T) {
 	}
 	if version != schemaVersion || pageSize != 1<<16 {
 		t.Fatalf("version %d with pages of %d bytes, want %d with 65536", version, pageSize, schemaVersion)
+	}
+}
+
+func TestMigrateWALIndex(t *testing.T) {
+	ctx, dir := t.Context(), t.TempDir()
+	old := open(t, dir)
+	_, err := old.writer.ExecContext(ctx, `
+PRAGMA journal_mode = WAL;
+INSERT INTO postings(postings, rank) VALUES('secure-delete', 0);
+PRAGMA user_version = 1;`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine := search.NewEngine(old, search.IndexLimits{})
+	if err := engine.CreateIndex(ctx, "old"); err != nil {
+		t.Fatal(err)
+	}
+	doc := search.Document{Ref: search.Ref{Kind: search.KindCode, ID: "file"}, Content: []byte("previous text")}
+	if err := engine.Put(ctx, "old", doc); err != nil {
+		t.Fatal(err)
+	}
+	if err := old.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	upgraded := open(t, dir)
+	defer func() { _ = upgraded.Close() }()
+	engine = search.NewEngine(upgraded, search.IndexLimits{})
+	found, err := engine.Search(ctx, "old", search.Query{Text: "previous"}, search.Filter{})
+	if err != nil || len(found.Matches) != 1 {
+		t.Fatalf("migrated matches: %+v, %v", found, err)
+	}
+	if err := engine.Remove(ctx, "old", doc.Ref); err != nil {
+		t.Fatal(err)
+	}
+	files, err := os.ReadDir(dir)
+	if err != nil || len(files) != 1 || files[0].Name() != FileName {
+		t.Fatalf("storage after migration: %v, %v", files, err)
+	}
+	content, err := os.ReadFile(filepath.Join(dir, FileName))
+	if err != nil || bytes.Contains(content, doc.Content) {
+		t.Fatalf("removed text remains after migration, read error %v", err)
 	}
 }

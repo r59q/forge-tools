@@ -13,14 +13,13 @@ import (
 )
 
 // schemaVersion is the user_version of the current schema.
-const schemaVersion = 1
+const schemaVersion = 2
 
 // schema creates version 1. indexes holds one row per index with its
 // counts. documents holds the identity, content and encoded terms of each
 // document; its unique key gives the match order. postings is a full-text
 // index of the terms of each document, with the document row ID as rowid.
-// It keeps no text and no positions. A delete adds a marker that hides the
-// tokens of the document; they leave the index when its segments merge.
+// It keeps no text and no positions. Version 2 enables secure removal of postings.
 const schema = `
 CREATE TABLE indexes (
 	id INTEGER PRIMARY KEY,
@@ -41,7 +40,7 @@ CREATE TABLE documents (
 	UNIQUE (index_id, kind, source, ref_id)
 ) STRICT;
 CREATE VIRTUAL TABLE postings USING fts5(terms, content='', detail=none, tokenize='ascii');
-PRAGMA user_version = 1;`
+`
 
 // migrate brings the schema to schemaVersion. A database of a newer
 // version returns ErrStorage.
@@ -52,25 +51,44 @@ func (s *Store) migrate(ctx context.Context) error {
 			return err
 		}
 
-		switch {
-		case version == schemaVersion:
+		switch version {
+		case schemaVersion:
 			return nil
-		case version > schemaVersion:
+		case 0:
+			if _, err := tx.ExecContext(ctx, schema); err != nil {
+				return err
+			}
+		case 1:
+			// Merge old delete markers before enabling immediate removal.
+			if _, err := tx.ExecContext(ctx, "INSERT INTO postings(postings) VALUES('optimize')"); err != nil {
+				return err
+			}
+		default:
 			return ErrStorage
 		}
-		_, err := tx.ExecContext(ctx, schema)
+		_, err := tx.ExecContext(ctx, `
+INSERT INTO postings(postings, rank) VALUES('secure-delete', 1);
+PRAGMA user_version = 2;`)
 		return err
 	})
 }
 
 // write runs change in one transaction on the writer connection.
 func (s *Store) write(ctx context.Context, change func(*sql.Tx) error) error {
+	if err := s.slots.Acquire(ctx, s.maxReaders); err != nil {
+		return err
+	}
+	defer s.slots.Release(s.maxReaders)
 	return transaction(ctx, s.writer, nil, change)
 }
 
 // read runs view in one read-only transaction, so that it sees one
 // snapshot of the database.
 func (s *Store) read(ctx context.Context, view func(*sql.Tx) error) error {
+	if err := s.slots.Acquire(ctx, 1); err != nil {
+		return err
+	}
+	defer s.slots.Release(1)
 	return transaction(ctx, s.readers, &sql.TxOptions{ReadOnly: true}, view)
 }
 

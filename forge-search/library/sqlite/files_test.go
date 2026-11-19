@@ -112,7 +112,7 @@ func TestFilesArePrivate(t *testing.T) {
 			t.Errorf("%s has mode %v, want 0600", file.Name(), mode)
 		}
 	}
-	want := map[string]bool{sqlite.FileName: true, sqlite.FileName + "-wal": true, sqlite.FileName + "-shm": true}
+	want := map[string]bool{sqlite.FileName: true}
 	if !reflect.DeepEqual(names, want) {
 		t.Errorf("files %v, want %v", names, want)
 	}
@@ -155,9 +155,8 @@ func TestRemovedContentLeavesFiles(t *testing.T) {
 		t.Fatalf("search found removed content: %+v", results.Matches)
 	}
 
-	wantErr(t, store.Checkpoint(ctx), nil)
 	if got := traces(t, dir); got != 0 {
-		t.Fatalf("%d files hold removed content after Checkpoint", got)
+		t.Fatalf("%d files hold removed content after commit", got)
 	}
 	wantErr(t, store.Close(), nil)
 	if got := traces(t, dir); got != 0 {

@@ -39,7 +39,7 @@ func BenchmarkSearch(b *testing.B) { storetest.Benchmark(b, openStore) }
 // BenchmarkSearchDuringUpdates measures a search for a line of one document
 // on an idle store, with one search per CPU at a time, and while another
 // goroutine replaces documents of the same index without pause. Searches
-// read a snapshot, so they should not wait for each other or the updates.
+// read consistent snapshots while the updater waits to commit.
 func BenchmarkSearchDuringUpdates(b *testing.B) {
 	documents := storetest.Corpus(4<<20, 16<<10)
 	engine := search.NewEngine(openStore(b), search.IndexLimits{})

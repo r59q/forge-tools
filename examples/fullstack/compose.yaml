@@ -173,6 +173,21 @@ services:
       - "127.0.0.1:8096:8080"
       - "127.0.0.1:9106:9090"
 
+  chat:
+    build:
+      context: ../..
+      dockerfile: forge-chat/service/Dockerfile
+    restart: unless-stopped
+    environment:
+      FORGE_CHAT_TOKEN: ${FORGE_CHAT_TOKEN:?set in .env}
+      FORGE_CHAT_AGENTS_URL: http://agents:8080
+      FORGE_CHAT_AGENTS_TOKEN: ${FORGE_AGENTS_TOKEN:?set in .env}
+    volumes:
+      - chat-data:/chat-data
+    ports:
+      - "127.0.0.1:8097:8080"
+      - "127.0.0.1:9107:9090"
+
   # Queues reactor deliveries. Subscribers consume and acknowledge here. The
   # fixed hostname keeps the node name, and so its data, across recreation.
   rabbitmq:
@@ -253,5 +268,6 @@ volumes:
   reactor-data:
   search-data:
   agents-data:
+  chat-data:
   checkouts-data:
     name: ${FORGE_CHECKOUTS_DATA_VOLUME:-${COMPOSE_PROJECT_NAME}_checkouts-data}

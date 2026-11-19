@@ -10,7 +10,7 @@ Runs the whole stack with Docker Compose: the
 [pipeprint service](../../forge-pipeprint/service/), the
 [symbols service](../../forge-symbols/service/), the
 [search service](../../forge-search/service/), the
-[agents service](../../forge-agents/service/), the
+[agents service](../../forge-agents/service/), the [chat service](../../forge-chat/service/), the
 [reactor service](../../forge-reactor/service/) with RabbitMQ and the
 [management interface](../../forge-tools-management/). You connect forges in
 the browser.
@@ -245,6 +245,14 @@ curl -fsS -H "$AUTH" http://127.0.0.1:8096/v1/agents -d '{"client": "claude",
 curl -fsS -H "$AUTH" http://127.0.0.1:8096/v1/agents/$AGENT/messages -d '{"text": "Explain the build"}'
 curl -fsSN -H "$AUTH" "http://127.0.0.1:8096/v1/agents/$AGENT/stream?after=0"
 ```
+
+## Chat
+
+Open http://127.0.0.1:8097/ and enter `FORGE_CHAT_TOKEN`. Use a scratch
+workspace or enter a connection ID and repository path to start in a new
+worktree of the default branch. The chat service forwards operations to
+agents and keeps its archive flags, links, and positions in `chat-data`.
+Its metadata gRPC API listens on `127.0.0.1:9107`.
 
 ## Forge events
 

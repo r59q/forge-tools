@@ -7,8 +7,8 @@ import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/r59q/forge-tools/forge-search/service/searchpb";
 
-// SearchService searches the code of forge-checkouts checkouts and the
-// issues of forge-issues repositories, indexed or not. An index is a named, durable copy of one checkout's files; indexing a
+// SearchService searches caller-supplied documents, checkout files and
+// repository issues with or without a durable index. Indexing a
 // checkout again, or another checkout into the same index, changes only the
 // files that differ. Every RPC requires the service token in the
 // Authorization: Bearer header (gRPC metadata).
@@ -48,6 +48,34 @@ option go_package = "github.com/r59q/forge-tools/forge-search/service/searchpb";
 // call that needs forge-issues without one, and DEADLINE_EXCEEDED for a call
 // over its time limit.
 service SearchService {
+  // CreateIndex creates an empty named index.
+  rpc CreateIndex(CreateIndexRequest) returns (CreateIndexResponse) {
+    option (google.api.http) = {
+      post: "/v1/indexes"
+      body: "*"
+    };
+  }
+  // PutDocument atomically adds or replaces a caller-supplied document by path.
+  rpc PutDocument(PutDocumentRequest) returns (PutDocumentResponse) {
+    option (google.api.http) = {
+      post: "/v1/documents:put"
+      body: "*"
+    };
+  }
+  // RemoveDocument removes a caller-supplied document by path.
+  rpc RemoveDocument(RemoveDocumentRequest) returns (RemoveDocumentResponse) {
+    option (google.api.http) = {
+      post: "/v1/documents:remove"
+      body: "*"
+    };
+  }
+  // SearchDocuments searches the supplied documents or those previously uploaded to index.
+  rpc SearchDocuments(SearchDocumentsRequest) returns (SearchDocumentsResponse) {
+    option (google.api.http) = {
+      post: "/v1/documents:search"
+      body: "*"
+    };
+  }
   // IndexCheckout syncs a checkout's files into an index, creating the
   // index if needed, and returns what changed. It runs within the call; a
   // call that ends early keeps what it wrote, and the next one continues.
@@ -331,7 +359,7 @@ message Range {
 
 // CodeMatch is one occurrence of the query text.
 message CodeMatch {
-  // path is the file's path in the checkout, with "/" separators.
+  // path is the supplied document identifier or checkout path, with "/" separators.
   string path = 1;
   // version is the hex SHA-256 of the file content.
   string version = 2;
@@ -594,4 +622,53 @@ message SearchCheckoutSymbolsResponse {
   FileState files = 4;
   // skipped counts the files read whose definitions were left out.
   SymbolFileState skipped = 5;
+}
+
+// Document is caller-supplied text. Path is an opaque identifier of at most
+// 4096 UTF-8 bytes. Content is at most 1 MiB and is base64 in JSON.
+message Document {
+  string path = 1;
+  bytes content = 2;
+}
+
+// CreateIndexRequest names a new index. The repo- and issues- prefixes are reserved.
+message CreateIndexRequest {
+  string index = 1;
+}
+
+// CreateIndexResponse is empty on success.
+message CreateIndexResponse {}
+
+// PutDocumentRequest writes one document into an existing index.
+message PutDocumentRequest {
+  string index = 1;
+  Document document = 2;
+}
+
+// PutDocumentResponse is empty on success.
+message PutDocumentResponse {}
+
+// RemoveDocumentRequest selects an uploaded document by index and path.
+message RemoveDocumentRequest {
+  string index = 1;
+  string path = 2;
+}
+
+// RemoveDocumentResponse is empty on success.
+message RemoveDocumentResponse {}
+
+// SearchDocumentsRequest scans up to 256 documents and 4 MiB of content
+// when index is empty and stores nothing. With an index, omit documents.
+// Text and max_results follow CodeQuery.
+message SearchDocumentsRequest {
+  string index = 1;
+  repeated Document documents = 2;
+  string text = 3;
+  int32 max_results = 4;
+}
+
+// SearchDocumentsResponse lists matches in path and line order.
+message SearchDocumentsResponse {
+  repeated CodeMatch matches = 1;
+  SearchState state = 2;
 }

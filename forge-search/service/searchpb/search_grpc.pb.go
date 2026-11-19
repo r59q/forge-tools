@@ -19,6 +19,10 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
+	SearchService_CreateIndex_FullMethodName           = "/forge.search.v1.SearchService/CreateIndex"
+	SearchService_PutDocument_FullMethodName           = "/forge.search.v1.SearchService/PutDocument"
+	SearchService_RemoveDocument_FullMethodName        = "/forge.search.v1.SearchService/RemoveDocument"
+	SearchService_SearchDocuments_FullMethodName       = "/forge.search.v1.SearchService/SearchDocuments"
 	SearchService_IndexCheckout_FullMethodName         = "/forge.search.v1.SearchService/IndexCheckout"
 	SearchService_ListIndexes_FullMethodName           = "/forge.search.v1.SearchService/ListIndexes"
 	SearchService_GetIndex_FullMethodName              = "/forge.search.v1.SearchService/GetIndex"
@@ -38,8 +42,8 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// SearchService searches the code of forge-checkouts checkouts and the
-// issues of forge-issues repositories, indexed or not. An index is a named, durable copy of one checkout's files; indexing a
+// SearchService searches caller-supplied documents, checkout files and
+// repository issues with or without a durable index. Indexing a
 // checkout again, or another checkout into the same index, changes only the
 // files that differ. Every RPC requires the service token in the
 // Authorization: Bearer header (gRPC metadata).
@@ -79,6 +83,14 @@ const (
 // call that needs forge-issues without one, and DEADLINE_EXCEEDED for a call
 // over its time limit.
 type SearchServiceClient interface {
+	// CreateIndex creates an empty named index.
+	CreateIndex(ctx context.Context, in *CreateIndexRequest, opts ...grpc.CallOption) (*CreateIndexResponse, error)
+	// PutDocument atomically adds or replaces a caller-supplied document by path.
+	PutDocument(ctx context.Context, in *PutDocumentRequest, opts ...grpc.CallOption) (*PutDocumentResponse, error)
+	// RemoveDocument removes a caller-supplied document by path.
+	RemoveDocument(ctx context.Context, in *RemoveDocumentRequest, opts ...grpc.CallOption) (*RemoveDocumentResponse, error)
+	// SearchDocuments searches the supplied documents or those previously uploaded to index.
+	SearchDocuments(ctx context.Context, in *SearchDocumentsRequest, opts ...grpc.CallOption) (*SearchDocumentsResponse, error)
 	// IndexCheckout syncs a checkout's files into an index, creating the
 	// index if needed, and returns what changed. It runs within the call; a
 	// call that ends early keeps what it wrote, and the next one continues.
@@ -134,6 +146,46 @@ type searchServiceClient struct {
 
 func NewSearchServiceClient(cc grpc.ClientConnInterface) SearchServiceClient {
 	return &searchServiceClient{cc}
+}
+
+func (c *searchServiceClient) CreateIndex(ctx context.Context, in *CreateIndexRequest, opts ...grpc.CallOption) (*CreateIndexResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateIndexResponse)
+	err := c.cc.Invoke(ctx, SearchService_CreateIndex_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *searchServiceClient) PutDocument(ctx context.Context, in *PutDocumentRequest, opts ...grpc.CallOption) (*PutDocumentResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PutDocumentResponse)
+	err := c.cc.Invoke(ctx, SearchService_PutDocument_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *searchServiceClient) RemoveDocument(ctx context.Context, in *RemoveDocumentRequest, opts ...grpc.CallOption) (*RemoveDocumentResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RemoveDocumentResponse)
+	err := c.cc.Invoke(ctx, SearchService_RemoveDocument_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *searchServiceClient) SearchDocuments(ctx context.Context, in *SearchDocumentsRequest, opts ...grpc.CallOption) (*SearchDocumentsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SearchDocumentsResponse)
+	err := c.cc.Invoke(ctx, SearchService_SearchDocuments_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *searchServiceClient) IndexCheckout(ctx context.Context, in *IndexCheckoutRequest, opts ...grpc.CallOption) (*IndexCheckoutResponse, error) {
@@ -270,8 +322,8 @@ func (c *searchServiceClient) SearchCheckoutSymbols(ctx context.Context, in *Sea
 // All implementations must embed UnimplementedSearchServiceServer
 // for forward compatibility.
 //
-// SearchService searches the code of forge-checkouts checkouts and the
-// issues of forge-issues repositories, indexed or not. An index is a named, durable copy of one checkout's files; indexing a
+// SearchService searches caller-supplied documents, checkout files and
+// repository issues with or without a durable index. Indexing a
 // checkout again, or another checkout into the same index, changes only the
 // files that differ. Every RPC requires the service token in the
 // Authorization: Bearer header (gRPC metadata).
@@ -311,6 +363,14 @@ func (c *searchServiceClient) SearchCheckoutSymbols(ctx context.Context, in *Sea
 // call that needs forge-issues without one, and DEADLINE_EXCEEDED for a call
 // over its time limit.
 type SearchServiceServer interface {
+	// CreateIndex creates an empty named index.
+	CreateIndex(context.Context, *CreateIndexRequest) (*CreateIndexResponse, error)
+	// PutDocument atomically adds or replaces a caller-supplied document by path.
+	PutDocument(context.Context, *PutDocumentRequest) (*PutDocumentResponse, error)
+	// RemoveDocument removes a caller-supplied document by path.
+	RemoveDocument(context.Context, *RemoveDocumentRequest) (*RemoveDocumentResponse, error)
+	// SearchDocuments searches the supplied documents or those previously uploaded to index.
+	SearchDocuments(context.Context, *SearchDocumentsRequest) (*SearchDocumentsResponse, error)
 	// IndexCheckout syncs a checkout's files into an index, creating the
 	// index if needed, and returns what changed. It runs within the call; a
 	// call that ends early keeps what it wrote, and the next one continues.
@@ -368,6 +428,18 @@ type SearchServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedSearchServiceServer struct{}
 
+func (UnimplementedSearchServiceServer) CreateIndex(context.Context, *CreateIndexRequest) (*CreateIndexResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateIndex not implemented")
+}
+func (UnimplementedSearchServiceServer) PutDocument(context.Context, *PutDocumentRequest) (*PutDocumentResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PutDocument not implemented")
+}
+func (UnimplementedSearchServiceServer) RemoveDocument(context.Context, *RemoveDocumentRequest) (*RemoveDocumentResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RemoveDocument not implemented")
+}
+func (UnimplementedSearchServiceServer) SearchDocuments(context.Context, *SearchDocumentsRequest) (*SearchDocumentsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SearchDocuments not implemented")
+}
 func (UnimplementedSearchServiceServer) IndexCheckout(context.Context, *IndexCheckoutRequest) (*IndexCheckoutResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method IndexCheckout not implemented")
 }
@@ -426,6 +498,78 @@ func RegisterSearchServiceServer(s grpc.ServiceRegistrar, srv SearchServiceServe
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&SearchService_ServiceDesc, srv)
+}
+
+func _SearchService_CreateIndex_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateIndexRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SearchServiceServer).CreateIndex(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SearchService_CreateIndex_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SearchServiceServer).CreateIndex(ctx, req.(*CreateIndexRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SearchService_PutDocument_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PutDocumentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SearchServiceServer).PutDocument(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SearchService_PutDocument_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SearchServiceServer).PutDocument(ctx, req.(*PutDocumentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SearchService_RemoveDocument_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveDocumentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SearchServiceServer).RemoveDocument(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SearchService_RemoveDocument_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SearchServiceServer).RemoveDocument(ctx, req.(*RemoveDocumentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SearchService_SearchDocuments_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SearchDocumentsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SearchServiceServer).SearchDocuments(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SearchService_SearchDocuments_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SearchServiceServer).SearchDocuments(ctx, req.(*SearchDocumentsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _SearchService_IndexCheckout_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -669,6 +813,22 @@ var SearchService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "forge.search.v1.SearchService",
 	HandlerType: (*SearchServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "CreateIndex",
+			Handler:    _SearchService_CreateIndex_Handler,
+		},
+		{
+			MethodName: "PutDocument",
+			Handler:    _SearchService_PutDocument_Handler,
+		},
+		{
+			MethodName: "RemoveDocument",
+			Handler:    _SearchService_RemoveDocument_Handler,
+		},
+		{
+			MethodName: "SearchDocuments",
+			Handler:    _SearchService_SearchDocuments_Handler,
+		},
 		{
 			MethodName: "IndexCheckout",
 			Handler:    _SearchService_IndexCheckout_Handler,

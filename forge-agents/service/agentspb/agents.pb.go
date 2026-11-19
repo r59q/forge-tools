@@ -90,6 +90,7 @@ func (x *Repository) GetPath() string {
 // (default, an empty directory forge-agents owns), path (an existing
 // directory below a configured root) or checkout (a new forge-checkouts
 // worktree of repository at reference; empty reference is the remote HEAD).
+// Shared borrows the parent agent's workspace.
 type WorkspaceSpec struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Kind          string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
@@ -159,7 +160,7 @@ func (x *WorkspaceSpec) GetReference() string {
 }
 
 // Workspace is the prepared directory. Checkout is the forge-checkouts
-// checkout ID of a checkout workspace. Path is host-local.
+// checkout ID of an owned checkout workspace. Path is host-local.
 type Workspace struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Kind          string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
@@ -241,9 +242,12 @@ func (x *Workspace) GetReference() string {
 // requests; only Claude Code can pause for them, so other clients reject it
 // and their mode decides up front.
 type Policy struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Mode          string                 `protobuf:"bytes,1,opt,name=mode,proto3" json:"mode,omitempty"`
-	Ask           bool                   `protobuf:"varint,2,opt,name=ask,proto3" json:"ask,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Mode  string                 `protobuf:"bytes,1,opt,name=mode,proto3" json:"mode,omitempty"`
+	Ask   bool                   `protobuf:"varint,2,opt,name=ask,proto3" json:"ask,omitempty"`
+	// AllowedModels lists permitted client/model pairs, including the agent's
+	// own pair. Omit to inherit the parent's list or use the root's own pair.
+	AllowedModels []*ClientModel `protobuf:"bytes,3,rep,name=allowed_models,json=allowedModels,proto3" json:"allowed_models,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -292,6 +296,67 @@ func (x *Policy) GetAsk() bool {
 	return false
 }
 
+func (x *Policy) GetAllowedModels() []*ClientModel {
+	if x != nil {
+		return x.AllowedModels
+	}
+	return nil
+}
+
+// ClientModel authorizes a model for one enabled client. An empty model
+// selects that client's default.
+type ClientModel struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Client        string                 `protobuf:"bytes,1,opt,name=client,proto3" json:"client,omitempty"`
+	Model         string                 `protobuf:"bytes,2,opt,name=model,proto3" json:"model,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClientModel) Reset() {
+	*x = ClientModel{}
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClientModel) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClientModel) ProtoMessage() {}
+
+func (x *ClientModel) ProtoReflect() protoreflect.Message {
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClientModel.ProtoReflect.Descriptor instead.
+func (*ClientModel) Descriptor() ([]byte, []int) {
+	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ClientModel) GetClient() string {
+	if x != nil {
+		return x.Client
+	}
+	return ""
+}
+
+func (x *ClientModel) GetModel() string {
+	if x != nil {
+		return x.Model
+	}
+	return ""
+}
+
 // Limits bound one agent. Unset values take the service bounds, which they
 // may not exceed.
 type Limits struct {
@@ -304,7 +369,7 @@ type Limits struct {
 
 func (x *Limits) Reset() {
 	*x = Limits{}
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[4]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -316,7 +381,7 @@ func (x *Limits) String() string {
 func (*Limits) ProtoMessage() {}
 
 func (x *Limits) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[4]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -329,7 +394,7 @@ func (x *Limits) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Limits.ProtoReflect.Descriptor instead.
 func (*Limits) Descriptor() ([]byte, []int) {
-	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{4}
+	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Limits) GetTurnTimeout() *durationpb.Duration {
@@ -347,32 +412,38 @@ func (x *Limits) GetMaxEvents() int64 {
 }
 
 // Agent is one conversation with one client CLI. State is created, running,
-// idle, waiting_input, stopped or failed. Session is the client's own
-// session ID, resumed by the next turn. Error is why the latest turn failed.
+// idle, waiting_input, waiting_children, stopped or failed. An agent in
+// waiting_children resumes once its children finish and a turn slot is
+// available. Session is the client's own session ID. Error is why the
+// latest turn failed.
 type Agent struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	// Client is claude, codex or gemini.
-	Client        string                 `protobuf:"bytes,2,opt,name=client,proto3" json:"client,omitempty"`
-	Model         string                 `protobuf:"bytes,3,opt,name=model,proto3" json:"model,omitempty"`
-	Effort        string                 `protobuf:"bytes,4,opt,name=effort,proto3" json:"effort,omitempty"`
-	Workspace     *Workspace             `protobuf:"bytes,5,opt,name=workspace,proto3" json:"workspace,omitempty"`
-	Policy        *Policy                `protobuf:"bytes,6,opt,name=policy,proto3" json:"policy,omitempty"`
-	Limits        *Limits                `protobuf:"bytes,7,opt,name=limits,proto3" json:"limits,omitempty"`
-	Parent        string                 `protobuf:"bytes,8,opt,name=parent,proto3" json:"parent,omitempty"`
-	State         string                 `protobuf:"bytes,9,opt,name=state,proto3" json:"state,omitempty"`
-	Session       string                 `protobuf:"bytes,10,opt,name=session,proto3" json:"session,omitempty"`
-	Turns         int32                  `protobuf:"varint,11,opt,name=turns,proto3" json:"turns,omitempty"`
-	Error         string                 `protobuf:"bytes,12,opt,name=error,proto3" json:"error,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	Client    string                 `protobuf:"bytes,2,opt,name=client,proto3" json:"client,omitempty"`
+	Model     string                 `protobuf:"bytes,3,opt,name=model,proto3" json:"model,omitempty"`
+	Effort    string                 `protobuf:"bytes,4,opt,name=effort,proto3" json:"effort,omitempty"`
+	Workspace *Workspace             `protobuf:"bytes,5,opt,name=workspace,proto3" json:"workspace,omitempty"`
+	Policy    *Policy                `protobuf:"bytes,6,opt,name=policy,proto3" json:"policy,omitempty"`
+	Limits    *Limits                `protobuf:"bytes,7,opt,name=limits,proto3" json:"limits,omitempty"`
+	Parent    string                 `protobuf:"bytes,8,opt,name=parent,proto3" json:"parent,omitempty"`
+	State     string                 `protobuf:"bytes,9,opt,name=state,proto3" json:"state,omitempty"`
+	Session   string                 `protobuf:"bytes,10,opt,name=session,proto3" json:"session,omitempty"`
+	Turns     int32                  `protobuf:"varint,11,opt,name=turns,proto3" json:"turns,omitempty"`
+	Error     string                 `protobuf:"bytes,12,opt,name=error,proto3" json:"error,omitempty"`
+	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	// Root is the top-level agent ID, including on the root itself.
+	Root string `protobuf:"bytes,15,opt,name=root,proto3" json:"root,omitempty"`
+	// Depth is zero on the root and increases by one per generation.
+	Depth         int32 `protobuf:"varint,16,opt,name=depth,proto3" json:"depth,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Agent) Reset() {
 	*x = Agent{}
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[5]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -384,7 +455,7 @@ func (x *Agent) String() string {
 func (*Agent) ProtoMessage() {}
 
 func (x *Agent) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[5]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -397,7 +468,7 @@ func (x *Agent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Agent.ProtoReflect.Descriptor instead.
 func (*Agent) Descriptor() ([]byte, []int) {
-	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{5}
+	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *Agent) GetId() string {
@@ -498,6 +569,20 @@ func (x *Agent) GetUpdatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *Agent) GetRoot() string {
+	if x != nil {
+		return x.Root
+	}
+	return ""
+}
+
+func (x *Agent) GetDepth() int32 {
+	if x != nil {
+		return x.Depth
+	}
+	return 0
+}
+
 // Usage is the token use and cost a client reported for a turn.
 type Usage struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -511,7 +596,7 @@ type Usage struct {
 
 func (x *Usage) Reset() {
 	*x = Usage{}
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[6]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -523,7 +608,7 @@ func (x *Usage) String() string {
 func (*Usage) ProtoMessage() {}
 
 func (x *Usage) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[6]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -536,7 +621,7 @@ func (x *Usage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Usage.ProtoReflect.Descriptor instead.
 func (*Usage) Descriptor() ([]byte, []int) {
-	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{6}
+	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *Usage) GetInputTokens() int64 {
@@ -568,11 +653,13 @@ func (x *Usage) GetCostUsd() float64 {
 }
 
 // Event is one transcript entry. Kind is message, tool_call, tool_result,
-// input_request, input_answer, usage, error or result. Role (user, assistant
+// input_request, input_answer, usage, error, result, child_spawned or
+// child_finished. Role (user, assistant
 // or reasoning) is set on messages; request_kind (question or permission)
 // on input requests; status (success, error, cancelled, timeout, stopped or
 // limit) on results. Input is JSON. Truncated marks text or input cut to the
-// event size limit.
+// event size limit. Child events identify the child and its state. A
+// child_finished event carries the child's latest result status and text.
 type Event struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Seq           int64                  `protobuf:"varint,1,opt,name=seq,proto3" json:"seq,omitempty"`
@@ -591,13 +678,15 @@ type Event struct {
 	Status        string                 `protobuf:"bytes,14,opt,name=status,proto3" json:"status,omitempty"`
 	Usage         *Usage                 `protobuf:"bytes,15,opt,name=usage,proto3" json:"usage,omitempty"`
 	Truncated     bool                   `protobuf:"varint,16,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	ChildId       string                 `protobuf:"bytes,17,opt,name=child_id,json=childId,proto3" json:"child_id,omitempty"`
+	ChildState    string                 `protobuf:"bytes,18,opt,name=child_state,json=childState,proto3" json:"child_state,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Event) Reset() {
 	*x = Event{}
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[7]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -609,7 +698,7 @@ func (x *Event) String() string {
 func (*Event) ProtoMessage() {}
 
 func (x *Event) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[7]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -622,7 +711,7 @@ func (x *Event) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Event.ProtoReflect.Descriptor instead.
 func (*Event) Descriptor() ([]byte, []int) {
-	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{7}
+	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *Event) GetSeq() int64 {
@@ -737,6 +826,20 @@ func (x *Event) GetTruncated() bool {
 	return false
 }
 
+func (x *Event) GetChildId() string {
+	if x != nil {
+		return x.ChildId
+	}
+	return ""
+}
+
+func (x *Event) GetChildState() string {
+	if x != nil {
+		return x.ChildState
+	}
+	return ""
+}
+
 // TurnOutput is a turn's raw client output, as bytes (base64 in JSON), each
 // cut to the output limit when truncated is set.
 type TurnOutput struct {
@@ -750,7 +853,7 @@ type TurnOutput struct {
 
 func (x *TurnOutput) Reset() {
 	*x = TurnOutput{}
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[8]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -762,7 +865,7 @@ func (x *TurnOutput) String() string {
 func (*TurnOutput) ProtoMessage() {}
 
 func (x *TurnOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[8]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -775,7 +878,7 @@ func (x *TurnOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TurnOutput.ProtoReflect.Descriptor instead.
 func (*TurnOutput) Descriptor() ([]byte, []int) {
-	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{8}
+	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *TurnOutput) GetStdout() []byte {
@@ -800,7 +903,9 @@ func (x *TurnOutput) GetTruncated() bool {
 }
 
 // CreateAgentRequest describes the agent. Model and effort are passed to
-// the client; empty uses its default. Parent is an existing agent.
+// the client; empty uses its default. With a parent, an omitted client and
+// model inherit the parent's pair. An omitted effort inherits the parent's.
+// Children must stay within their parent's policy and tree limits.
 type CreateAgentRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Client        string                 `protobuf:"bytes,1,opt,name=client,proto3" json:"client,omitempty"`
@@ -816,7 +921,7 @@ type CreateAgentRequest struct {
 
 func (x *CreateAgentRequest) Reset() {
 	*x = CreateAgentRequest{}
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[9]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -828,7 +933,7 @@ func (x *CreateAgentRequest) String() string {
 func (*CreateAgentRequest) ProtoMessage() {}
 
 func (x *CreateAgentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[9]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -841,7 +946,7 @@ func (x *CreateAgentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateAgentRequest.ProtoReflect.Descriptor instead.
 func (*CreateAgentRequest) Descriptor() ([]byte, []int) {
-	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{9}
+	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *CreateAgentRequest) GetClient() string {
@@ -903,7 +1008,7 @@ type CreateAgentResponse struct {
 
 func (x *CreateAgentResponse) Reset() {
 	*x = CreateAgentResponse{}
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[10]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -915,7 +1020,7 @@ func (x *CreateAgentResponse) String() string {
 func (*CreateAgentResponse) ProtoMessage() {}
 
 func (x *CreateAgentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[10]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -928,7 +1033,7 @@ func (x *CreateAgentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateAgentResponse.ProtoReflect.Descriptor instead.
 func (*CreateAgentResponse) Descriptor() ([]byte, []int) {
-	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{10}
+	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *CreateAgentResponse) GetAgent() *Agent {
@@ -948,7 +1053,7 @@ type GetAgentRequest struct {
 
 func (x *GetAgentRequest) Reset() {
 	*x = GetAgentRequest{}
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[11]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -960,7 +1065,7 @@ func (x *GetAgentRequest) String() string {
 func (*GetAgentRequest) ProtoMessage() {}
 
 func (x *GetAgentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[11]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -973,7 +1078,7 @@ func (x *GetAgentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAgentRequest.ProtoReflect.Descriptor instead.
 func (*GetAgentRequest) Descriptor() ([]byte, []int) {
-	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{11}
+	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *GetAgentRequest) GetId() string {
@@ -993,7 +1098,7 @@ type GetAgentResponse struct {
 
 func (x *GetAgentResponse) Reset() {
 	*x = GetAgentResponse{}
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[12]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1005,7 +1110,7 @@ func (x *GetAgentResponse) String() string {
 func (*GetAgentResponse) ProtoMessage() {}
 
 func (x *GetAgentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[12]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1018,7 +1123,7 @@ func (x *GetAgentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAgentResponse.ProtoReflect.Descriptor instead.
 func (*GetAgentResponse) Descriptor() ([]byte, []int) {
-	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{12}
+	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *GetAgentResponse) GetAgent() *Agent {
@@ -1028,20 +1133,22 @@ func (x *GetAgentResponse) GetAgent() *Agent {
 	return nil
 }
 
-// ListAgentsRequest filters by state, parent and the repository of
-// checkout workspaces.
+// ListAgentsRequest filters by state, direct parent, root, exact depth
+// and the repository of checkout workspaces.
 type ListAgentsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	State         string                 `protobuf:"bytes,1,opt,name=state,proto3" json:"state,omitempty"`
 	Parent        string                 `protobuf:"bytes,2,opt,name=parent,proto3" json:"parent,omitempty"`
 	Repository    *Repository            `protobuf:"bytes,3,opt,name=repository,proto3" json:"repository,omitempty"`
+	Root          string                 `protobuf:"bytes,4,opt,name=root,proto3" json:"root,omitempty"`
+	Depth         *int32                 `protobuf:"varint,5,opt,name=depth,proto3,oneof" json:"depth,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListAgentsRequest) Reset() {
 	*x = ListAgentsRequest{}
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[13]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1053,7 +1160,7 @@ func (x *ListAgentsRequest) String() string {
 func (*ListAgentsRequest) ProtoMessage() {}
 
 func (x *ListAgentsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[13]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1066,7 +1173,7 @@ func (x *ListAgentsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAgentsRequest.ProtoReflect.Descriptor instead.
 func (*ListAgentsRequest) Descriptor() ([]byte, []int) {
-	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{13}
+	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ListAgentsRequest) GetState() string {
@@ -1090,6 +1197,20 @@ func (x *ListAgentsRequest) GetRepository() *Repository {
 	return nil
 }
 
+func (x *ListAgentsRequest) GetRoot() string {
+	if x != nil {
+		return x.Root
+	}
+	return ""
+}
+
+func (x *ListAgentsRequest) GetDepth() int32 {
+	if x != nil && x.Depth != nil {
+		return *x.Depth
+	}
+	return 0
+}
+
 // ListAgentsResponse lists agents oldest first.
 type ListAgentsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1100,7 +1221,7 @@ type ListAgentsResponse struct {
 
 func (x *ListAgentsResponse) Reset() {
 	*x = ListAgentsResponse{}
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[14]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1112,7 +1233,7 @@ func (x *ListAgentsResponse) String() string {
 func (*ListAgentsResponse) ProtoMessage() {}
 
 func (x *ListAgentsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[14]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1125,7 +1246,7 @@ func (x *ListAgentsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAgentsResponse.ProtoReflect.Descriptor instead.
 func (*ListAgentsResponse) Descriptor() ([]byte, []int) {
-	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{14}
+	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ListAgentsResponse) GetAgents() []*Agent {
@@ -1146,7 +1267,7 @@ type SendMessageRequest struct {
 
 func (x *SendMessageRequest) Reset() {
 	*x = SendMessageRequest{}
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[15]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1158,7 +1279,7 @@ func (x *SendMessageRequest) String() string {
 func (*SendMessageRequest) ProtoMessage() {}
 
 func (x *SendMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[15]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1171,7 +1292,7 @@ func (x *SendMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendMessageRequest.ProtoReflect.Descriptor instead.
 func (*SendMessageRequest) Descriptor() ([]byte, []int) {
-	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{15}
+	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *SendMessageRequest) GetId() string {
@@ -1198,7 +1319,7 @@ type SendMessageResponse struct {
 
 func (x *SendMessageResponse) Reset() {
 	*x = SendMessageResponse{}
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[16]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1210,7 +1331,7 @@ func (x *SendMessageResponse) String() string {
 func (*SendMessageResponse) ProtoMessage() {}
 
 func (x *SendMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[16]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1223,7 +1344,7 @@ func (x *SendMessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendMessageResponse.ProtoReflect.Descriptor instead.
 func (*SendMessageResponse) Descriptor() ([]byte, []int) {
-	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{16}
+	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *SendMessageResponse) GetAgent() *Agent {
@@ -1247,7 +1368,7 @@ type AnswerInputRequest struct {
 
 func (x *AnswerInputRequest) Reset() {
 	*x = AnswerInputRequest{}
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[17]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1259,7 +1380,7 @@ func (x *AnswerInputRequest) String() string {
 func (*AnswerInputRequest) ProtoMessage() {}
 
 func (x *AnswerInputRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[17]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1272,7 +1393,7 @@ func (x *AnswerInputRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AnswerInputRequest.ProtoReflect.Descriptor instead.
 func (*AnswerInputRequest) Descriptor() ([]byte, []int) {
-	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{17}
+	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *AnswerInputRequest) GetId() string {
@@ -1313,7 +1434,7 @@ type AnswerInputResponse struct {
 
 func (x *AnswerInputResponse) Reset() {
 	*x = AnswerInputResponse{}
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[18]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1325,7 +1446,7 @@ func (x *AnswerInputResponse) String() string {
 func (*AnswerInputResponse) ProtoMessage() {}
 
 func (x *AnswerInputResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[18]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1338,7 +1459,7 @@ func (x *AnswerInputResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AnswerInputResponse.ProtoReflect.Descriptor instead.
 func (*AnswerInputResponse) Descriptor() ([]byte, []int) {
-	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{18}
+	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *AnswerInputResponse) GetAgent() *Agent {
@@ -1358,7 +1479,7 @@ type CancelTurnRequest struct {
 
 func (x *CancelTurnRequest) Reset() {
 	*x = CancelTurnRequest{}
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[19]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1370,7 +1491,7 @@ func (x *CancelTurnRequest) String() string {
 func (*CancelTurnRequest) ProtoMessage() {}
 
 func (x *CancelTurnRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[19]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1383,7 +1504,7 @@ func (x *CancelTurnRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelTurnRequest.ProtoReflect.Descriptor instead.
 func (*CancelTurnRequest) Descriptor() ([]byte, []int) {
-	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{19}
+	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *CancelTurnRequest) GetId() string {
@@ -1403,7 +1524,7 @@ type CancelTurnResponse struct {
 
 func (x *CancelTurnResponse) Reset() {
 	*x = CancelTurnResponse{}
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[20]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1415,7 +1536,7 @@ func (x *CancelTurnResponse) String() string {
 func (*CancelTurnResponse) ProtoMessage() {}
 
 func (x *CancelTurnResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[20]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1428,7 +1549,7 @@ func (x *CancelTurnResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelTurnResponse.ProtoReflect.Descriptor instead.
 func (*CancelTurnResponse) Descriptor() ([]byte, []int) {
-	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{20}
+	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *CancelTurnResponse) GetAgent() *Agent {
@@ -1448,7 +1569,7 @@ type StopAgentRequest struct {
 
 func (x *StopAgentRequest) Reset() {
 	*x = StopAgentRequest{}
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[21]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1460,7 +1581,7 @@ func (x *StopAgentRequest) String() string {
 func (*StopAgentRequest) ProtoMessage() {}
 
 func (x *StopAgentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[21]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1473,7 +1594,7 @@ func (x *StopAgentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StopAgentRequest.ProtoReflect.Descriptor instead.
 func (*StopAgentRequest) Descriptor() ([]byte, []int) {
-	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{21}
+	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *StopAgentRequest) GetId() string {
@@ -1493,7 +1614,7 @@ type StopAgentResponse struct {
 
 func (x *StopAgentResponse) Reset() {
 	*x = StopAgentResponse{}
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[22]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1505,7 +1626,7 @@ func (x *StopAgentResponse) String() string {
 func (*StopAgentResponse) ProtoMessage() {}
 
 func (x *StopAgentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[22]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1518,7 +1639,7 @@ func (x *StopAgentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StopAgentResponse.ProtoReflect.Descriptor instead.
 func (*StopAgentResponse) Descriptor() ([]byte, []int) {
-	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{22}
+	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *StopAgentResponse) GetAgent() *Agent {
@@ -1540,7 +1661,7 @@ type DeleteAgentRequest struct {
 
 func (x *DeleteAgentRequest) Reset() {
 	*x = DeleteAgentRequest{}
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[23]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1552,7 +1673,7 @@ func (x *DeleteAgentRequest) String() string {
 func (*DeleteAgentRequest) ProtoMessage() {}
 
 func (x *DeleteAgentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[23]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1565,7 +1686,7 @@ func (x *DeleteAgentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteAgentRequest.ProtoReflect.Descriptor instead.
 func (*DeleteAgentRequest) Descriptor() ([]byte, []int) {
-	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{23}
+	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *DeleteAgentRequest) GetId() string {
@@ -1591,7 +1712,7 @@ type DeleteAgentResponse struct {
 
 func (x *DeleteAgentResponse) Reset() {
 	*x = DeleteAgentResponse{}
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[24]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1603,7 +1724,7 @@ func (x *DeleteAgentResponse) String() string {
 func (*DeleteAgentResponse) ProtoMessage() {}
 
 func (x *DeleteAgentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[24]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1616,7 +1737,7 @@ func (x *DeleteAgentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteAgentResponse.ProtoReflect.Descriptor instead.
 func (*DeleteAgentResponse) Descriptor() ([]byte, []int) {
-	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{24}
+	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{25}
 }
 
 // ListEventsRequest pages a transcript. Limit 0 or over 1000 reads 1000.
@@ -1631,7 +1752,7 @@ type ListEventsRequest struct {
 
 func (x *ListEventsRequest) Reset() {
 	*x = ListEventsRequest{}
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[25]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1643,7 +1764,7 @@ func (x *ListEventsRequest) String() string {
 func (*ListEventsRequest) ProtoMessage() {}
 
 func (x *ListEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[25]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1656,7 +1777,7 @@ func (x *ListEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEventsRequest.ProtoReflect.Descriptor instead.
 func (*ListEventsRequest) Descriptor() ([]byte, []int) {
-	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{25}
+	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ListEventsRequest) GetId() string {
@@ -1692,7 +1813,7 @@ type ListEventsResponse struct {
 
 func (x *ListEventsResponse) Reset() {
 	*x = ListEventsResponse{}
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[26]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1704,7 +1825,7 @@ func (x *ListEventsResponse) String() string {
 func (*ListEventsResponse) ProtoMessage() {}
 
 func (x *ListEventsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[26]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1717,7 +1838,7 @@ func (x *ListEventsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEventsResponse.ProtoReflect.Descriptor instead.
 func (*ListEventsResponse) Descriptor() ([]byte, []int) {
-	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{26}
+	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *ListEventsResponse) GetEvents() []*Event {
@@ -1738,7 +1859,7 @@ type StreamEventsRequest struct {
 
 func (x *StreamEventsRequest) Reset() {
 	*x = StreamEventsRequest{}
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[27]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1750,7 +1871,7 @@ func (x *StreamEventsRequest) String() string {
 func (*StreamEventsRequest) ProtoMessage() {}
 
 func (x *StreamEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[27]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1763,7 +1884,7 @@ func (x *StreamEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamEventsRequest.ProtoReflect.Descriptor instead.
 func (*StreamEventsRequest) Descriptor() ([]byte, []int) {
-	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{27}
+	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *StreamEventsRequest) GetId() string {
@@ -1790,7 +1911,7 @@ type StreamEventsResponse struct {
 
 func (x *StreamEventsResponse) Reset() {
 	*x = StreamEventsResponse{}
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[28]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1802,7 +1923,7 @@ func (x *StreamEventsResponse) String() string {
 func (*StreamEventsResponse) ProtoMessage() {}
 
 func (x *StreamEventsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[28]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1815,7 +1936,7 @@ func (x *StreamEventsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamEventsResponse.ProtoReflect.Descriptor instead.
 func (*StreamEventsResponse) Descriptor() ([]byte, []int) {
-	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{28}
+	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *StreamEventsResponse) GetEvent() *Event {
@@ -1836,7 +1957,7 @@ type GetTurnOutputRequest struct {
 
 func (x *GetTurnOutputRequest) Reset() {
 	*x = GetTurnOutputRequest{}
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[29]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1848,7 +1969,7 @@ func (x *GetTurnOutputRequest) String() string {
 func (*GetTurnOutputRequest) ProtoMessage() {}
 
 func (x *GetTurnOutputRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[29]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1861,7 +1982,7 @@ func (x *GetTurnOutputRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTurnOutputRequest.ProtoReflect.Descriptor instead.
 func (*GetTurnOutputRequest) Descriptor() ([]byte, []int) {
-	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{29}
+	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *GetTurnOutputRequest) GetId() string {
@@ -1888,7 +2009,7 @@ type GetTurnOutputResponse struct {
 
 func (x *GetTurnOutputResponse) Reset() {
 	*x = GetTurnOutputResponse{}
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[30]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1900,7 +2021,7 @@ func (x *GetTurnOutputResponse) String() string {
 func (*GetTurnOutputResponse) ProtoMessage() {}
 
 func (x *GetTurnOutputResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_forge_agents_v1_agents_proto_msgTypes[30]
+	mi := &file_forge_agents_v1_agents_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1913,7 +2034,7 @@ func (x *GetTurnOutputResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTurnOutputResponse.ProtoReflect.Descriptor instead.
 func (*GetTurnOutputResponse) Descriptor() ([]byte, []int) {
-	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{30}
+	return file_forge_agents_v1_agents_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *GetTurnOutputResponse) GetOutput() *TurnOutput {
@@ -1948,14 +2069,18 @@ const file_forge_agents_v1_agents_proto_rawDesc = "" +
 	"\n" +
 	"repository\x18\x04 \x01(\v2\x1b.forge.agents.v1.RepositoryR\n" +
 	"repository\x12\x1c\n" +
-	"\treference\x18\x05 \x01(\tR\treference\".\n" +
+	"\treference\x18\x05 \x01(\tR\treference\"s\n" +
 	"\x06Policy\x12\x12\n" +
 	"\x04mode\x18\x01 \x01(\tR\x04mode\x12\x10\n" +
-	"\x03ask\x18\x02 \x01(\bR\x03ask\"e\n" +
+	"\x03ask\x18\x02 \x01(\bR\x03ask\x12C\n" +
+	"\x0eallowed_models\x18\x03 \x03(\v2\x1c.forge.agents.v1.ClientModelR\rallowedModels\";\n" +
+	"\vClientModel\x12\x16\n" +
+	"\x06client\x18\x01 \x01(\tR\x06client\x12\x14\n" +
+	"\x05model\x18\x02 \x01(\tR\x05model\"e\n" +
 	"\x06Limits\x12<\n" +
 	"\fturn_timeout\x18\x01 \x01(\v2\x19.google.protobuf.DurationR\vturnTimeout\x12\x1d\n" +
 	"\n" +
-	"max_events\x18\x02 \x01(\x03R\tmaxEvents\"\xe3\x03\n" +
+	"max_events\x18\x02 \x01(\x03R\tmaxEvents\"\x8d\x04\n" +
 	"\x05Agent\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06client\x18\x02 \x01(\tR\x06client\x12\x14\n" +
@@ -1973,12 +2098,14 @@ const file_forge_agents_v1_agents_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\x8f\x01\n" +
+	"updated_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x12\n" +
+	"\x04root\x18\x0f \x01(\tR\x04root\x12\x14\n" +
+	"\x05depth\x18\x10 \x01(\x05R\x05depth\"\x8f\x01\n" +
 	"\x05Usage\x12!\n" +
 	"\finput_tokens\x18\x01 \x01(\x03R\vinputTokens\x12#\n" +
 	"\routput_tokens\x18\x02 \x01(\x03R\foutputTokens\x12#\n" +
 	"\rcached_tokens\x18\x03 \x01(\x03R\fcachedTokens\x12\x19\n" +
-	"\bcost_usd\x18\x04 \x01(\x01R\acostUsd\"\xbc\x03\n" +
+	"\bcost_usd\x18\x04 \x01(\x01R\acostUsd\"\xf8\x03\n" +
 	"\x05Event\x12\x10\n" +
 	"\x03seq\x18\x01 \x01(\x03R\x03seq\x12.\n" +
 	"\x04time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12\x12\n" +
@@ -1997,7 +2124,10 @@ const file_forge_agents_v1_agents_proto_rawDesc = "" +
 	"\x05allow\x18\r \x01(\bR\x05allow\x12\x16\n" +
 	"\x06status\x18\x0e \x01(\tR\x06status\x12,\n" +
 	"\x05usage\x18\x0f \x01(\v2\x16.forge.agents.v1.UsageR\x05usage\x12\x1c\n" +
-	"\ttruncated\x18\x10 \x01(\bR\ttruncated\"Z\n" +
+	"\ttruncated\x18\x10 \x01(\bR\ttruncated\x12\x19\n" +
+	"\bchild_id\x18\x11 \x01(\tR\achildId\x12\x1f\n" +
+	"\vchild_state\x18\x12 \x01(\tR\n" +
+	"childState\"Z\n" +
 	"\n" +
 	"TurnOutput\x12\x16\n" +
 	"\x06stdout\x18\x01 \x01(\fR\x06stdout\x12\x16\n" +
@@ -2016,13 +2146,16 @@ const file_forge_agents_v1_agents_proto_rawDesc = "" +
 	"\x0fGetAgentRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"@\n" +
 	"\x10GetAgentResponse\x12,\n" +
-	"\x05agent\x18\x01 \x01(\v2\x16.forge.agents.v1.AgentR\x05agent\"~\n" +
+	"\x05agent\x18\x01 \x01(\v2\x16.forge.agents.v1.AgentR\x05agent\"\xb7\x01\n" +
 	"\x11ListAgentsRequest\x12\x14\n" +
 	"\x05state\x18\x01 \x01(\tR\x05state\x12\x16\n" +
 	"\x06parent\x18\x02 \x01(\tR\x06parent\x12;\n" +
 	"\n" +
 	"repository\x18\x03 \x01(\v2\x1b.forge.agents.v1.RepositoryR\n" +
-	"repository\"D\n" +
+	"repository\x12\x12\n" +
+	"\x04root\x18\x04 \x01(\tR\x04root\x12\x19\n" +
+	"\x05depth\x18\x05 \x01(\x05H\x00R\x05depth\x88\x01\x01B\b\n" +
+	"\x06_depth\"D\n" +
 	"\x12ListAgentsResponse\x12.\n" +
 	"\x06agents\x18\x01 \x03(\v2\x16.forge.agents.v1.AgentR\x06agents\"8\n" +
 	"\x12SendMessageRequest\x12\x0e\n" +
@@ -2097,94 +2230,96 @@ func file_forge_agents_v1_agents_proto_rawDescGZIP() []byte {
 	return file_forge_agents_v1_agents_proto_rawDescData
 }
 
-var file_forge_agents_v1_agents_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
+var file_forge_agents_v1_agents_proto_msgTypes = make([]protoimpl.MessageInfo, 32)
 var file_forge_agents_v1_agents_proto_goTypes = []any{
 	(*Repository)(nil),            // 0: forge.agents.v1.Repository
 	(*WorkspaceSpec)(nil),         // 1: forge.agents.v1.WorkspaceSpec
 	(*Workspace)(nil),             // 2: forge.agents.v1.Workspace
 	(*Policy)(nil),                // 3: forge.agents.v1.Policy
-	(*Limits)(nil),                // 4: forge.agents.v1.Limits
-	(*Agent)(nil),                 // 5: forge.agents.v1.Agent
-	(*Usage)(nil),                 // 6: forge.agents.v1.Usage
-	(*Event)(nil),                 // 7: forge.agents.v1.Event
-	(*TurnOutput)(nil),            // 8: forge.agents.v1.TurnOutput
-	(*CreateAgentRequest)(nil),    // 9: forge.agents.v1.CreateAgentRequest
-	(*CreateAgentResponse)(nil),   // 10: forge.agents.v1.CreateAgentResponse
-	(*GetAgentRequest)(nil),       // 11: forge.agents.v1.GetAgentRequest
-	(*GetAgentResponse)(nil),      // 12: forge.agents.v1.GetAgentResponse
-	(*ListAgentsRequest)(nil),     // 13: forge.agents.v1.ListAgentsRequest
-	(*ListAgentsResponse)(nil),    // 14: forge.agents.v1.ListAgentsResponse
-	(*SendMessageRequest)(nil),    // 15: forge.agents.v1.SendMessageRequest
-	(*SendMessageResponse)(nil),   // 16: forge.agents.v1.SendMessageResponse
-	(*AnswerInputRequest)(nil),    // 17: forge.agents.v1.AnswerInputRequest
-	(*AnswerInputResponse)(nil),   // 18: forge.agents.v1.AnswerInputResponse
-	(*CancelTurnRequest)(nil),     // 19: forge.agents.v1.CancelTurnRequest
-	(*CancelTurnResponse)(nil),    // 20: forge.agents.v1.CancelTurnResponse
-	(*StopAgentRequest)(nil),      // 21: forge.agents.v1.StopAgentRequest
-	(*StopAgentResponse)(nil),     // 22: forge.agents.v1.StopAgentResponse
-	(*DeleteAgentRequest)(nil),    // 23: forge.agents.v1.DeleteAgentRequest
-	(*DeleteAgentResponse)(nil),   // 24: forge.agents.v1.DeleteAgentResponse
-	(*ListEventsRequest)(nil),     // 25: forge.agents.v1.ListEventsRequest
-	(*ListEventsResponse)(nil),    // 26: forge.agents.v1.ListEventsResponse
-	(*StreamEventsRequest)(nil),   // 27: forge.agents.v1.StreamEventsRequest
-	(*StreamEventsResponse)(nil),  // 28: forge.agents.v1.StreamEventsResponse
-	(*GetTurnOutputRequest)(nil),  // 29: forge.agents.v1.GetTurnOutputRequest
-	(*GetTurnOutputResponse)(nil), // 30: forge.agents.v1.GetTurnOutputResponse
-	(*durationpb.Duration)(nil),   // 31: google.protobuf.Duration
-	(*timestamppb.Timestamp)(nil), // 32: google.protobuf.Timestamp
+	(*ClientModel)(nil),           // 4: forge.agents.v1.ClientModel
+	(*Limits)(nil),                // 5: forge.agents.v1.Limits
+	(*Agent)(nil),                 // 6: forge.agents.v1.Agent
+	(*Usage)(nil),                 // 7: forge.agents.v1.Usage
+	(*Event)(nil),                 // 8: forge.agents.v1.Event
+	(*TurnOutput)(nil),            // 9: forge.agents.v1.TurnOutput
+	(*CreateAgentRequest)(nil),    // 10: forge.agents.v1.CreateAgentRequest
+	(*CreateAgentResponse)(nil),   // 11: forge.agents.v1.CreateAgentResponse
+	(*GetAgentRequest)(nil),       // 12: forge.agents.v1.GetAgentRequest
+	(*GetAgentResponse)(nil),      // 13: forge.agents.v1.GetAgentResponse
+	(*ListAgentsRequest)(nil),     // 14: forge.agents.v1.ListAgentsRequest
+	(*ListAgentsResponse)(nil),    // 15: forge.agents.v1.ListAgentsResponse
+	(*SendMessageRequest)(nil),    // 16: forge.agents.v1.SendMessageRequest
+	(*SendMessageResponse)(nil),   // 17: forge.agents.v1.SendMessageResponse
+	(*AnswerInputRequest)(nil),    // 18: forge.agents.v1.AnswerInputRequest
+	(*AnswerInputResponse)(nil),   // 19: forge.agents.v1.AnswerInputResponse
+	(*CancelTurnRequest)(nil),     // 20: forge.agents.v1.CancelTurnRequest
+	(*CancelTurnResponse)(nil),    // 21: forge.agents.v1.CancelTurnResponse
+	(*StopAgentRequest)(nil),      // 22: forge.agents.v1.StopAgentRequest
+	(*StopAgentResponse)(nil),     // 23: forge.agents.v1.StopAgentResponse
+	(*DeleteAgentRequest)(nil),    // 24: forge.agents.v1.DeleteAgentRequest
+	(*DeleteAgentResponse)(nil),   // 25: forge.agents.v1.DeleteAgentResponse
+	(*ListEventsRequest)(nil),     // 26: forge.agents.v1.ListEventsRequest
+	(*ListEventsResponse)(nil),    // 27: forge.agents.v1.ListEventsResponse
+	(*StreamEventsRequest)(nil),   // 28: forge.agents.v1.StreamEventsRequest
+	(*StreamEventsResponse)(nil),  // 29: forge.agents.v1.StreamEventsResponse
+	(*GetTurnOutputRequest)(nil),  // 30: forge.agents.v1.GetTurnOutputRequest
+	(*GetTurnOutputResponse)(nil), // 31: forge.agents.v1.GetTurnOutputResponse
+	(*durationpb.Duration)(nil),   // 32: google.protobuf.Duration
+	(*timestamppb.Timestamp)(nil), // 33: google.protobuf.Timestamp
 }
 var file_forge_agents_v1_agents_proto_depIdxs = []int32{
 	0,  // 0: forge.agents.v1.WorkspaceSpec.repository:type_name -> forge.agents.v1.Repository
 	0,  // 1: forge.agents.v1.Workspace.repository:type_name -> forge.agents.v1.Repository
-	31, // 2: forge.agents.v1.Limits.turn_timeout:type_name -> google.protobuf.Duration
-	2,  // 3: forge.agents.v1.Agent.workspace:type_name -> forge.agents.v1.Workspace
-	3,  // 4: forge.agents.v1.Agent.policy:type_name -> forge.agents.v1.Policy
-	4,  // 5: forge.agents.v1.Agent.limits:type_name -> forge.agents.v1.Limits
-	32, // 6: forge.agents.v1.Agent.created_at:type_name -> google.protobuf.Timestamp
-	32, // 7: forge.agents.v1.Agent.updated_at:type_name -> google.protobuf.Timestamp
-	32, // 8: forge.agents.v1.Event.time:type_name -> google.protobuf.Timestamp
-	6,  // 9: forge.agents.v1.Event.usage:type_name -> forge.agents.v1.Usage
-	1,  // 10: forge.agents.v1.CreateAgentRequest.workspace:type_name -> forge.agents.v1.WorkspaceSpec
-	3,  // 11: forge.agents.v1.CreateAgentRequest.policy:type_name -> forge.agents.v1.Policy
-	4,  // 12: forge.agents.v1.CreateAgentRequest.limits:type_name -> forge.agents.v1.Limits
-	5,  // 13: forge.agents.v1.CreateAgentResponse.agent:type_name -> forge.agents.v1.Agent
-	5,  // 14: forge.agents.v1.GetAgentResponse.agent:type_name -> forge.agents.v1.Agent
-	0,  // 15: forge.agents.v1.ListAgentsRequest.repository:type_name -> forge.agents.v1.Repository
-	5,  // 16: forge.agents.v1.ListAgentsResponse.agents:type_name -> forge.agents.v1.Agent
-	5,  // 17: forge.agents.v1.SendMessageResponse.agent:type_name -> forge.agents.v1.Agent
-	5,  // 18: forge.agents.v1.AnswerInputResponse.agent:type_name -> forge.agents.v1.Agent
-	5,  // 19: forge.agents.v1.CancelTurnResponse.agent:type_name -> forge.agents.v1.Agent
-	5,  // 20: forge.agents.v1.StopAgentResponse.agent:type_name -> forge.agents.v1.Agent
-	7,  // 21: forge.agents.v1.ListEventsResponse.events:type_name -> forge.agents.v1.Event
-	7,  // 22: forge.agents.v1.StreamEventsResponse.event:type_name -> forge.agents.v1.Event
-	8,  // 23: forge.agents.v1.GetTurnOutputResponse.output:type_name -> forge.agents.v1.TurnOutput
-	9,  // 24: forge.agents.v1.AgentsService.CreateAgent:input_type -> forge.agents.v1.CreateAgentRequest
-	11, // 25: forge.agents.v1.AgentsService.GetAgent:input_type -> forge.agents.v1.GetAgentRequest
-	13, // 26: forge.agents.v1.AgentsService.ListAgents:input_type -> forge.agents.v1.ListAgentsRequest
-	15, // 27: forge.agents.v1.AgentsService.SendMessage:input_type -> forge.agents.v1.SendMessageRequest
-	17, // 28: forge.agents.v1.AgentsService.AnswerInput:input_type -> forge.agents.v1.AnswerInputRequest
-	19, // 29: forge.agents.v1.AgentsService.CancelTurn:input_type -> forge.agents.v1.CancelTurnRequest
-	21, // 30: forge.agents.v1.AgentsService.StopAgent:input_type -> forge.agents.v1.StopAgentRequest
-	23, // 31: forge.agents.v1.AgentsService.DeleteAgent:input_type -> forge.agents.v1.DeleteAgentRequest
-	25, // 32: forge.agents.v1.AgentsService.ListEvents:input_type -> forge.agents.v1.ListEventsRequest
-	27, // 33: forge.agents.v1.AgentsService.StreamEvents:input_type -> forge.agents.v1.StreamEventsRequest
-	29, // 34: forge.agents.v1.AgentsService.GetTurnOutput:input_type -> forge.agents.v1.GetTurnOutputRequest
-	10, // 35: forge.agents.v1.AgentsService.CreateAgent:output_type -> forge.agents.v1.CreateAgentResponse
-	12, // 36: forge.agents.v1.AgentsService.GetAgent:output_type -> forge.agents.v1.GetAgentResponse
-	14, // 37: forge.agents.v1.AgentsService.ListAgents:output_type -> forge.agents.v1.ListAgentsResponse
-	16, // 38: forge.agents.v1.AgentsService.SendMessage:output_type -> forge.agents.v1.SendMessageResponse
-	18, // 39: forge.agents.v1.AgentsService.AnswerInput:output_type -> forge.agents.v1.AnswerInputResponse
-	20, // 40: forge.agents.v1.AgentsService.CancelTurn:output_type -> forge.agents.v1.CancelTurnResponse
-	22, // 41: forge.agents.v1.AgentsService.StopAgent:output_type -> forge.agents.v1.StopAgentResponse
-	24, // 42: forge.agents.v1.AgentsService.DeleteAgent:output_type -> forge.agents.v1.DeleteAgentResponse
-	26, // 43: forge.agents.v1.AgentsService.ListEvents:output_type -> forge.agents.v1.ListEventsResponse
-	28, // 44: forge.agents.v1.AgentsService.StreamEvents:output_type -> forge.agents.v1.StreamEventsResponse
-	30, // 45: forge.agents.v1.AgentsService.GetTurnOutput:output_type -> forge.agents.v1.GetTurnOutputResponse
-	35, // [35:46] is the sub-list for method output_type
-	24, // [24:35] is the sub-list for method input_type
-	24, // [24:24] is the sub-list for extension type_name
-	24, // [24:24] is the sub-list for extension extendee
-	0,  // [0:24] is the sub-list for field type_name
+	4,  // 2: forge.agents.v1.Policy.allowed_models:type_name -> forge.agents.v1.ClientModel
+	32, // 3: forge.agents.v1.Limits.turn_timeout:type_name -> google.protobuf.Duration
+	2,  // 4: forge.agents.v1.Agent.workspace:type_name -> forge.agents.v1.Workspace
+	3,  // 5: forge.agents.v1.Agent.policy:type_name -> forge.agents.v1.Policy
+	5,  // 6: forge.agents.v1.Agent.limits:type_name -> forge.agents.v1.Limits
+	33, // 7: forge.agents.v1.Agent.created_at:type_name -> google.protobuf.Timestamp
+	33, // 8: forge.agents.v1.Agent.updated_at:type_name -> google.protobuf.Timestamp
+	33, // 9: forge.agents.v1.Event.time:type_name -> google.protobuf.Timestamp
+	7,  // 10: forge.agents.v1.Event.usage:type_name -> forge.agents.v1.Usage
+	1,  // 11: forge.agents.v1.CreateAgentRequest.workspace:type_name -> forge.agents.v1.WorkspaceSpec
+	3,  // 12: forge.agents.v1.CreateAgentRequest.policy:type_name -> forge.agents.v1.Policy
+	5,  // 13: forge.agents.v1.CreateAgentRequest.limits:type_name -> forge.agents.v1.Limits
+	6,  // 14: forge.agents.v1.CreateAgentResponse.agent:type_name -> forge.agents.v1.Agent
+	6,  // 15: forge.agents.v1.GetAgentResponse.agent:type_name -> forge.agents.v1.Agent
+	0,  // 16: forge.agents.v1.ListAgentsRequest.repository:type_name -> forge.agents.v1.Repository
+	6,  // 17: forge.agents.v1.ListAgentsResponse.agents:type_name -> forge.agents.v1.Agent
+	6,  // 18: forge.agents.v1.SendMessageResponse.agent:type_name -> forge.agents.v1.Agent
+	6,  // 19: forge.agents.v1.AnswerInputResponse.agent:type_name -> forge.agents.v1.Agent
+	6,  // 20: forge.agents.v1.CancelTurnResponse.agent:type_name -> forge.agents.v1.Agent
+	6,  // 21: forge.agents.v1.StopAgentResponse.agent:type_name -> forge.agents.v1.Agent
+	8,  // 22: forge.agents.v1.ListEventsResponse.events:type_name -> forge.agents.v1.Event
+	8,  // 23: forge.agents.v1.StreamEventsResponse.event:type_name -> forge.agents.v1.Event
+	9,  // 24: forge.agents.v1.GetTurnOutputResponse.output:type_name -> forge.agents.v1.TurnOutput
+	10, // 25: forge.agents.v1.AgentsService.CreateAgent:input_type -> forge.agents.v1.CreateAgentRequest
+	12, // 26: forge.agents.v1.AgentsService.GetAgent:input_type -> forge.agents.v1.GetAgentRequest
+	14, // 27: forge.agents.v1.AgentsService.ListAgents:input_type -> forge.agents.v1.ListAgentsRequest
+	16, // 28: forge.agents.v1.AgentsService.SendMessage:input_type -> forge.agents.v1.SendMessageRequest
+	18, // 29: forge.agents.v1.AgentsService.AnswerInput:input_type -> forge.agents.v1.AnswerInputRequest
+	20, // 30: forge.agents.v1.AgentsService.CancelTurn:input_type -> forge.agents.v1.CancelTurnRequest
+	22, // 31: forge.agents.v1.AgentsService.StopAgent:input_type -> forge.agents.v1.StopAgentRequest
+	24, // 32: forge.agents.v1.AgentsService.DeleteAgent:input_type -> forge.agents.v1.DeleteAgentRequest
+	26, // 33: forge.agents.v1.AgentsService.ListEvents:input_type -> forge.agents.v1.ListEventsRequest
+	28, // 34: forge.agents.v1.AgentsService.StreamEvents:input_type -> forge.agents.v1.StreamEventsRequest
+	30, // 35: forge.agents.v1.AgentsService.GetTurnOutput:input_type -> forge.agents.v1.GetTurnOutputRequest
+	11, // 36: forge.agents.v1.AgentsService.CreateAgent:output_type -> forge.agents.v1.CreateAgentResponse
+	13, // 37: forge.agents.v1.AgentsService.GetAgent:output_type -> forge.agents.v1.GetAgentResponse
+	15, // 38: forge.agents.v1.AgentsService.ListAgents:output_type -> forge.agents.v1.ListAgentsResponse
+	17, // 39: forge.agents.v1.AgentsService.SendMessage:output_type -> forge.agents.v1.SendMessageResponse
+	19, // 40: forge.agents.v1.AgentsService.AnswerInput:output_type -> forge.agents.v1.AnswerInputResponse
+	21, // 41: forge.agents.v1.AgentsService.CancelTurn:output_type -> forge.agents.v1.CancelTurnResponse
+	23, // 42: forge.agents.v1.AgentsService.StopAgent:output_type -> forge.agents.v1.StopAgentResponse
+	25, // 43: forge.agents.v1.AgentsService.DeleteAgent:output_type -> forge.agents.v1.DeleteAgentResponse
+	27, // 44: forge.agents.v1.AgentsService.ListEvents:output_type -> forge.agents.v1.ListEventsResponse
+	29, // 45: forge.agents.v1.AgentsService.StreamEvents:output_type -> forge.agents.v1.StreamEventsResponse
+	31, // 46: forge.agents.v1.AgentsService.GetTurnOutput:output_type -> forge.agents.v1.GetTurnOutputResponse
+	36, // [36:47] is the sub-list for method output_type
+	25, // [25:36] is the sub-list for method input_type
+	25, // [25:25] is the sub-list for extension type_name
+	25, // [25:25] is the sub-list for extension extendee
+	0,  // [0:25] is the sub-list for field type_name
 }
 
 func init() { file_forge_agents_v1_agents_proto_init() }
@@ -2192,13 +2327,14 @@ func file_forge_agents_v1_agents_proto_init() {
 	if File_forge_agents_v1_agents_proto != nil {
 		return
 	}
+	file_forge_agents_v1_agents_proto_msgTypes[14].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_forge_agents_v1_agents_proto_rawDesc), len(file_forge_agents_v1_agents_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   31,
+			NumMessages:   32,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

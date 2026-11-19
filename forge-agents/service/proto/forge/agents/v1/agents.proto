@@ -48,8 +48,8 @@ service AgentsService {
       response_body: "agent"
     };
   }
-  // CancelTurn kills the running client and returns the agent to idle. An
-  // agent without a turn is returned unchanged.
+  // CancelTurn kills the running client or cancels a pending continuation
+  // and returns the agent to idle.
   rpc CancelTurn(CancelTurnRequest) returns (CancelTurnResponse) {
     option (google.api.http) = {
       post: "/v1/agents/{id}/cancel"
@@ -57,8 +57,8 @@ service AgentsService {
       response_body: "agent"
     };
   }
-  // StopAgent kills any running client and stops the agent for good. Its
-  // transcript and workspace are kept.
+  // StopAgent kills running clients in the agent's subtree and stops them
+  // for good. Their transcripts and workspaces are kept.
   rpc StopAgent(StopAgentRequest) returns (StopAgentResponse) {
     option (google.api.http) = {
       post: "/v1/agents/{id}/stop"
@@ -66,7 +66,8 @@ service AgentsService {
       response_body: "agent"
     };
   }
-  // DeleteAgent stops an agent and removes it with its transcript. Scratch
+  // DeleteAgent stops an agent and its descendants, then removes the named
+  // agent and its transcript. Descendant records are kept. Scratch
   // workspaces are removed; a checkout only when remove_checkout is set, and
   // forge-checkouts refuses one with uncommitted changes.
   rpc DeleteAgent(DeleteAgentRequest) returns (DeleteAgentResponse) {
@@ -106,6 +107,7 @@ message Repository {
 // (default, an empty directory forge-agents owns), path (an existing
 // directory below a configured root) or checkout (a new forge-checkouts
 // worktree of repository at reference; empty reference is the remote HEAD).
+// Shared borrows the parent agent's workspace.
 message WorkspaceSpec {
   string kind = 1;
   string path = 2;
@@ -114,7 +116,7 @@ message WorkspaceSpec {
 }
 
 // Workspace is the prepared directory. Checkout is the forge-checkouts
-// checkout ID of a checkout workspace. Path is host-local.
+// checkout ID of an owned checkout workspace. Path is host-local.
 message Workspace {
   string kind = 1;
   string path = 2;
@@ -130,6 +132,16 @@ message Workspace {
 message Policy {
   string mode = 1;
   bool ask = 2;
+  // AllowedModels lists permitted client/model pairs, including the agent's
+  // own pair. Omit to inherit the parent's list or use the root's own pair.
+  repeated ClientModel allowed_models = 3;
+}
+
+// ClientModel authorizes a model for one enabled client. An empty model
+// selects that client's default.
+message ClientModel {
+  string client = 1;
+  string model = 2;
 }
 
 // Limits bound one agent. Unset values take the service bounds, which they
@@ -140,8 +152,10 @@ message Limits {
 }
 
 // Agent is one conversation with one client CLI. State is created, running,
-// idle, waiting_input, stopped or failed. Session is the client's own
-// session ID, resumed by the next turn. Error is why the latest turn failed.
+// idle, waiting_input, waiting_children, stopped or failed. An agent in
+// waiting_children resumes once its children finish and a turn slot is
+// available. Session is the client's own session ID. Error is why the
+// latest turn failed.
 message Agent {
   string id = 1;
   // Client is claude, codex or gemini.
@@ -158,6 +172,10 @@ message Agent {
   string error = 12;
   google.protobuf.Timestamp created_at = 13;
   google.protobuf.Timestamp updated_at = 14;
+  // Root is the top-level agent ID, including on the root itself.
+  string root = 15;
+  // Depth is zero on the root and increases by one per generation.
+  int32 depth = 16;
 }
 
 // Usage is the token use and cost a client reported for a turn.
@@ -169,11 +187,13 @@ message Usage {
 }
 
 // Event is one transcript entry. Kind is message, tool_call, tool_result,
-// input_request, input_answer, usage, error or result. Role (user, assistant
+// input_request, input_answer, usage, error, result, child_spawned or
+// child_finished. Role (user, assistant
 // or reasoning) is set on messages; request_kind (question or permission)
 // on input requests; status (success, error, cancelled, timeout, stopped or
 // limit) on results. Input is JSON. Truncated marks text or input cut to the
-// event size limit.
+// event size limit. Child events identify the child and its state. A
+// child_finished event carries the child's latest result status and text.
 message Event {
   int64 seq = 1;
   google.protobuf.Timestamp time = 2;
@@ -191,6 +211,8 @@ message Event {
   string status = 14;
   Usage usage = 15;
   bool truncated = 16;
+  string child_id = 17;
+  string child_state = 18;
 }
 
 // TurnOutput is a turn's raw client output, as bytes (base64 in JSON), each
@@ -202,7 +224,9 @@ message TurnOutput {
 }
 
 // CreateAgentRequest describes the agent. Model and effort are passed to
-// the client; empty uses its default. Parent is an existing agent.
+// the client; empty uses its default. With a parent, an omitted client and
+// model inherit the parent's pair. An omitted effort inherits the parent's.
+// Children must stay within their parent's policy and tree limits.
 message CreateAgentRequest {
   string client = 1;
   string model = 2;
@@ -224,12 +248,14 @@ message GetAgentRequest {
 message GetAgentResponse {
   Agent agent = 1;
 }
-// ListAgentsRequest filters by state, parent and the repository of
-// checkout workspaces.
+// ListAgentsRequest filters by state, direct parent, root, exact depth
+// and the repository of checkout workspaces.
 message ListAgentsRequest {
   string state = 1;
   string parent = 2;
   Repository repository = 3;
+  string root = 4;
+  optional int32 depth = 5;
 }
 // ListAgentsResponse lists agents oldest first.
 message ListAgentsResponse {

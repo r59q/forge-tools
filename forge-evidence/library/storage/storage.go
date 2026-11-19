@@ -42,10 +42,27 @@ type Store interface {
 	// Entry returns the metadata of an entry, or ErrNotExist.
 	Entry(ctx context.Context, id evidence.ID) (evidence.Entry, error)
 
+	// List returns matching entry metadata in bytewise order by commit SHA,
+	// then by entry name. A failed listing returns an error with no entries.
+	List(ctx context.Context, filter Filter) ([]evidence.Entry, error)
+
 	// ReadFile returns the content of one file of an entry, exactly as it
 	// was added. A file not listed in the entry's metadata returns
 	// ErrNotExist.
 	ReadFile(ctx context.Context, id evidence.ID, name string) ([]byte, error)
+}
+
+// Filter selects entries for List. Empty fields match any value and all
+// nonempty fields must match exactly, including case.
+type Filter struct {
+	// Commit matches the full subject commit SHA.
+	Commit string
+
+	// Path matches the repository-relative subject path.
+	Path string
+
+	// Kind matches the evidence kind.
+	Kind evidence.Kind
 }
 
 // Draft is an entry to add: its fields and the content of its files. Sizes

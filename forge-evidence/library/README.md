@@ -186,12 +186,12 @@ every strategy implements:
 | ---------- | ------------------------------------------------------------ |
 | `Add`      | Stores a new entry from a `Draft`: its fields and file bytes |
 | `Entry`    | Returns the metadata of an entry                             |
+| `List`     | Returns matching entry metadata                              |
 | `ReadFile` | Returns the bytes of one file listed in an entry's metadata  |
 
 Callers name entries by `ID` and files by name, never by a path or object
 key, so a strategy, such as a future S3 one, can be swapped without changing
-them. `Draft.Entry` computes each file's size and SHA-256. Listing and
-validating entries will be added to `Store`.
+them. `Draft.Entry` computes each file's size and SHA-256.
 
 | Error           | Meaning                                                 |
 | --------------- | ------------------------------------------------------- |
@@ -221,6 +221,7 @@ entry, err := store.Add(ctx, storage.Draft{
 })
 
 entry, err = store.Entry(ctx, entry.ID())
+entries, err := store.List(ctx, storage.Filter{Commit: commit, Kind: evidence.KindTestResult})
 report, err = store.ReadFile(ctx, entry.ID(), "junit.xml")
 ```
 
@@ -242,7 +243,7 @@ report, err = store.ReadFile(ctx, entry.ID(), "junit.xml")
   exists. Errors name paths relative to the root, never host paths or file
   content.
 
-| Limit           | `Add`                   | `Entry`, `ReadFile`                      |
+| Limit           | `Add`                   | `Entry`, `List`, `ReadFile`              |
 | --------------- | ----------------------- | ---------------------------------------- |
 | `MetadataBytes` | Encoded metadata        | `entry.json` size, before it is read     |
 | `FileBytes`     | Each file's bytes       | Recorded sizes; `ReadFile` file size too |
@@ -251,3 +252,25 @@ report, err = store.ReadFile(ctx, entry.ID(), "junit.xml")
 
 Sizes on disk are checked before content is read, and an exceeded limit
 returns `ErrTooLarge`; nothing is truncated.
+
+### Listing
+
+`List` returns `[]evidence.Entry` in ascending bytewise order by subject
+commit SHA, then by entry name. It reads `entry.json` only. A missing or
+empty `.evidence/` returns an empty list.
+
+`storage.Filter` has three case-sensitive, exact-match fields. `Commit`
+matches the full subject SHA, `Path` matches the full repository-relative
+subject path, and `Kind` matches the evidence kind. Empty fields match any
+value. All set fields must match.
+
+`Limits.Entries` caps the number of children in `.evidence/` and separately
+the total number of children across its commit folders. These counts include
+folders and files regardless of the filter, including Add's staging folders.
+`Limits.MetadataBytes` caps each `entry.json`. Exceeding either limit returns
+`ErrTooLarge` with no results.
+
+Listing checks every entry before applying the filter. A malformed or
+unreadable entry, an unsafe name, or a symlink at a commit or entry path
+fails the list with an error naming the repository-relative path. Add's
+temporary `.add-` directories with random base32 suffixes are ignored.

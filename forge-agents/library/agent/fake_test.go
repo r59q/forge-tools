@@ -45,12 +45,18 @@ type directive struct {
 	Count    int             `json:"count"`
 	Code     int             `json:"code"`
 	MS       int             `json:"ms"`
+	Alias    string          `json:"alias"`
+	Args     map[string]any  `json:"args"`
+	Children []string        `json:"children"`
 }
 
 // fakeClient plays script <turn>.jsonl, counting turns in the workspace,
 // and records its arguments, prompt and tool answers there.
 func fakeClient() int {
 	prompt, _ := io.ReadAll(os.Stdin)
+	if name, ok := scriptedName(string(prompt)); ok {
+		return namedScript(name, prompt)
+	}
 	turns, _ := os.ReadFile("turns")
 	n := len(turns) + 1
 	_ = os.WriteFile("turns", bytes.Repeat([]byte("x"), n), 0o600)

@@ -54,10 +54,15 @@ const (
 	ServerName   = "forge-agents"
 	ToolAsk      = "ask_user"
 	ToolApprove  = "approve"
+	ToolSpawn    = "spawn_agent"
+	ToolList     = "list_agents"
+	ToolSend     = "send_message"
+	ToolWait     = "wait_agents"
+	ToolStop     = "stop_agent"
 	maxModelSize = 128
 )
 
-// Tools is the MCP server a turn reaches for questions and permissions.
+// Tools is the scoped MCP handle a turn reaches for input and child sessions.
 type Tools struct {
 	URL   string
 	Token string

@@ -1,6 +1,6 @@
 // Package mcp serves the tools forge-agents gives its clients: ask_user,
 // which pauses a turn until a person answers, and approve, Claude Code's
-// permission prompt tool. It speaks the Model Context Protocol over
+// permission prompt tool, plus tools to manage child sessions. It speaks the Model Context Protocol over
 // streamable HTTP, answering every request with a single JSON response.
 package mcp
 
@@ -34,8 +34,9 @@ type Decision struct {
 // Binding is what one turn's tools do. A nil Approve leaves the approve
 // tool out.
 type Binding struct {
-	Ask     func(ctx context.Context, question string) (string, error)
-	Approve func(ctx context.Context, tool string, input json.RawMessage) (Decision, error)
+	Children *Children
+	Ask      func(ctx context.Context, question string) (string, error)
+	Approve  func(ctx context.Context, tool string, input json.RawMessage) (Decision, error)
 }
 
 // Server routes tool calls to the turn whose token they carry. The zero
@@ -48,9 +49,15 @@ type Server struct {
 // Register makes b reachable with a new token, which it returns, until
 // the returned function is called.
 func (s *Server) Register(b Binding) (string, func()) {
+	return s.RegisterFor(func(string) Binding { return b })
+}
+
+// RegisterFor builds a binding that can also mask its own token in tool arguments.
+func (s *Server) RegisterFor(bind func(token string) Binding) (string, func()) {
 	var raw [32]byte
 	_, _ = rand.Read(raw[:])
 	token := hex.EncodeToString(raw[:])
+	b := bind(token)
 	s.mu.Lock()
 	if s.turns == nil {
 		s.turns = map[string]Binding{}
@@ -189,29 +196,16 @@ const (
 )
 
 func tools(b Binding) []map[string]any {
-	list := []map[string]any{{
-		"name":        adapter.ToolAsk,
-		"description": askDescription,
-		"inputSchema": map[string]any{
-			"type":       "object",
-			"properties": map[string]any{"question": map[string]any{"type": "string"}},
-			"required":   []string{"question"},
-		},
-	}}
+	list := []map[string]any{
+		tool(adapter.ToolAsk, askDescription, map[string]any{"question": textSchema()}, "question"),
+	}
 	if b.Approve != nil {
-		list = append(list, map[string]any{
-			"name":        adapter.ToolApprove,
-			"description": approveDescription,
-			"inputSchema": map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"tool_name":   map[string]any{"type": "string"},
-					"input":       map[string]any{"type": "object"},
-					"tool_use_id": map[string]any{"type": "string"},
-				},
-				"required": []string{"tool_name", "input"},
-			},
-		})
+		list = append(list, tool(adapter.ToolApprove, approveDescription, map[string]any{
+			"tool_name": textSchema(), "input": map[string]any{"type": "object"}, "tool_use_id": textSchema(),
+		}, "tool_name", "input"))
+	}
+	if b.Children != nil {
+		list = append(list, childTools()...)
 	}
 	return list
 }
@@ -247,6 +241,9 @@ func call(ctx context.Context, b Binding, params json.RawMessage) (any, *rpcErro
 			return toolResult("", err), nil
 		}
 		return toolResult(permission(d, args.Input), nil), nil
+	}
+	if b.Children != nil {
+		return b.Children.call(ctx, p.Name, p.Arguments)
 	}
 	return nil, &rpcError{codeParams, "unknown tool: " + p.Name}
 }

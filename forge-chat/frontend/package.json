@@ -1,0 +1,31 @@
+{
+  "name": "@r59q/chat",
+  "version": "0.1.0",
+  "description": "Embeddable chat for forge-agents",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=24"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    },
+    "./styles.css": "./dist/src/styles.css"
+  },
+  "files": [
+    "dist/src",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc && node build.mjs",
+    "lint": "eslint .",
+    "test": "npm run build && node --test test/*.test.mjs"
+  },
+  "devDependencies": {
+    "@typescript-eslint/parser": "8.72.1",
+    "eslint": "10.14.0",
+    "typescript": "5.9.3"
+  }
+}

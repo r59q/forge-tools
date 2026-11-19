@@ -132,25 +132,39 @@ func TestAddRejectsSymlinkAtEntry(t *testing.T) {
 }
 
 func TestAddRejectsLimits(t *testing.T) {
-	tests := map[string]evidence.Limits{
-		"file":     {FileBytes: int64(len(binaryContent())) - 1},
-		"files":    {Files: 1},
-		"entry":    {EntryBytes: int64(len(textContent))},
-		"metadata": {MetadataBytes: 64},
+	tests := map[string]struct {
+		limits evidence.Limits
+		want   error
+	}{
+		"file":     {evidence.Limits{FileBytes: int64(len(binaryContent())) - 1}, evidence.ErrFileTooLarge},
+		"files":    {evidence.Limits{Files: 1}, evidence.ErrTooManyFiles},
+		"entry":    {evidence.Limits{EntryBytes: int64(len(textContent))}, evidence.ErrEntryTooLarge},
+		"metadata": {evidence.Limits{MetadataBytes: 64}, evidence.ErrTooLarge},
 	}
 
-	for test, limits := range tests {
+	for test, check := range tests {
 		t.Run(test, func(t *testing.T) {
 			dir := t.TempDir()
 
-			_, err := openStore(t, dir, limits).Add(context.Background(), exampleDraft())
-			wantError(t, err, evidence.ErrTooLarge)
+			_, err := openStore(t, dir, check.limits).Add(t.Context(), exampleDraft())
+			wantError(t, err, check.want)
+			wantClean(t, err, dir)
 
 			if got := tree(t, dir); len(got) != 0 {
 				t.Errorf("tree = %q, want nothing written", got)
 			}
 		})
 	}
+}
+
+func TestAddChecksPayloadSizeBeforeMetadata(t *testing.T) {
+	limits := evidence.Limits{EntryBytes: 1}
+	store := openStore(t, t.TempDir(), limits)
+	draft := exampleDraft()
+	draft.Title = ""
+
+	_, err := store.Add(t.Context(), draft)
+	wantError(t, err, evidence.ErrEntryTooLarge)
 }
 
 func TestAddRejectsSymlinkedFolders(t *testing.T) {

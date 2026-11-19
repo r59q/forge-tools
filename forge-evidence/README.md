@@ -1,46 +1,25 @@
 # Forge Evidence
 
-Stores evidence, such as test results, screenshots, logs or analysis
-documents, that backs a claim like "this test passes" or "the UI looks like
-this" in change requests and code analysis.
+Store test results, screenshots, logs and analysis as evidence for claims in
+change requests and code reviews. The Go library adds, lists, filters, reads
+and validates entries in a local checkout.
 
-## Entries
+The repository strategy keeps ordinary files alongside the code at
+`.evidence/<commit>/<entry>/`. Each entry has one or more evidence files and
+a version 1 `entry.json` with a title, kind, full subject commit SHA,
+optional repository-relative subject path, file sizes and SHA-256 digests.
 
-An entry is one or more files plus machine-readable metadata:
+Default limits are 4 MiB per file, 16 MiB and 32 files per entry, and 64 KiB
+for metadata. The limits keep Git history growth in check.
 
-- a **title** or claim, such as "login form renders on mobile";
-- a **kind**, such as a test result, screenshot, log or document;
-- a **subject**: the commit SHA and the path the evidence is about.
+Build and test from the repository root.
 
-## Storage
+```sh
+cd forge-evidence/library
+CGO_ENABLED=0 go build ./...
+go test -race ./...
+```
 
-Storage is a strategy. Repository storage is the one built now; S3 is
-planned.
-
-Repository storage keeps evidence in `.evidence/` at the repository root, as
-ordinary files on the same branch as the code. It uses no separate ref and no
-Git LFS.
-
-## Layout
-
-- [`library/`](library/README.md): entries and repository storage, as a Go
-  library. Its README sets the folder layout, metadata format and version,
-  limits, and how to build and test.
-
-[FUTURE.md](FUTURE.md) lists ideas that are not built yet.
-
-## Design
-
-- **Independent.** forge-evidence imports no other tool. A caller passes in
-  a checkout path.
-- **Untrusted content.** Reads and writes stay inside the evidence folder.
-  Sizes are bounded, and a limit that is hit fails visibly.
-- **Stable.** Binary files round-trip byte for byte. Listing order and
-  generated metadata are stable, so the same evidence gives the same diff.
-- **Conservative limits.** Binary evidence committed to a branch stays in Git
-  history for good, and
-  [forge-checkouts](../forge-checkouts/library/README.md) does not download
-  Git LFS content.
-- **Not CI artifacts.** forge-actions already handles CI artifacts. Evidence
-  differs because it is versioned with the repository.
-- **No side effects.** The library does not commit, push or call forge APIs.
+See the [library README](library/README.md) for format rules, scan limits and
+API examples. See [future suggestions](FUTURE.md) for S3 storage and service
+integration.

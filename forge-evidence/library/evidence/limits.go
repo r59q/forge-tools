@@ -32,7 +32,9 @@ type Limits struct {
 	// EntryBytes is the most bytes of evidence files in one entry.
 	EntryBytes int64
 
-	// Entries is the most entries in one evidence folder.
+	// Entries bounds the directory entries scanned by a listing. The folder
+	// strategy applies it separately to the evidence root and to the total
+	// across all commit folders.
 	Entries int
 }
 

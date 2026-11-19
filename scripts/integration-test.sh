@@ -48,8 +48,10 @@ FORGE_PIPEPRINT_TEST_TOKEN=$(sed -n 's/^FORGE_PIPEPRINT_TOKEN=//p' "$(dirname "$
 FORGE_SYMBOLS_TEST_TOKEN=$(sed -n 's/^FORGE_SYMBOLS_TOKEN=//p' "$(dirname "$0")/../examples/fullstack/.env") \
   sh "$(dirname "$0")/symbols-integration-test.sh"
 
-# Chat uses the agents service and creates a scratch workspace without running a model.
+# Agents and chat can create sessions without running a model.
 env_file="$(dirname "$0")/../examples/fullstack/.env"
+FORGE_AGENTS_TEST_TOKEN=$(sed -n 's/^FORGE_AGENTS_TOKEN=//p' "$env_file") \
+  sh "$(dirname "$0")/agents-integration-test.sh"
 FORGE_CHAT_TEST_TOKEN=$(sed -n 's/^FORGE_CHAT_TOKEN=//p' "$env_file") \
   FORGE_CHAT_TEST_AGENTS_TOKEN=$(sed -n 's/^FORGE_AGENTS_TOKEN=//p' "$env_file") \
   sh "$(dirname "$0")/chat-integration-test.sh"

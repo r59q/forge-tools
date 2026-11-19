@@ -237,6 +237,9 @@ forge credentials; deleting an agent keeps its worktree unless
 `remove_checkout=true`. See its
 [API reference](../../forge-agents/service/README.md#api).
 
+Agents can start child sessions in scratch directories, shared workspaces
+or new worktrees. See the [delegation tools](../../forge-agents/README.md#delegating-work).
+
 ```sh
 AUTH="Authorization: Bearer $FORGE_AGENTS_TOKEN"
 curl -fsS -H "$AUTH" http://127.0.0.1:8096/v1/agents -d '{"client": "claude",

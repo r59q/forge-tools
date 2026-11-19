@@ -515,10 +515,12 @@ linters:
               desc: forge-search may only combine forge-checkouts, forge-issues and forge-symbols
             - pkg: "github.com/r59q/forge-tools/forge-agents"
               desc: forge-search may only combine forge-checkouts, forge-issues and forge-symbols
-        evidence-no-other-tools:
+        forge-evidence-no-other-tools:
           files:
             - "**/forge-evidence/**"
           deny:
+            - pkg: "github.com/r59q/forge-tools/forge-connector"
+              desc: forge-evidence uses a caller-supplied checkout
             - pkg: "github.com/r59q/forge-tools/forge-explorer"
               desc: tools must not depend on each other
             - pkg: "github.com/r59q/forge-tools/forge-actions"

@@ -22,9 +22,16 @@ id, file, err := evidence.ParsePath(path)
 ```
 
 Import `github.com/r59q/forge-tools/forge-evidence/library/evidence`.
-[Storage](#storage) keeps entries through the `storage` and `folder`
-packages. From this directory: `CGO_ENABLED=0 go build ./...`,
-`go vet ./...`, `go test -race ./...`, `go mod tidy -diff`.
+The `storage` and `folder` packages provide [persistent storage](#storage).
+Build and test from this directory with Go 1.27.
+
+```sh
+CGO_ENABLED=0 go build ./...
+go test -race ./...
+go vet ./...
+go mod tidy -diff
+golangci-lint run ./...
+```
 
 ## Entries
 
@@ -228,12 +235,12 @@ report, err = store.ReadFile(ctx, entry.ID(), "junit.xml")
 validation, err := store.Validate(ctx)
 ```
 
-- **Add** checks the draft and encodes its metadata before it touches the
-  folder, then creates `.evidence/` and the commit folder when missing. It
-  writes the files, then `entry.json`, to a hidden `.add-*` folder beside the
-  entry folder and renames it into place. An existing entry returns
-  `ErrExist` and is left as it is. A failed `Add` leaves no entry; it may
-  leave empty folders. The same entry always gives the same files.
+- **Add** checks the draft's file count and sizes before hashing its files.
+  It encodes the validated metadata before creating `.evidence/` and the
+  commit folder when missing. It writes the files, then `entry.json`, to a
+  hidden `.add-*` folder beside the entry folder and renames it into place.
+  An existing entry returns `ErrExist` and keeps its contents. A failed
+  `Add` may leave empty folders. The same entry always gives the same files.
 - **Entry** reads `entry.json` and checks that it names the entry of its
   folder. A folder without it is not an entry.
 - **ReadFile** returns the bytes as they were added, after checking their

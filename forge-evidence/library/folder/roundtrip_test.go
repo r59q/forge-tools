@@ -12,16 +12,15 @@ import (
 func TestEvidenceRoundTrip(t *testing.T) {
 	var store storage.Store = openStore(t, t.TempDir(), evidence.Limits{})
 	ctx := t.Context()
-	text := exampleDraft()
-	text.Files = text.Files[:1]
-	binary := listDraft(laterCommit, "screenshot", "frontend", evidence.KindScreenshot)
-	binary.Files = binary.Files[1:]
+	testRun := exampleDraft()
+	screenshot := listDraft(laterCommit, "screenshot", "frontend", evidence.KindScreenshot)
+	screenshot.Files = screenshot.Files[1:]
 
-	binaryEntry, err := store.Add(ctx, binary)
+	screenshotEntry, err := store.Add(ctx, screenshot)
 	if err != nil {
 		t.Fatal(err)
 	}
-	textEntry, err := store.Add(ctx, text)
+	testEntry, err := store.Add(ctx, testRun)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,9 +29,9 @@ func TestEvidenceRoundTrip(t *testing.T) {
 		filter storage.Filter
 		want   []evidence.Entry
 	}{
-		{storage.Filter{}, []evidence.Entry{textEntry, binaryEntry}},
-		{storage.Filter{Commit: text.Subject.Commit, Path: text.Subject.Path}, []evidence.Entry{textEntry}},
-		{storage.Filter{Kind: binary.Kind}, []evidence.Entry{binaryEntry}},
+		{storage.Filter{}, []evidence.Entry{testEntry, screenshotEntry}},
+		{storage.Filter{Commit: testRun.Subject.Commit, Path: testRun.Subject.Path}, []evidence.Entry{testEntry}},
+		{storage.Filter{Kind: screenshot.Kind}, []evidence.Entry{screenshotEntry}},
 	} {
 		got, err := store.List(ctx, tc.filter)
 		if err != nil || !slices.EqualFunc(got, tc.want, sameEntry) {
@@ -40,17 +39,18 @@ func TestEvidenceRoundTrip(t *testing.T) {
 		}
 	}
 
-	for _, draft := range []storage.Draft{text, binary} {
+	for _, draft := range []storage.Draft{testRun, screenshot} {
 		wantEntry := draft.Entry()
 		id := wantEntry.ID()
 		entry, err := store.Entry(ctx, id)
 		if err != nil || !sameEntry(entry, wantEntry) {
 			t.Fatalf("Entry(%+v) = %+v, %v, want %+v", id, entry, err, wantEntry)
 		}
-		file := draft.Files[0]
-		content, err := store.ReadFile(ctx, id, file.Name)
-		if err != nil || !bytes.Equal(content, file.Data) {
-			t.Fatalf("ReadFile(%+v, %s) = %x, %v, want %x", id, file.Name, content, err, file.Data)
+		for _, file := range draft.Files {
+			content, err := store.ReadFile(ctx, id, file.Name)
+			if err != nil || !bytes.Equal(content, file.Data) {
+				t.Fatalf("ReadFile(%+v, %s) = %x, %v, want %x", id, file.Name, content, err, file.Data)
+			}
 		}
 	}
 

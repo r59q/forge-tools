@@ -1,0 +1,66 @@
+syntax = "proto3";
+package forge.chat.v1;
+
+import "google/api/annotations.proto";
+
+option go_package = "github.com/r59q/forge-tools/forge-chat/service/chatpb";
+
+// ChatService stores presentation metadata for one forge-chat deployment.
+// All calls require the forge-chat bearer token.
+service ChatService {
+  // ListChatMetadata lists the chats with display preferences.
+  rpc ListChatMetadata(ListChatMetadataRequest) returns (ListChatMetadataResponse) {
+    option (google.api.http) = {get: "/v1/chat-metadata"};
+  }
+
+  // UpdateChatMetadata patches display preferences for one chat.
+  rpc UpdateChatMetadata(UpdateChatMetadataRequest) returns (UpdateChatMetadataResponse) {
+    option (google.api.http) = {
+      patch: "/v1/chat-metadata/{id}"
+      body: "*"
+      response_body: "chat"
+    };
+  }
+}
+
+// ListChatMetadataRequest selects all stored display preferences.
+message ListChatMetadataRequest {}
+
+// ListChatMetadataResponse contains the stored display preferences.
+message ListChatMetadataResponse {
+  repeated ChatMetadata chats = 1;
+}
+
+// ChatMetadata holds UI preferences for a forge-agents ID.
+message ChatMetadata {
+  string id = 1;
+  bool archived = 2;
+  ChatLinks links = 3;
+  IslandPosition island_position = 4;
+}
+
+// ChatLinks holds user-created outgoing links from the chat.
+message ChatLinks {
+  repeated string ids = 1;
+}
+
+// IslandPosition is the position of a chat in a future island view.
+message IslandPosition {
+  double x = 1;
+  double y = 2;
+  double z = 3;
+}
+
+// UpdateChatMetadataRequest replaces fields that are present. An empty links
+// message clears links. Omitting a field preserves its current value.
+message UpdateChatMetadataRequest {
+  string id = 1;
+  optional bool archived = 2;
+  ChatLinks links = 3;
+  IslandPosition island_position = 4;
+}
+
+// UpdateChatMetadataResponse contains the updated display preferences.
+message UpdateChatMetadataResponse {
+  ChatMetadata chat = 1;
+}

@@ -50,6 +50,26 @@ func TestValidateEntryLimits(t *testing.T) {
 	})
 }
 
+func TestValidateActualEntrySize(t *testing.T) {
+	root, _ := added(t)
+	bytesAtAdd := len(textContent) + len(binaryContent())
+	write(t, root, textPath, []byte(textContent+"x"))
+	binary := binaryContent()
+	binary[0] ^= 0xff
+	write(t, root, entryPath+"/"+binaryFile, binary)
+
+	store := openStore(t, root, evidence.Limits{EntryBytes: int64(bytesAtAdd)})
+	report := validate(t, store)
+	if report.Truncated || len(report.Problems) != 2 {
+		t.Fatalf("Validate = %+v, want a total size and a file size problem", report)
+	}
+	total, file := report.Problems[0], report.Problems[1]
+	if total.Path != entryPath || total.Reason != storage.EntryTooLarge ||
+		file.Path != textPath || file.Reason != storage.FileMismatch {
+		t.Fatalf("Validate = %+v, want size checks with no payload digest checks", report)
+	}
+}
+
 func TestValidateCannotComplete(t *testing.T) {
 	root, store := added(t)
 	ctx, cancel := context.WithCancel(t.Context())

@@ -7,7 +7,8 @@ them, or search without an index. Code indexes also hold the definitions
 [forge-symbols](../../forge-symbols/library/) finds, searchable by name. It
 does the same for the issues of a repository, read through
 [forge-issues](../../forge-issues/service/). Indexed and unindexed searches
-return the same matches in the same order.
+return the same matches in the same order. Callers can also supply documents
+directly, search them in one request, or upload them to a named index.
 
 The service resolves checkout IDs through forge-checkouts, with its own
 token, and reads the checkout directories from the forge-checkouts data
@@ -70,7 +71,7 @@ FORGE_SEARCH_CHECKOUTS_TOKEN="$(cat checkouts-token)" /tmp/forge-search-service 
 | `--checkouts-insecure`          | `FORGE_SEARCH_CHECKOUTS_INSECURE`          | `false`: TLS                                         |
 | `--checkouts-token-file`        | `FORGE_SEARCH_CHECKOUTS_TOKEN_FILE`        | none                                                 |
 | `--checkouts-token-env`         | `FORGE_SEARCH_CHECKOUTS_TOKEN_ENV`         | `FORGE_SEARCH_CHECKOUTS_TOKEN` when no source is set |
-| `--checkouts-data-dir`          | `FORGE_SEARCH_CHECKOUTS_DATA_DIR`          | required                                             |
+| `--checkouts-data-dir`          | `FORGE_SEARCH_CHECKOUTS_DATA_DIR`          | unset (checkout access disabled)                     |
 | `--checkouts-reported-data-dir` | `FORGE_SEARCH_CHECKOUTS_REPORTED_DATA_DIR` | `--checkouts-data-dir`                               |
 | `--index-timeout`               | `FORGE_SEARCH_INDEX_TIMEOUT`               | `10m`                                                |
 | `--max-indexes`                 | `FORGE_SEARCH_MAX_INDEXES`                 | `32`                                                 |
@@ -80,11 +81,12 @@ FORGE_SEARCH_CHECKOUTS_TOKEN="$(cat checkouts-token)" /tmp/forge-search-service 
 | `--issues-token-file`           | `FORGE_SEARCH_ISSUES_TOKEN_FILE`           | none                                                 |
 | `--issues-token-env`            | `FORGE_SEARCH_ISSUES_TOKEN_ENV`            | `FORGE_SEARCH_ISSUES_TOKEN` when no source is set    |
 
-The service and checkouts tokens are read at startup, and the service does
-not start without them. The forge-issues token, the service token of
-forge-issues, is read too when `--issues-addr` is set. Without
-`--issues-addr`, issue calls fail with `UNIMPLEMENTED` and code search works
-as before. `--checkouts-data-dir` is the forge-checkouts data directory as
+The service token is required. For document-only search, start the service
+with `--token-file service-token --data-dir ./search-data`. Setting
+`--checkouts-data-dir` enables checkout access and requires a checkouts
+token. Setting `--issues-addr` enables issue fetching and requires an
+issues token. Calls that need a disabled source return `UNIMPLEMENTED`.
+`--checkouts-data-dir` is the forge-checkouts data directory as
 mounted here. When forge-checkouts sees it at another path, as in separate
 containers, set `--checkouts-reported-data-dir` to its `--data-dir` there.
 `--request-timeout` bounds every call but `IndexCheckout`,
@@ -141,7 +143,9 @@ Find them with `GET /v1/checkouts` on forge-checkouts and remove them with
 
 | Limit                | Value                                                     |
 | -------------------- | --------------------------------------------------------- |
-| Request              | 64 KiB, gRPC or REST, checked before the body is read     |
+| Metadata request     | 64 KiB                                                    |
+| Document upload or search | 6 MiB protobuf or 12 MiB JSON including framing      |
+| Supplied text        | 1 MiB per document, 4 MiB and 256 documents per search   |
 | Indexes              | `--max-indexes`                                           |
 | File                 | 1 MiB; larger files are skipped and counted in `tooLarge` |
 | Index                | 200000 documents and 2 GiB, code and definitions          |
@@ -185,6 +189,10 @@ documents every field.
 
 | Method and path                                  | Body                  | Returns                                                                  |
 | ------------------------------------------------ | --------------------- | ------------------------------------------------------------------------ |
+| `POST /v1/indexes`                               | `index`               | creates an empty index                                                   |
+| `POST /v1/documents:put`                         | `index`, `document`   | adds or replaces a document                                              |
+| `POST /v1/documents:remove`                      | `index`, `path`       | removes an uploaded document                                             |
+| `POST /v1/documents:search`                      | `text`, `index` or `documents`, optional `maxResults` | `matches`, `state`                              |
 | `POST /v1/indexes/{index}/checkout`              | `checkoutId`          | `index`, `added`, `replaced`, `removed`, `unchanged`, `files`, `symbols` |
 | `GET /v1/indexes`                                |                       | `indexes`                                                                |
 | `GET /v1/indexes/{index}`                        |                       | `index`                                                                  |
@@ -213,6 +221,26 @@ search() {
   curl -fsS -H "Authorization: Bearer $(cat service-token)" "http://127.0.0.1:8095$@"
 }
 ```
+
+### Search supplied documents
+
+The same query searches inline bytes or previously uploaded documents.
+A path is an opaque ID. Matches give the first occurrence on each matching
+line, in path and line order, with a UTF-16 range, preview and SHA-256
+version. Binary and invalid UTF-8 documents count toward `state.skipped`.
+
+```sh
+doc='{"path":"notes.txt","content":"aGVsbG8="}'
+search /v1/documents:search -d "{\"text\":\"ell\",\"documents\":[$doc]}"
+search /v1/indexes -d '{"index":"notes"}'
+search /v1/documents:put -d "{\"index\":\"notes\",\"document\":$doc}"
+search /v1/documents:search -d '{"text":"ell","index":"notes"}'
+search /v1/documents:remove -d '{"index":"notes","path":"notes.txt"}'
+```
+
+The `repo-` and `issues-` prefixes belong to managed indexes. An upload
+and a checkout file can share a path in other indexes. Use
+`SearchDocuments` for uploads and `SearchIndex` for checkout files.
 
 ### Index a checkout
 
@@ -356,9 +384,7 @@ search /v1/issues:searchUnindexed -d "{\"repository\": $ISSUES, \"query\": {\"te
 
 ### Delete an index
 
-Removes the index, then checkpoints the database so that its content leaves
-the storage files. The checkpoint rewrites the full-text index of every
-index, so it takes time in proportion to all of them.
+Deleting the index erases its documents and postings in one transaction.
 
 ```sh
 search /v1/indexes/main -X DELETE
@@ -371,6 +397,7 @@ tokens.
 
 | Code                  | HTTP | When                                                                                                                                                                                                                               |
 | --------------------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ALREADY_EXISTS`      | 409  | An index with the requested name exists. |
 | `UNAUTHENTICATED`     | 401  | The token is missing or wrong. Checked before the body is read.                                                                                                                                                                    |
 | `INVALID_ARGUMENT`    | 400  | An index name, checkout ID, target, query or `maxResults` is invalid, or forge-checkouts refuses the target, or forge-issues refuses the repository, or the body is malformed.                                                     |
 | `NOT_FOUND`           | 404  | The index, or the checkout, source, repository or reference in forge-checkouts, or the repository in forge-issues, does not exist.                                                                                                 |
@@ -380,7 +407,7 @@ tokens.
 | `RESOURCE_EXHAUSTED`  | 429  | The request, checkout, repository, index, number of indexes or of repository checkouts, or an unindexed symbol search, is over its limit, or the disk is full. Also a forge-issues listing over its limits, or a forge rate limit. |
 | `UNAVAILABLE`         | 503  | forge-checkouts or forge-issues cannot be reached or rejects the token, or storage is read-only.                                                                                                                                   |
 | `DEADLINE_EXCEEDED`   | 504  | The call took too long.                                                                                                                                                                                                            |
-| `UNIMPLEMENTED`       | 501  | An issue call, when no `--issues-addr` is set.                                                                                                                                                                                     |
+| `UNIMPLEMENTED`       | 501  | A call requires an unconfigured checkout or issue source.                                                                                                                                                                                     |
 | `INTERNAL`            | 500  | Storage failed, the checkout journal cannot be written, or the symbol analyzer failed.                                                                                                                                             |
 
 ## License

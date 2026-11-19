@@ -79,7 +79,7 @@ func parse(args []string, getenv func(string) string, help io.Writer) (settings,
 		fs.StringVar(&s.checkoutsTokenEnv, "checkouts-token-env", env("CHECKOUTS_TOKEN_ENV", ""),
 			"forge-checkouts token variable name (default FORGE_SEARCH_CHECKOUTS_TOKEN)")
 		fs.StringVar(&checkoutsData, "checkouts-data-dir", env("CHECKOUTS_DATA_DIR", ""),
-			"forge-checkouts data directory as mounted here (required)")
+			"forge-checkouts data directory as mounted here (enables checkout access)")
 		fs.StringVar(&checkoutsReported, "checkouts-reported-data-dir", env("CHECKOUTS_REPORTED_DATA_DIR", ""),
 			"absolute forge-checkouts data directory as forge-checkouts names it, when mounted elsewhere")
 		fs.StringVar(&indexTimeout, "index-timeout", env("INDEX_TIMEOUT", "10m"), "deadline for each checkout indexing")
@@ -137,7 +137,10 @@ func parse(args []string, getenv func(string) string, help io.Writer) (settings,
 // and where forge-checkouts reports them when reported is set.
 func root(data, reported string) (api.Root, error) {
 	if data == "" {
-		return api.Root{}, errors.New("checkouts-data-dir is required")
+		if reported != "" {
+			return api.Root{}, errors.New("checkouts-reported-data-dir requires checkouts-data-dir")
+		}
+		return api.Root{}, nil
 	}
 	local, err := filepath.Abs(data)
 	if err != nil {
@@ -198,21 +201,37 @@ func openData(ctx context.Context, dir string) (*sqlite.Store, error) {
 	return store, nil
 }
 
+func (s settings) configureCheckouts(ctx context.Context, config *api.Config) (*grpc.ClientConn, error) {
+	if s.root.Local == "" {
+		return nil, nil
+	}
+	checkoutsToken, err := servicekit.BearerToken(ctx, "checkouts", s.checkoutsTokenFile, s.checkoutsTokenEnv)
+	if err != nil {
+		return nil, err
+	}
+
+	conn, err := dial("checkouts", s.checkoutsAddress, s.checkoutsInsecure)
+	if err != nil {
+		return nil, err
+	}
+	config.Checkouts = api.NewRemote(checkoutspb.NewCheckoutsServiceClient(conn), checkoutsToken)
+	config.Root = s.root
+	return conn, nil
+}
+
 func run(ctx context.Context, s settings, ready func(grpcAddr, httpAddr net.Addr)) (err error) {
 	token, err := servicekit.BearerToken(ctx, "service", s.TokenFile, s.TokenEnv)
 	if err != nil {
 		return err
 	}
-	checkoutsToken, err := servicekit.BearerToken(ctx, "checkouts", s.checkoutsTokenFile, s.checkoutsTokenEnv)
+	var config api.Config
+	conn, err := s.configureCheckouts(ctx, &config)
 	if err != nil {
 		return err
 	}
-
-	conn, err := dial("checkouts", s.checkoutsAddress, s.checkoutsInsecure)
-	if err != nil {
-		return err
+	if conn != nil {
+		defer func() { _ = conn.Close() }()
 	}
-	defer func() { _ = conn.Close() }()
 
 	issues, issuesConn, err := s.issues.connect(ctx)
 	if err != nil {
@@ -226,8 +245,7 @@ func run(ctx context.Context, s settings, ready func(grpcAddr, httpAddr net.Addr
 	if err != nil {
 		return err
 	}
-	// Closing copies the write-ahead log into the database file, after ctx
-	// has ended.
+	// Close the store after the server drains its requests.
 	defer func() { //nolint:contextcheck // runs after ctx ends
 		if closeErr := store.Close(); err == nil && closeErr != nil {
 			err = errors.New("cannot close index storage")
@@ -241,24 +259,20 @@ func run(ctx context.Context, s settings, ready func(grpcAddr, httpAddr net.Addr
 		}
 	}()
 
-	journal, err := api.OpenJournal(filepath.Join(s.dataDirectory, journalDir))
-	if err != nil {
-		return errors.New("cannot open checkout journal")
+	if config.Checkouts != nil {
+		journal, err := api.OpenJournal(filepath.Join(s.dataDirectory, journalDir))
+		if err != nil {
+			return errors.New("cannot open checkout journal")
+		}
+		config.Journal = journal
 	}
-
-	config := api.Config{
-		Engine:       search.NewEngine(store, indexLimits()),
-		Checkpoint:   store.Checkpoint,
-		Checkouts:    api.NewRemote(checkoutspb.NewCheckoutsServiceClient(conn), checkoutsToken),
-		Journal:      journal,
-		Root:         s.root,
-		Token:        token,
-		Timeout:      s.Timeout,
-		IndexTimeout: s.indexTimeout,
-		MaxIndexes:   s.maxIndexes,
-		Analyzer:     analyzer,
-		SymbolParses: s.symbolParses,
-	}
+	config.Engine = search.NewEngine(store, indexLimits())
+	config.Token = token
+	config.Timeout = s.Timeout
+	config.IndexTimeout = s.indexTimeout
+	config.MaxIndexes = s.maxIndexes
+	config.Analyzer = analyzer
+	config.SymbolParses = s.symbolParses
 	if issues != nil { // A nil *RemoteIssues is not a nil reader.
 		config.Issues = issues
 	}

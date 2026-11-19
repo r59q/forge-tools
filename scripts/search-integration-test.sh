@@ -78,7 +78,7 @@ printf '%s\n' "$status" | jq -e '.index.symbols.complete == true' >/dev/null ||
 if printf '%s\n' "$status" | jq -e '(.index.symbols.documents // "0" | tonumber) == 0' >/dev/null; then
   echo "skip: $FORGE_SEARCH_TEST_REPOSITORY has no definitions in a supported language"
 else
-  indexed=$(jq -n "$query" | api "$url/v1/indexes/$index/symbols:search" -d @-) || fail "search index symbols"
+  indexed_symbols=$(jq -n "$query" | api "$url/v1/indexes/$index/symbols:search" -d @-) || fail "search index symbols"
   unindexed=$(jq -n "$query" |
     curl -sS -H "Authorization: Bearer $FORGE_SEARCH_TEST_TOKEN" -w '\n%{http_code}' \
       "$url/v1/checkouts/$FORGE_SEARCH_TEST_CHECKOUT/symbols:search" -d @-) || fail "search checkout symbols"
@@ -88,7 +88,7 @@ else
     echo "skip: checkout is over the unindexed symbol search limits"
   else
     [ "$code" = 200 ] || fail "search checkout symbols: HTTP $code"
-    printf '%s\n%s\n' "$indexed" "$unindexed" |
+    printf '%s\n%s\n' "$indexed_symbols" "$unindexed" |
       jq -s -e --arg r "$FORGE_SEARCH_TEST_REVISION" '.[0] as $a | .[1] as $b |
         ($a.symbols | length) > 0 and $a.revision == $r and $a.complete == true and $b.revision == $r and
         $a.symbols == $b.symbols and ($a.truncated // false) == ($b.truncated // false) and

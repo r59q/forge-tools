@@ -30,17 +30,17 @@ func (s *Server) IndexCheckout(ctx context.Context, r *pb.IndexCheckoutRequest) 
 			return nil, errBadRequest
 		}
 
-		_, err := engine.Index(ctx, r.GetIndex())
-		exists := err == nil
-		if err != nil && !errors.Is(err, search.ErrNotFound) {
-			return nil, err
-		}
-
 		release, err := s.reserve(r.GetIndex())
 		if err != nil {
 			return nil, err
 		}
 		defer release()
+
+		_, err = engine.Index(ctx, r.GetIndex())
+		exists := err == nil
+		if err != nil && !errors.Is(err, search.ErrNotFound) {
+			return nil, err
+		}
 
 		c, root, err := s.openCheckout(ctx, r.GetCheckoutId())
 		if err != nil {
@@ -66,15 +66,16 @@ func (s *Server) create(ctx context.Context, index string) error {
 	if err != nil {
 		return err
 	}
+	for _, existing := range indexes {
+		if existing.Name == index {
+			return search.ErrExists
+		}
+	}
 	if len(indexes) >= s.config.MaxIndexes {
 		return errTooMany
 	}
 
-	err = s.config.Engine.CreateIndex(ctx, index)
-	if errors.Is(err, search.ErrExists) {
-		return nil
-	}
-	return err
+	return s.config.Engine.CreateIndex(ctx, index)
 }
 
 // sync brings the code of an index to a checkout, records it, then brings

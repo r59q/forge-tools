@@ -425,3 +425,17 @@ column searches the embedded database immediately after filling it.
 Run `CGO_ENABLED=0 go test ./sqlite -run '^$' -bench '^BenchmarkSearch$' -benchtime=600ms -cpu 4`.
 For inputs already in memory, SQLite falls short of the proposed 10× speedup.
 Two-byte queries scan all selected documents.
+
+### Checkout search
+
+The checkout benchmark writes the same corpus to a directory. It compares
+reading and searching that directory with querying SQLite immediately after
+a sync. Both paths use the library entry points served by the checkout API.
+
+| Query | Unindexed checkout | SQLite | Speedup |
+| --- | ---: | ---: | ---: |
+| Identifier in three files | 100 ms | 1.25 ms | 80× |
+| Phrase in one file | 115 ms | 13.2 ms | 8.7× |
+| Two bytes | 95.1 ms | 24.2 ms | 3.9× |
+
+Run `CGO_ENABLED=0 go test ./checkout -run '^$' -bench '^BenchmarkCheckout$' -benchtime=600ms -cpu 4`.

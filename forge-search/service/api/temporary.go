@@ -26,6 +26,9 @@ var errCheckoutsBusy = errors.New("api: too many temporary checkouts")
 // when ctx has ended; a checkout it cannot remove stays journaled for the
 // next sweep.
 func (s *Server) checkOut(ctx context.Context, target Target) (c Checkout, root *os.Root, done func(), err error) {
+	if s.config.Checkouts == nil {
+		return Checkout{}, nil, nil, errNoCheckouts
+	}
 	select {
 	case s.slots <- struct{}{}:
 	default:
@@ -111,7 +114,7 @@ func (s *Server) remove(ctx context.Context, id string) {
 // nothing; the next sweep tries again. Calls that create a checkout sweep
 // first, and a service should sweep when it starts.
 func (s *Server) Sweep(ctx context.Context) {
-	if !s.sweeping.TryLock() {
+	if s.config.Checkouts == nil || !s.sweeping.TryLock() {
 		return
 	}
 	defer s.sweeping.Unlock()

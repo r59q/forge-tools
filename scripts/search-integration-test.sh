@@ -43,6 +43,20 @@ cleanup() {
 cleanup
 trap cleanup EXIT
 
+# Exercise both document modes with known content independent of the forge.
+doc='{"path":"notes.txt","content":"aGVsbG8="}'
+live=$(jq -nc --argjson doc "$doc" '{text:"ell",documents:[$doc]}' |
+  api "$url/v1/documents:search" -d @-) || fail "search supplied documents"
+jq -nc --arg i "$index" '{index:$i}' | api "$url/v1/indexes" -d @- >/dev/null || fail "create document index"
+jq -nc --arg i "$index" --argjson doc "$doc" '{index:$i,document:$doc}' |
+  api "$url/v1/documents:put" -d @- >/dev/null || fail "put document"
+indexed=$(jq -nc --arg i "$index" '{index:$i,text:"ell"}' | api "$url/v1/documents:search" -d @-) || fail "search uploaded document"
+printf '%s\n%s\n' "$live" "$indexed" | jq -se '.[0] == .[1] and (.[0].matches | length) == 1' >/dev/null ||
+  fail "document modes differ"
+jq -nc --arg i "$index" '{index:$i,path:"notes.txt"}' | api "$url/v1/documents:remove" -d @- >/dev/null || fail "remove document"
+api -X DELETE "$url/v1/indexes/$index" >/dev/null || fail "delete document index"
+echo "ok: search finds the supplied document with and without an index"
+
 jq -n --arg c "$FORGE_SEARCH_TEST_CHECKOUT" '{checkoutId: $c}' |
   api "$url/v1/indexes/$index/checkout" -d @- |
   jq -e --arg i "$index" --arg c "$FORGE_SEARCH_TEST_CHECKOUT" --arg r "$FORGE_SEARCH_TEST_REVISION" \
@@ -78,7 +92,7 @@ printf '%s\n' "$status" | jq -e '.index.symbols.complete == true' >/dev/null ||
 if printf '%s\n' "$status" | jq -e '(.index.symbols.documents // "0" | tonumber) == 0' >/dev/null; then
   echo "skip: $FORGE_SEARCH_TEST_REPOSITORY has no definitions in a supported language"
 else
-  indexed=$(jq -n "$query" | api "$url/v1/indexes/$index/symbols:search" -d @-) || fail "search index symbols"
+  indexed_symbols=$(jq -n "$query" | api "$url/v1/indexes/$index/symbols:search" -d @-) || fail "search index symbols"
   unindexed=$(jq -n "$query" |
     curl -sS -H "Authorization: Bearer $FORGE_SEARCH_TEST_TOKEN" -w '\n%{http_code}' \
       "$url/v1/checkouts/$FORGE_SEARCH_TEST_CHECKOUT/symbols:search" -d @-) || fail "search checkout symbols"
@@ -88,7 +102,7 @@ else
     echo "skip: checkout is over the unindexed symbol search limits"
   else
     [ "$code" = 200 ] || fail "search checkout symbols: HTTP $code"
-    printf '%s\n%s\n' "$indexed" "$unindexed" |
+    printf '%s\n%s\n' "$indexed_symbols" "$unindexed" |
       jq -s -e --arg r "$FORGE_SEARCH_TEST_REVISION" '.[0] as $a | .[1] as $b |
         ($a.symbols | length) > 0 and $a.revision == $r and $a.complete == true and $b.revision == $r and
         $a.symbols == $b.symbols and ($a.truncated // false) == ($b.truncated // false) and
@@ -113,7 +127,7 @@ repo_index=$(printf '%s\n' "$repository" | jq -r '.index.name')
 printf '%s\n' "$repository" |
   jq -e --arg r "$FORGE_SEARCH_TEST_REVISION" --argjson t "$target" \
     '(.index.name | startswith("repo-")) and (.index.documents | tonumber) > 0 and
-      .index.revision == $r and .index.target == $t and (.upToDate // false) == false' >/dev/null ||
+      .index.revision == $r and .index.target == ($t + {reference: ""}) and (.upToDate // false) == false' >/dev/null ||
   fail "index repository default branch"
 jq -n --argjson t "$target" '{target: $t}' | api "$url/v1/repositories:index" -d @- |
   jq -e --arg r "$FORGE_SEARCH_TEST_REVISION" '.upToDate == true and .index.revision == $r' >/dev/null ||

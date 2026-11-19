@@ -12,12 +12,12 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"golang.org/x/sync/semaphore"
+
 	"github.com/r59q/forge-tools/forge-search/library/search"
 )
 
-// FileName is the name of the database file in the data directory. SQLite
-// keeps its write-ahead log and shared memory beside it, in FileName with
-// "-wal" and "-shm" appended.
+// FileName is the name of the database file in the data directory.
 const FileName = "search.db"
 
 // Storage error categories. Match them with errors.Is. Their messages never
@@ -35,12 +35,15 @@ var (
 )
 
 // Store is a search.Store in a SQLite database. It is safe for concurrent
-// use: searches read a snapshot each and do not wait for updates, which run
+// use: searches read a snapshot each. Updates commit when readers finish and run
 // one at a time. Use one process per data directory and Close the store when
 // requests have stopped.
 type Store struct {
-	writer  *sql.DB
-	readers *sql.DB
+	// A writer takes all slots. Waiting calls can cancel before entering SQLite.
+	slots      *semaphore.Weighted
+	maxReaders int64
+	writer     *sql.DB
+	readers    *sql.DB
 }
 
 var _ search.Store = (*Store)(nil)
@@ -62,7 +65,8 @@ func Open(ctx context.Context, dir string) (*Store, error) {
 	// One writer connection serializes updates.
 	writer.SetMaxOpenConns(1)
 
-	s := &Store{writer: writer}
+	readerCount := max(4, runtime.GOMAXPROCS(0))
+	s := &Store{writer: writer, slots: semaphore.NewWeighted(int64(readerCount)), maxReaders: int64(readerCount)}
 	if err := s.setUp(ctx); err != nil {
 		_ = writer.Close()
 		return nil, clean(ctx, err)
@@ -73,47 +77,28 @@ func Open(ctx context.Context, dir string) (*Store, error) {
 		_ = writer.Close()
 		return nil, ErrStorage
 	}
-	s.readers.SetMaxOpenConns(max(4, runtime.GOMAXPROCS(0)))
+	s.readers.SetMaxOpenConns(readerCount)
 	return s, nil
 }
 
-// Close releases the database. SQLite then copies the write-ahead log into
-// the database file and removes the log.
+// Close releases the database.
 func (s *Store) Close() error {
 	return clean(context.Background(), errors.Join(s.readers.Close(), s.writer.Close()))
 }
 
-// Checkpoint removes what is left of removed documents and empties the
-// write-ahead log. Their content is overwritten in the database file at
-// once, but the log may still hold it, and the full-text index their terms,
-// until a checkpoint; after Checkpoint returns, neither file holds them.
-//
-// It rewrites the full-text index, which takes time in proportion to the
-// size of all indexes, and updates wait for it. It then waits for searches
-// that read an older snapshot, and returns ErrStorage when they do not
-// finish in time.
+// Checkpoint merges the full-text index segments to reduce query overhead.
 func (s *Store) Checkpoint(ctx context.Context) error {
-	err := s.write(ctx, func(tx *sql.Tx) error {
+	return s.write(ctx, func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, "INSERT INTO postings(postings) VALUES('optimize')")
 		return err
 	})
-	if err != nil {
-		return err
-	}
-
-	var busy, frames, copied int
-	err = s.writer.QueryRowContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)").Scan(&busy, &frames, &copied)
-	if err == nil && busy != 0 {
-		err = ErrStorage
-	}
-	return clean(ctx, err)
 }
 
-// setUp gives a new database its page size and write-ahead log, which the
+// setUp gives a new database its page size and rollback journal, which the
 // file keeps, and migrates the schema. The page size has to come first, so
 // it cannot be a connection option: the driver runs those by name.
 func (s *Store) setUp(ctx context.Context) error {
-	for _, statement := range []string{"PRAGMA page_size = 65536", "PRAGMA journal_mode = WAL"} {
+	for _, statement := range []string{"PRAGMA page_size = 65536", "PRAGMA journal_mode = DELETE"} {
 		if _, err := s.writer.ExecContext(ctx, statement); err != nil {
 			return err
 		}

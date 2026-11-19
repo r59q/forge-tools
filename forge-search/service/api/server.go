@@ -25,8 +25,7 @@ import (
 	"google.golang.org/grpc/tap"
 )
 
-// RequestBytes is the largest request, gRPC or REST. Requests hold names,
-// IDs and query text only.
+// RequestBytes caps requests that carry only names, IDs and query text.
 const RequestBytes = 64 << 10
 
 // DefaultMaxIndexes is the default for Config.MaxIndexes.
@@ -51,10 +50,10 @@ type Config struct {
 	// Engine holds the indexes.
 	Engine *search.Engine
 
-	// Checkpoint, when set, runs after an index is deleted so that its
-	// content leaves the storage files, as sqlite.Store.Checkpoint does.
+	// Checkpoint is an optional storage maintenance hook after index deletion.
 	Checkpoint func(context.Context) error
 
+	// Checkouts, Root and Journal together enable checkout access.
 	// Checkouts resolves checkout IDs, and creates and removes the
 	// checkouts of repository references.
 	Checkouts Checkouts
@@ -88,7 +87,7 @@ type Config struct {
 	// within Timeout.
 	Timeout, IndexTimeout time.Duration
 
-	// MaxIndexes is the most indexes IndexCheckout creates. Zero uses
+	// MaxIndexes bounds the total number of indexes. Zero uses
 	// DefaultMaxIndexes.
 	MaxIndexes int
 
@@ -121,8 +120,8 @@ type Server struct {
 
 // New returns a server for config.
 func New(config Config) (*Server, error) {
-	valid := config.Engine != nil && config.Checkouts != nil && config.Journal != nil && config.Token != nil &&
-		config.Timeout > 0 && config.IndexTimeout > 0 && config.MaxIndexes >= 0 && config.Root.valid() &&
+	valid := config.Engine != nil && config.validCheckouts() && config.Token != nil &&
+		config.Timeout > 0 && config.IndexTimeout > 0 && config.MaxIndexes >= 0 &&
 		config.Analyzer != nil && config.SymbolParses >= 0
 	if !valid {
 		return nil, ErrInvalid
@@ -148,11 +147,12 @@ func New(config Config) (*Server, error) {
 }
 
 // GRPCOptions returns the options a gRPC server for s needs: a receive
-// limit of RequestBytes, and a token check that rejects callers before
+// limit for document uploads, and a token check that rejects callers before
 // their request is read. RPCs check the token again.
 func (s *Server) GRPCOptions() []grpc.ServerOption {
 	return []grpc.ServerOption{
-		grpc.MaxRecvMsgSize(RequestBytes),
+		grpc.MaxRecvMsgSize(documentMessageBytes),
+		grpc.ChainUnaryInterceptor(limitRequest),
 		grpc.InTapHandle(func(ctx context.Context, info *tap.Info) (context.Context, error) {
 			return ctx, s.authorize(ctx, info.Header)
 		}),
@@ -161,7 +161,7 @@ func (s *Server) GRPCOptions() []grpc.ServerOption {
 
 // REST returns the generated routes. Only Authorization is forwarded,
 // errors never echo input, and responses are not cached. The token is
-// checked before the body is read, and bodies are capped at RequestBytes.
+// checked before the body is read, and size limits apply per route.
 func (s *Server) REST(ctx context.Context) (http.Handler, error) {
 	mux := servicekit.NewMux(true)
 	if err := pb.RegisterSearchServiceHandlerServer(ctx, mux, s); err != nil {
@@ -181,12 +181,11 @@ func (s *Server) REST(ctx context.Context) (http.Handler, error) {
 			fail(w, r, err)
 			return
 		}
-		if r.ContentLength > RequestBytes {
-			fail(w, r, servicekit.Status(codes.ResourceExhausted))
+		if err := limitBody(w, r); err != nil {
+			fail(w, r, err)
 			return
 		}
 
-		r.Body = http.MaxBytesReader(w, r.Body, RequestBytes)
 		mux.ServeHTTP(w, r)
 	}), nil
 }
@@ -234,7 +233,7 @@ func code(err error) codes.Code {
 		return codes.InvalidArgument
 	case errors.Is(err, ErrIssuesDenied):
 		return codes.PermissionDenied
-	case errors.Is(err, errNoIssues):
+	case errors.Is(err, errNoIssues), errors.Is(err, errNoCheckouts):
 		return codes.Unimplemented
 	case errors.Is(err, ErrNotFound), errors.Is(err, search.ErrNotFound):
 		return codes.NotFound

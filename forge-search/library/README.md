@@ -360,34 +360,24 @@ engine := search.NewEngine(store, search.IndexLimits{})
 
 Import `github.com/r59q/forge-tools/forge-search/library/sqlite`.
 
-- **Files.** `search.db` holds all indexes. While the store is open, SQLite
-  keeps `search.db-wal` and `search.db-shm` beside it. Index names are rows,
-  never paths. Use one process per directory.
+- **Files.** `search.db` holds all indexes. SQLite uses a private rollback
+  journal during writes and removes it at commit. Index names are rows.
+  Use one process per directory.
 - **Private.** The files hold the content and terms of every document at
   rest. They are created with mode 0600, and `Open` resets the mode of the
   database file; the directory and the disk are the caller's to protect.
 - **Schema.** The version is `PRAGMA user_version`. `Open` migrates an older
   database; a newer one returns `ErrStorage`.
-- **Removed content.** With `secure_delete`, the content of a replaced or
-  removed document, or of a deleted index, is overwritten in the database
-  file when the change commits. Until a checkpoint, the write-ahead log may
-  still hold it, and the full-text index keeps its terms behind delete
-  markers; the store never returns either. `Checkpoint` merges the full-text
-  index and empties the log, after which neither file holds them. `Close`
-  empties the log but does not merge. The file does not shrink: freed pages
-  are zeroed and reused, and there is no `VACUUM`. Copies outside the files,
-  such as backups and file system snapshots, are out of reach.
-- **Checkpoint cost.** `Checkpoint` rewrites the full-text index of all
-  indexes: 0.7 s for the benchmark corpus. Updates wait for it; searches do
-  not. Call it after removing content that must leave the disk, or
-  periodically.
-- **Concurrency.** Updates run one at a time on one connection, each in one
-  transaction. Searches use a pool of `max(4, GOMAXPROCS)` read-only
-  connections and read one snapshot each, so they wait neither for updates
-  nor for each other.
-- **Durability.** The database uses a write-ahead log with
-  `synchronous=NORMAL`: a committed change survives the process ending. A
-  power loss may lose the latest commits, but does not corrupt the file.
+- **Removal.** SQLite and FTS5 secure deletion erase replaced or removed
+  text and postings in the committing transaction. Freed pages are reused.
+  Existing version 1 indexes migrate on open. Migration merges old posting
+  segments and retires the write-ahead log. Backups have their own lifetime.
+- **Concurrency.** Readers share a pool of `max(4, GOMAXPROCS)` connections.
+  Writers wait for active readers and have exclusive access through commit.
+  Waiting calls respect context cancellation. A visitor runs inside a read
+  transaction and must return before starting a write.
+- **Maintenance.** `Checkpoint` merges the full-text index segments.
+  This optional operation takes time proportional to index size.
 - **Errors.** Besides the search errors and context errors, the store
   returns `ErrStorage`, `ErrDiskFull` and `ErrReadOnly`, without SQL, paths
   or content. A change that does not fit on the disk leaves the index as it
@@ -421,31 +411,31 @@ size.
 
 ### SQLite
 
-`CGO_ENABLED=0 go test ./sqlite -run '^$' -bench . -cpu 6` on the same host
-and corpus, with the database in a temporary directory on an SSD. Unindexed
-times are as above. Indexed times are right after filling, and after a
-`Checkpoint` has merged the full-text index.
+Go 1.27 on an AMD Ryzen 9 5950X, four CPUs, using the same 32 MiB corpus.
+The unindexed column searches documents already in memory. The indexed
+column searches the embedded database immediately after filling it.
 
-| Query                                | Indexed | After `Checkpoint` | Speedup |
-| ------------------------------------ | ------- | ------------------ | ------- |
-| Identifier, in 3 documents           | 990 µs  | 630 µs             | 2.5–4x  |
-| Line of common words, in 1 document  | 12 ms   | 5.7 ms             | 1.4–3x  |
-| Three-letter word, in 644 documents  | 11 ms   | 11 ms              | 1.4x    |
-| Two bytes, in 3 documents            | 20 ms   | 20 ms              | 0.13x   |
+| Query | Unindexed | Indexed | Speedup |
+| --- | ---: | ---: | ---: |
+| Identifier in three documents | 2.88 ms | 0.94 ms | 3.1× |
+| Phrase in one document | 18.9 ms | 15.5 ms | 1.2× |
+| Three-letter word in 644 documents | 18.6 ms | 13.6 ms | 1.4× |
+| Two bytes | 3.08 ms | 25.6 ms | 0.12× |
 
-The target of 10x is not met. A search pays for SQLite's full-text query
-and for reading every candidate's content from the database, which
-`MemoryStore` hands over in memory. A two-byte query reads all 32 MiB.
+Run `CGO_ENABLED=0 go test ./sqlite -run '^$' -bench '^BenchmarkSearch$' -benchtime=600ms -cpu 4`.
+For inputs already in memory, SQLite falls short of the proposed 10× speedup.
+Two-byte queries scan all selected documents.
 
-Filling the index takes 12 s. The database file is then 80 MiB, with up to
-65 MiB more in the write-ahead log, and 85 MiB after `Checkpoint`.
+### Checkout search
 
-`BenchmarkSearchDuringUpdates` searches for a line on 256 documents of
-16 KiB. Compared with one shared connection, as in the forge-connector
-broker:
+The checkout benchmark writes the same corpus to a directory. It compares
+reading and searching that directory with querying SQLite immediately after
+a sync. Both paths use the library entry points served by the checkout API.
 
-| Search                       | Reader pool | One connection |
-| ---------------------------- | ----------- | -------------- |
-| Alone                        | 2.4 ms      | 2.4 ms         |
-| 6 at a time, wall per search | 0.55 ms     | 2.4 ms         |
-| During updates, 115 per s    | 5.3 ms      | 9.0 ms         |
+| Query | Unindexed checkout | SQLite | Speedup |
+| --- | ---: | ---: | ---: |
+| Identifier in three files | 100 ms | 1.25 ms | 80× |
+| Phrase in one file | 115 ms | 13.2 ms | 8.7× |
+| Two bytes | 95.1 ms | 24.2 ms | 3.9× |
+
+Run `CGO_ENABLED=0 go test ./checkout -run '^$' -bench '^BenchmarkCheckout$' -benchtime=600ms -cpu 4`.

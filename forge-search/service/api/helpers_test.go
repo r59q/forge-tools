@@ -346,6 +346,14 @@ func grpcCaller(t *testing.T, s *Server, authorization string) func(*testing.T, 
 // route is the REST method and path of a request.
 func route(req proto.Message) (string, string) {
 	switch r := req.(type) {
+	case *pb.CreateIndexRequest:
+		return http.MethodPost, "/v1/indexes"
+	case *pb.PutDocumentRequest:
+		return http.MethodPost, "/v1/documents:put"
+	case *pb.RemoveDocumentRequest:
+		return http.MethodPost, "/v1/documents:remove"
+	case *pb.SearchDocumentsRequest:
+		return http.MethodPost, "/v1/documents:search"
 	case *pb.IndexCheckoutRequest:
 		return http.MethodPost, "/v1/indexes/" + url.PathEscape(r.GetIndex()) + "/checkout"
 	case *pb.ListIndexesRequest:
@@ -449,6 +457,7 @@ func httpStatus(code codes.Code) int {
 		codes.InvalidArgument:    http.StatusBadRequest,
 		codes.NotFound:           http.StatusNotFound,
 		codes.FailedPrecondition: http.StatusBadRequest,
+		codes.AlreadyExists:      http.StatusConflict,
 		codes.Aborted:            http.StatusConflict,
 		codes.ResourceExhausted:  http.StatusTooManyRequests,
 		codes.Unavailable:        http.StatusServiceUnavailable,
@@ -461,6 +470,10 @@ func httpStatus(code codes.Code) int {
 func requests() []proto.Message {
 	query := &pb.CodeQuery{Text: "Greet"}
 	return []proto.Message{
+		&pb.CreateIndexRequest{Index: "main"},
+		&pb.PutDocumentRequest{Index: "main", Document: &pb.Document{Path: "file"}},
+		&pb.RemoveDocumentRequest{Index: "main", Path: "file"},
+		&pb.SearchDocumentsRequest{Text: "Greet"},
 		&pb.IndexCheckoutRequest{Index: "main", CheckoutId: checkoutID},
 		&pb.ListIndexesRequest{},
 		&pb.GetIndexRequest{Index: "main"},
@@ -481,6 +494,7 @@ func requests() []proto.Message {
 func response(req proto.Message) proto.Message {
 	name := strings.TrimSuffix(string(req.ProtoReflect().Descriptor().FullName()), "Request") + "Response"
 	for _, m := range []proto.Message{
+		&pb.CreateIndexResponse{}, &pb.PutDocumentResponse{}, &pb.RemoveDocumentResponse{}, &pb.SearchDocumentsResponse{},
 		&pb.IndexCheckoutResponse{}, &pb.ListIndexesResponse{}, &pb.GetIndexResponse{},
 		&pb.DeleteIndexResponse{}, &pb.SearchIndexResponse{}, &pb.SearchCheckoutResponse{},
 		&pb.IndexRepositoryResponse{}, &pb.SearchRepositoryResponse{},

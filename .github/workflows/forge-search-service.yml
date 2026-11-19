@@ -8,6 +8,7 @@ on:
       - forge-search/library/**
       - forge-symbols/library/**
       - forge-issues/library/**
+      - forge-issues/service/**
       - forge-checkouts/library/**
       - forge-checkouts/service/**
       - forge-connector/library/**
@@ -25,6 +26,7 @@ on:
       - forge-search/library/**
       - forge-symbols/library/**
       - forge-issues/library/**
+      - forge-issues/service/**
       - forge-checkouts/library/**
       - forge-checkouts/service/**
       - forge-connector/library/**

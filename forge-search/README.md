@@ -1,15 +1,15 @@
 # Forge Search
 
-Literal text search over several aggregates: code from checkouts, issues
-and symbols. One set of query rules serves two modes.
+Literal text search over supplied documents, checkout files, issues and
+symbol definitions. One set of query rules serves two modes.
 
 ## Layout
 
 - [`library/`](library/README.md): the search model, unindexed search and
   the index engine with its storage interface and an embedded SQLite store,
   as a Go library.
-- [`service/`](service/README.md): indexes and searches the code of
-  forge-checkouts checkouts over REST and gRPC, with durable SQLite indexes.
+- [`service/`](service/README.md): exposes document search and index maintenance over REST
+  and gRPC, with optional checkout and issue sources.
 
 ## Design
 

@@ -15,6 +15,15 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+var errNoCheckouts = errors.New("api: no checkouts service configured")
+
+func (c Config) validCheckouts() bool {
+	if c.Checkouts == nil {
+		return c.Journal == nil && c.Root == (Root{})
+	}
+	return c.Journal != nil && c.Root.valid()
+}
+
 // ErrNotFound is returned by Checkouts for a checkout, or a source,
 // repository or reference, that does not exist.
 var ErrNotFound = errors.New("api: checkout not found")
@@ -109,6 +118,9 @@ func readable(state string) bool {
 // openCheckout looks up a checkout and opens its directory. The caller
 // closes the root.
 func (s *Server) openCheckout(ctx context.Context, id string) (Checkout, *os.Root, error) {
+	if s.config.Checkouts == nil {
+		return Checkout{}, nil, errNoCheckouts
+	}
 	if !validCheckoutID(id) {
 		return Checkout{}, nil, errBadRequest
 	}

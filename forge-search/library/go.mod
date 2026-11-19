@@ -5,6 +5,7 @@ go 1.27
 require (
 	github.com/r59q/forge-tools/forge-issues/library v0.0.0
 	github.com/r59q/forge-tools/forge-symbols/library v0.0.0
+	golang.org/x/sync v0.16.0
 	modernc.org/sqlite v1.39.1
 )
 

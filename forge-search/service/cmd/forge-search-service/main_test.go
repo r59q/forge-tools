@@ -75,7 +75,7 @@ func TestSettings(t *testing.T) {
 		{"--checkouts-data-dir=/checkouts", "--checkouts-addr="},
 		{"--checkouts-data-dir=/checkouts", "--issues-insecure=secret-sentinel"},
 		{"--checkouts-data-dir=/checkouts", "--issues-token-file=/a", "--issues-token-env=B"},
-		{},
+		{"--checkouts-reported-data-dir=/copies"},
 	} {
 		if _, err := parse(args, noEnv, io.Discard); err == nil || strings.Contains(err.Error(), "secret-sentinel") {
 			t.Errorf("%v: %v", args, err)
@@ -297,5 +297,35 @@ func TestRunRequiresTokens(t *testing.T) {
 		if _, err := os.Stat(e.dataDir); !errors.Is(err, os.ErrNotExist) {
 			t.Fatalf("%s: data directory created: %v", unset, err)
 		}
+	}
+}
+
+func TestStandaloneDocumentsSurviveRestart(t *testing.T) {
+	t.Setenv("FORGE_SEARCH_TOKEN", "service")
+	e := installation{args: []string{
+		"--data-dir=" + filepath.Join(t.TempDir(), "index"),
+		"--grpc-listen=127.0.0.1:0", "--http-listen=127.0.0.1:0",
+	}}
+	addr, _, stop := e.start(t)
+	c, ctx := client(t, addr)
+	if _, err := c.CreateIndex(ctx, &pb.CreateIndexRequest{Index: "notes"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.PutDocument(ctx, &pb.PutDocumentRequest{
+		Index: "notes", Document: &pb.Document{Path: "hello.txt", Content: []byte("hello")},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	stop()
+
+	addr, _, _ = e.start(t)
+	c, ctx = client(t, addr)
+	result, err := c.SearchDocuments(ctx, &pb.SearchDocumentsRequest{Index: "notes", Text: "ell"})
+	if err != nil || len(result.GetMatches()) != 1 || result.Matches[0].Path != "hello.txt" {
+		t.Fatalf("search after restart: %v, %v", result, err)
+	}
+	_, err = c.SearchCheckout(ctx, &pb.SearchCheckoutRequest{CheckoutId: checkoutID, Query: &pb.CodeQuery{Text: "ell"}})
+	if status.Code(err) != codes.Unimplemented {
+		t.Fatalf("checkout without configuration: %v", err)
 	}
 }

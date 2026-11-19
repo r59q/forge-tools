@@ -32,6 +32,9 @@ func (s *Store) Add(ctx context.Context, draft storage.Draft) (evidence.Entry, e
 	if err := ctx.Err(); err != nil {
 		return evidence.Entry{}, err
 	}
+	if err := checkDraftSize(draft.Files, s.limits); err != nil {
+		return evidence.Entry{}, err
+	}
 
 	entry := draft.Entry()
 	metadata, err := evidence.Encode(entry, s.limits)
@@ -63,6 +66,25 @@ func (s *Store) Add(ctx context.Context, draft storage.Draft) (evidence.Entry, e
 		return strings.Compare(a.Name, b.Name)
 	})
 	return entry, nil
+}
+
+// checkDraftSize bounds the amount of data Draft.Entry can hash.
+func checkDraftSize(files []storage.Content, limits evidence.Limits) error {
+	if len(files) > limits.Files {
+		return evidence.ErrTooManyFiles
+	}
+	remaining := limits.EntryBytes
+	for index, file := range files {
+		size := int64(len(file.Data))
+		if size > limits.FileBytes {
+			return fmt.Errorf("draft file %d: %w", index, evidence.ErrFileTooLarge)
+		}
+		if size > remaining {
+			return evidence.ErrEntryTooLarge
+		}
+		remaining -= size
+	}
+	return nil
 }
 
 // makeCommitDir creates the .evidence and commit folders when missing and

@@ -1,15 +1,14 @@
 import { ChatView } from "./chat-view.js";
-import { byActivity } from "./chats.js";
+import { ChatCatalog } from "./chats.js";
 import { createForm } from "./create.js";
 import { element } from "./dom.js";
 import { followChat } from "./live.js";
 import { Sidebar } from "./sidebar.js";
 import { Transcript } from "./transcript.js";
 import { TranscriptView } from "./transcript-view.js";
-import type { Agent, ChatMetadata, ChatProvider, MetadataPatch } from "./types.js";
+import type { Agent, ChatProvider, MetadataPatch } from "./types.js";
 
 interface ActiveChat {
-  id: string;
   view: ChatView;
   stream: AbortController;
 }
@@ -23,10 +22,8 @@ export class ChatPanel {
   private readonly body = element("div", "chat-body");
   private readonly sidebar: Sidebar;
   private readonly timer: ReturnType<typeof setInterval>;
+  private readonly catalog = new ChatCatalog();
   private active?: ActiveChat;
-  private agents: Agent[] = [];
-  private metadata = new Map<string, ChatMetadata>();
-  private version = 0;
   private refreshing = false;
   private catalogKey = "";
 
@@ -36,7 +33,10 @@ export class ChatPanel {
       this.accept(agent);
       this.select(agent.id);
     }));
-    this.sidebar = new Sidebar(create, id => this.select(id));
+    this.sidebar = new Sidebar(create, id => this.select(id), () => {
+      this.catalog.showArchived = !this.catalog.showArchived;
+      this.renderCatalog();
+    });
     this.error.setAttribute("role", "alert");
     this.catalogError.setAttribute("role", "status");
     this.body.append(element("p", "empty-chat", "Select a chat or start a new one."));
@@ -55,8 +55,7 @@ export class ChatPanel {
   }
 
   private select(id: string): void {
-    const agent = this.agents.find(candidate => candidate.id === id);
-    if (!agent || this.active?.id === id) return;
+    if (this.abort.signal.aborted || !this.catalog.select(id)) return;
     this.active?.stream.abort();
     this.error.textContent = "";
     const stream = new AbortController();
@@ -69,7 +68,7 @@ export class ChatPanel {
       target => this.perform(async signal => this.accept(await this.provider.stop(target, signal)), id),
       (target, value) => this.patch(target, value),
       target => this.select(target));
-    this.active = { id, view, stream };
+    this.active = { view, stream };
     this.body.replaceChildren(view.element);
     this.renderCatalog();
     void followChat(this.provider, id, transcript, stream.signal, {
@@ -82,15 +81,14 @@ export class ChatPanel {
   private async refresh(): Promise<void> {
     if (this.refreshing || this.abort.signal.aborted) return;
     this.refreshing = true;
-    const version = this.version;
+    const version = this.catalog.version;
     try {
       const [agents, metadata] = await Promise.all([
         this.provider.agents(this.abort.signal), this.provider.metadata(this.abort.signal),
       ]);
-      if (this.abort.signal.aborted || version !== this.version) return;
+      if (this.abort.signal.aborted) return;
       this.catalogError.textContent = "";
-      this.agents = agents;
-      this.metadata = new Map(metadata.map(entry => [entry.id, entry]));
+      this.catalog.replace(agents, metadata, version);
       this.renderCatalog();
     } catch (error) {
       if (!this.abort.signal.aborted) this.catalogError.textContent = failure(error);
@@ -105,7 +103,7 @@ export class ChatPanel {
       await action(this.abort.signal);
       return !this.abort.signal.aborted;
     } catch (error) {
-      if (!this.abort.signal.aborted && (!id || this.active?.id === id)) this.error.textContent = failure(error);
+      if (!this.abort.signal.aborted && (!id || this.catalog.active?.id === id)) this.error.textContent = failure(error);
       return false;
     }
   }
@@ -114,37 +112,33 @@ export class ChatPanel {
     return this.perform(async signal => {
       const metadata = await this.provider.update(id, value, signal);
       if (signal.aborted) return;
-      this.version++;
-      this.metadata.set(id, metadata);
+      this.catalog.save(metadata);
       this.renderCatalog();
     }, id);
   }
 
   private accept(agent: Agent): void {
     if (this.abort.signal.aborted) return;
-    const current = this.agents.find(candidate => candidate.id === agent.id);
-    if (current && byActivity(current, agent) < 0) return;
-    this.version++;
-    this.agents = this.agents.filter(candidate => candidate.id !== agent.id).concat(agent);
+    this.catalog.accept(agent);
     this.renderCatalog();
   }
 
   private renderCatalog(): void {
-    const key = JSON.stringify([this.agents, [...this.metadata.values()], this.active?.id]);
+    const { active: agent, agents, metadata, showArchived } = this.catalog;
+    const key = JSON.stringify([agents, [...metadata.values()], agent?.id, showArchived]);
     if (key === this.catalogKey) return;
     this.catalogKey = key;
-    this.sidebar.render(this.agents, this.metadata, this.active?.id ?? "");
+    this.sidebar.render(this.catalog);
     if (!this.active) return;
-    const agent = this.agents.find(candidate => candidate.id === this.active?.id);
     if (!agent) {
       this.active.stream.abort();
       this.active = undefined;
       this.body.replaceChildren(element("p", "empty-chat", "This chat is no longer available."));
       return;
     }
-    const metadata = this.metadata.get(agent.id);
-    this.active.view.renderHeader(agent, metadata);
-    this.active.view.renderLinks(agent, metadata, this.agents);
+    const preferences = metadata.get(agent.id);
+    this.active.view.renderHeader(agent, preferences);
+    this.active.view.renderLinks(agent, preferences, agents);
   }
 }
 

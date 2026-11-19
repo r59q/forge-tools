@@ -41,7 +41,7 @@ export class ChatView {
     this.updateComposer();
   }
 
-  renderLinks(agent: Agent, metadata: ChatMetadata | undefined, agents: Agent[]): void {
+  renderLinks(agent: Agent, metadata: ChatMetadata | undefined, agents: readonly Agent[]): void {
     const ids = metadata?.links?.ids ?? [];
     const links = ids.flatMap(id => {
       const linked = agents.find(candidate => candidate.id === id);

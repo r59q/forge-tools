@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { recentChats, sessionTree } from "../dist/src/chats.js";
+import { ChatCatalog, recentChats, sessionTree } from "../dist/src/chats.js";
 import { Transcript } from "../dist/src/transcript.js";
 
 function event(seq, kind, changes = {}) {
@@ -62,4 +62,19 @@ test("activity sorting preserves nanoseconds and archiving leaves family navigat
   assert.equal(tree.children[0].agent.id, "child");
   assert.equal(tree.children[0].children[0].agent.id, "grandchild");
   assert.equal(sessionTree(agents, "orphan").agent.id, "orphan");
+});
+
+test("a stale refresh cannot undo a local update and removal clears selection", () => {
+  const catalog = new ChatCatalog();
+  const agent = { id: "parent", updatedAt: "2026-01-01T00:00:00Z" };
+  catalog.replace([agent], [], catalog.version);
+  assert.equal(catalog.select(agent.id), true);
+  const beforeSave = catalog.version;
+  catalog.save({ id: agent.id, archived: true });
+  catalog.replace([agent], [], beforeSave);
+  assert.equal(catalog.metadata.get(agent.id).archived, true);
+  assert.equal(catalog.active.id, agent.id);
+  catalog.replace([], [], catalog.version);
+  assert.equal(catalog.active, undefined);
+  assert.equal(catalog.select(agent.id), false);
 });

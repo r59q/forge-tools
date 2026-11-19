@@ -1,6 +1,9 @@
 package evidence
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 // Stable error categories. Match them with errors.Is; their messages never
 // contain metadata or file content.
@@ -15,6 +18,22 @@ var (
 	// ErrTooLarge reports metadata, a file, an entry or a listing over a size
 	// or count limit.
 	ErrTooLarge = errors.New("evidence exceeds limit")
+
+	// ErrMalformed reports metadata that does not conform to its JSON format.
+	// It also matches ErrInvalid.
+	ErrMalformed = fmt.Errorf("malformed metadata: %w", ErrInvalid)
+
+	// ErrFileTooLarge reports a recorded file size over Limits.FileBytes.
+	// It also matches ErrTooLarge.
+	ErrFileTooLarge = fmt.Errorf("recorded file size: %w", ErrTooLarge)
+
+	// ErrTooManyFiles reports a file list over Limits.Files.
+	// It also matches ErrTooLarge.
+	ErrTooManyFiles = fmt.Errorf("recorded file count: %w", ErrTooLarge)
+
+	// ErrEntryTooLarge reports recorded sizes totaling over Limits.EntryBytes.
+	// It also matches ErrTooLarge.
+	ErrEntryTooLarge = fmt.Errorf("recorded entry size: %w", ErrTooLarge)
 )
 
 // Limits bounds the evidence the library accepts. Zero or negative fields use
@@ -32,10 +51,13 @@ type Limits struct {
 	// EntryBytes is the most bytes of evidence files in one entry.
 	EntryBytes int64
 
-	// Entries bounds the directory entries scanned by a listing. The folder
+	// Entries bounds the directory entries scanned by List and Validate. The folder
 	// strategy applies it separately to the evidence root and to the total
 	// across all commit folders.
 	Entries int
+
+	// Problems is the most problems returned by storage validation.
+	Problems int
 }
 
 // DefaultLimits returns the default limits. They are small because evidence
@@ -47,6 +69,7 @@ func DefaultLimits() Limits {
 		Files:         32,
 		EntryBytes:    16 << 20,
 		Entries:       10000,
+		Problems:      1000,
 	}
 }
 
@@ -69,6 +92,9 @@ func (l Limits) WithDefaults() Limits {
 	}
 	if l.Entries <= 0 {
 		l.Entries = defaults.Entries
+	}
+	if l.Problems <= 0 {
+		l.Problems = defaults.Problems
 	}
 	return l
 }

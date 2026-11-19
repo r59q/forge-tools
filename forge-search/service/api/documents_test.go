@@ -92,3 +92,20 @@ func TestDocumentLimits(t *testing.T) {
 		}
 	}
 }
+
+func TestChunkedDocumentRequest(t *testing.T) {
+	f := newFixture(t, nil)
+	h, err := f.s.REST(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	const path = "/v1/documents:search"
+	body := []byte(`{"text":"hello"}`)
+	if got := rest(h, "POST", path, body, -1, "Bearer "+token); got.Code != 200 {
+		t.Fatalf("chunked search: %d", got.Code)
+	}
+	body = append(body, bytes.Repeat([]byte(" "), documentBodyBytes)...)
+	if got := restCode(t, rest(h, "POST", path, body, -1, "Bearer "+token)); got != codes.ResourceExhausted {
+		t.Fatalf("oversized chunked search: %v", got)
+	}
+}

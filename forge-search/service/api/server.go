@@ -181,13 +181,11 @@ func (s *Server) REST(ctx context.Context) (http.Handler, error) {
 			fail(w, r, err)
 			return
 		}
-		limit := bodyLimit(r)
-		if r.ContentLength > limit {
-			fail(w, r, servicekit.Status(codes.ResourceExhausted))
+		if err := limitBody(w, r); err != nil {
+			fail(w, r, err)
 			return
 		}
 
-		r.Body = http.MaxBytesReader(w, r.Body, limit)
 		mux.ServeHTTP(w, r)
 	}), nil
 }

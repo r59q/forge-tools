@@ -21,11 +21,13 @@
   "scripts": {
     "build": "tsc && node build.mjs",
     "lint": "eslint .",
-    "test": "npm run build && node --test test/*.test.mjs"
+    "test": "npm run build && node --test test/*.test.mjs",
+    "test:browser": "node --test test/chat.browser.mjs"
   },
   "devDependencies": {
     "@typescript-eslint/parser": "8.72.1",
     "eslint": "10.14.0",
+    "playwright": "1.56.1",
     "typescript": "5.9.3"
   }
 }

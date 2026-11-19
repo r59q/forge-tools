@@ -125,6 +125,7 @@
 .forge-chat .message.result, .forge-chat .activity summary { color: var(--muted); }
 .forge-chat .message h3 { margin: 0; font-size: .9rem; }
 .forge-chat .message-text, .forge-chat pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: .4rem 0 0; }
+.forge-chat .message-text a { color: var(--accent); }
 .forge-chat pre { font-size: .87rem; }
 .forge-chat .activity ol { margin-top: 0; padding-inline-end: 1rem; }
 .forge-chat .activity li { margin-bottom: .55rem; }

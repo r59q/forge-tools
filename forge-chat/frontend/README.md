@@ -9,6 +9,10 @@ npm test
 npm pack
 ```
 
+For browser tests, run `npx playwright install chromium` and
+`npm run test:browser` after building. Set `CHROMIUM_EXECUTABLE` to use
+an installed Chromium instead.
+
 `npm run build` also produces the standalone app in `dist/web`. Serve that
 directory with [forge-chat service](../service/), which supplies the API
 routes. The standalone app holds the chat service token in memory while signed in.

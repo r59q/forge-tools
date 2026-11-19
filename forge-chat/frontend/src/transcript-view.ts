@@ -71,8 +71,26 @@ export class TranscriptView {
 
 function message(label: string, text?: string, style = ""): HTMLElement {
   const card = element("article", `message ${style}`, element("h3", "", label));
-  if (text) card.append(element("p", "message-text", text));
+  if (text) card.append(messageText(text));
   return card;
+}
+
+function messageText(text: string): HTMLParagraphElement {
+  const paragraph = element("p", "message-text");
+  let offset = 0;
+  const links = /\[([^\]\n]+)\]\((https?:\/\/[^\s<>"')]+)\)|https?:\/\/[^\s<>"']+/g;
+  for (const match of text.matchAll(links)) {
+    const href = match[2] ?? match[0].replace(/[.,;!?)]+$/, "");
+    if (!URL.canParse(href)) continue;
+    const link = element("a", "", match[1] ?? href);
+    link.href = href;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    paragraph.append(text.slice(offset, match.index), link);
+    offset = match.index + (match[2] ? match[0].length : href.length);
+  }
+  paragraph.append(text.slice(offset));
+  return paragraph;
 }
 
 class ActivityView {

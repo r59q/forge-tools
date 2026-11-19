@@ -28,5 +28,6 @@ export function option(value: string, label: string): HTMLOptionElement {
 }
 
 export function field(label: string, control: HTMLElement): HTMLLabelElement {
+  control.setAttribute("aria-label", label);
   return element("label", "field", element("span", "", label), control);
 }

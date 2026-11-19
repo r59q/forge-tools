@@ -10,12 +10,12 @@ func TestLimitsWithDefaults(t *testing.T) {
 		t.Fatalf("zero limits = %+v, want defaults", got)
 	}
 
-	negative := Limits{MetadataBytes: -1, FileBytes: -1, Files: -1, EntryBytes: -1, Entries: -1}
+	negative := Limits{MetadataBytes: -1, FileBytes: -1, Files: -1, EntryBytes: -1, Entries: -1, Problems: -1}
 	if got := negative.WithDefaults(); got != DefaultLimits() {
 		t.Fatalf("negative limits = %+v, want defaults", got)
 	}
 
-	custom := Limits{MetadataBytes: 1, FileBytes: 2, Files: 3, EntryBytes: 4, Entries: 5}
+	custom := Limits{MetadataBytes: 1, FileBytes: 2, Files: 3, EntryBytes: 4, Entries: 5, Problems: 6}
 	if got := custom.WithDefaults(); got != custom {
 		t.Fatalf("custom limits = %+v, want %+v", got, custom)
 	}
@@ -33,6 +33,7 @@ func TestDefaultLimits(t *testing.T) {
 		Files:         32,
 		EntryBytes:    16 << 20,
 		Entries:       10000,
+		Problems:      1000,
 	}
 	if got := DefaultLimits(); got != want {
 		t.Fatalf("DefaultLimits = %+v, want the README table %+v", got, want)

@@ -151,17 +151,17 @@ func sortedFiles(files []File) []File {
 	})
 }
 
-// malformed returns ErrInvalid with the byte offset of a JSON error. The JSON
+// malformed returns ErrMalformed with the byte offset of a JSON error. The JSON
 // error itself is dropped, since it may quote the input.
 func malformed(err error) error {
 	var syntactic *jsontext.SyntacticError
 	if errors.As(err, &syntactic) {
-		return fmt.Errorf("metadata is not valid JSON at byte %d: %w", syntactic.ByteOffset, ErrInvalid)
+		return fmt.Errorf("metadata is not valid JSON at byte %d: %w", syntactic.ByteOffset, ErrMalformed)
 	}
 
 	var semantic *json.SemanticError
 	if errors.As(err, &semantic) {
-		return fmt.Errorf("metadata does not match the format at byte %d: %w", semantic.ByteOffset, ErrInvalid)
+		return fmt.Errorf("metadata does not match the format at byte %d: %w", semantic.ByteOffset, ErrMalformed)
 	}
-	return invalid("metadata", "is malformed")
+	return ErrMalformed
 }

@@ -64,8 +64,7 @@ type Subject struct {
 
 // File is one evidence file of an entry, as recorded in its metadata.
 type File struct {
-	// Name is the file name in the entry folder. It follows ValidName and is
-	// not MetadataFile.
+	// Name is the file name in the entry folder. It follows ValidFileName.
 	Name string
 
 	// Size is the length of the file in bytes.
@@ -122,7 +121,7 @@ func validFiles(files []File, limits Limits) error {
 		return invalid("files", "are empty")
 	}
 	if len(files) > limits.Files {
-		return fmt.Errorf("files: %w", ErrTooLarge)
+		return ErrTooManyFiles
 	}
 
 	seen := make(map[string]bool, len(files))
@@ -141,7 +140,7 @@ func validFiles(files []File, limits Limits) error {
 		seen[folded] = true
 
 		if file.Size > limits.EntryBytes-total {
-			return fmt.Errorf("files: %w", ErrTooLarge)
+			return ErrEntryTooLarge
 		}
 		total += file.Size
 	}
@@ -149,17 +148,14 @@ func validFiles(files []File, limits Limits) error {
 }
 
 func validFile(file File, limits Limits) error {
-	if err := ValidName(file.Name); err != nil {
+	if err := ValidFileName(file.Name); err != nil {
 		return err
-	}
-	if strings.EqualFold(file.Name, MetadataFile) {
-		return invalid("name", "is the metadata file name")
 	}
 	if file.Size < 0 {
 		return invalid("size", "is negative")
 	}
 	if file.Size > limits.FileBytes {
-		return fmt.Errorf("size: %w", ErrTooLarge)
+		return ErrFileTooLarge
 	}
 	return validDigest(file.SHA256)
 }

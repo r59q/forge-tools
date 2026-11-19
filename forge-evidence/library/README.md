@@ -155,7 +155,8 @@ Each entry folder holds `entry.json`, in format version 1:
 | `FileBytes`     | 4 MiB   | `Validate`, by recorded size        | `ErrTooLarge` |
 | `Files`         | 32      | `Validate`, per entry               | `ErrTooLarge` |
 | `EntryBytes`    | 16 MiB  | `Validate`, sum of recorded sizes   | `ErrTooLarge` |
-| `Entries`       | 10000   | Storage, per evidence folder        | `ErrTooLarge` |
+| `Entries`       | 10000   | Children scanned by storage        | `ErrTooLarge` |
+| `Problems`      | 1000    | Problems returned by storage       | `Truncated`   |
 
 Zero or negative fields use the default; `WithDefaults` resolves them.
 `Encode` and `Decode` call `Validate`. Storage checks the bytes it actually
@@ -188,6 +189,7 @@ every strategy implements:
 | `Entry`    | Returns the metadata of an entry                             |
 | `List`     | Returns matching entry metadata                              |
 | `ReadFile` | Returns the bytes of one file listed in an entry's metadata  |
+| `Validate` | Reports layout, metadata and file problems                 |
 
 Callers name entries by `ID` and files by name, never by a path or object
 key, so a strategy, such as a future S3 one, can be swapped without changing
@@ -223,6 +225,7 @@ entry, err := store.Add(ctx, storage.Draft{
 entry, err = store.Entry(ctx, entry.ID())
 entries, err := store.List(ctx, storage.Filter{Commit: commit, Kind: evidence.KindTestResult})
 report, err = store.ReadFile(ctx, entry.ID(), "junit.xml")
+validation, err := store.Validate(ctx)
 ```
 
 - **Add** checks the draft and encodes its metadata before it touches the
@@ -274,3 +277,44 @@ Listing checks every entry before applying the filter. A malformed or
 unreadable entry, an unsafe name, or a symlink at a commit or entry path
 fails the list with an error naming the repository-relative path. Add's
 temporary `.add-` directories with random base32 suffixes are ignored.
+
+### Validation
+
+`Validate(ctx)` checks the folder without changing it. A missing or empty
+`.evidence/` is valid and returns an empty report. Each problem has a
+repository-relative `Path`, a machine-readable `Reason` and a short
+`Message`. The report is sorted by path and then by reason, both in
+ascending bytewise order. When more than `Limits.Problems` problems are
+found, the report keeps the first ones found in the deterministic scan and
+sets `Truncated`. Messages omit file contents, metadata values and host
+paths. A missing listed file is located by its validated file name.
+
+Content problems go in the report, and the scan continues to other entries.
+An unreadable path, a cancelled context or exceeding `Limits.Entries`
+returns an error and an empty report because the check could not finish.
+`Limits.Entries` applies as it does in listing.
+
+Validation checks sizes on disk before reading. It reports unexpected
+directories at their boundary and skips their contents. It also flags
+`Add`'s temporary directories if present, so validate a stable checkout.
+An entry over the file count limit gets a count problem and its payload
+scan is skipped. An entry over the total byte limit is checked without
+reading payload contents. File comparisons require valid metadata.
+
+| Reason | Meaning |
+| ------ | ------- |
+| `missing_metadata` | The entry has no `entry.json`. |
+| `malformed_metadata` | The metadata violates the JSON format, including duplicate or unknown members and wrong value types. |
+| `oversized_metadata` | The metadata exceeds `Limits.MetadataBytes`. |
+| `unknown_version` | The metadata format version is unsupported. |
+| `invalid_field` | A required field is missing, a value is invalid or the ID differs from the folder's. |
+| `unsafe_name` | A commit directory, entry directory or evidence file breaks the name rules. |
+| `symlink` | The path is a symbolic link. |
+| `special_file` | The path is a special file, such as a FIFO. |
+| `stray_path` | The layout expects a different type of file or directory at this path. |
+| `file_too_large` | An actual or recorded file size exceeds `Limits.FileBytes`. |
+| `too_many_files` | An actual or recorded file count exceeds `Limits.Files`. |
+| `entry_too_large` | An actual or recorded total exceeds `Limits.EntryBytes`. |
+| `missing_file` | A listed file is absent. |
+| `unlisted_file` | An evidence file is absent from the metadata. |
+| `file_mismatch` | A listed file differs from its recorded size or SHA-256. |

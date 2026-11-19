@@ -59,6 +59,18 @@ func ValidName(name string) error {
 	return nil
 }
 
+// ValidFileName applies ValidName to an evidence file and reserves MetadataFile
+// in every case. An invalid name returns ErrInvalid, without the name.
+func ValidFileName(name string) error {
+	if err := ValidName(name); err != nil {
+		return err
+	}
+	if strings.EqualFold(name, MetadataFile) {
+		return invalid("name", "is the metadata file name")
+	}
+	return nil
+}
+
 // ValidCommit reports whether commit is a full commit SHA: 40 or 64 lowercase
 // hex digits. Otherwise it returns ErrInvalid, without the value.
 func ValidCommit(commit string) error {

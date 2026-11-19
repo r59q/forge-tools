@@ -50,6 +50,11 @@ type Store interface {
 	// was added. A file not listed in the entry's metadata returns
 	// ErrNotExist.
 	ReadFile(ctx context.Context, id evidence.ID, name string) ([]byte, error)
+
+	// Validate checks stored evidence without changing it. Content problems
+	// go in the report. A failure to complete the check returns an error and
+	// an empty report.
+	Validate(ctx context.Context) (Report, error)
 }
 
 // Filter selects entries for List. Empty fields match any value and all

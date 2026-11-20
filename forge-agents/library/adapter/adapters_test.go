@@ -106,7 +106,9 @@ func TestClaudeCommand(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{"-p", "--output-format", "stream-json", "--verbose", "--resume", "s-1", "--model", "m-1",
-		"--effort", "high", "--mcp-config", "/run/a/mcp.json", "--allowedTools", "mcp__forge-agents__ask_user",
+		"--effort", "high", "--mcp-config", "/run/a/mcp.json", "--allowedTools",
+		"mcp__forge-agents__ask_user,mcp__forge-agents__spawn_agent,mcp__forge-agents__list_agents," +
+			"mcp__forge-agents__send_message,mcp__forge-agents__wait_agents,mcp__forge-agents__stop_agent",
 		"--disallowedTools", "AskUserQuestion", "--permission-mode", "acceptEdits",
 		"--permission-prompt-tool", "mcp__forge-agents__approve"}
 	if !slices.Equal(inv.Args, want) {

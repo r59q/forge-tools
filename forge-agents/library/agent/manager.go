@@ -44,9 +44,12 @@ type Config struct {
 
 // live is the runtime state of an agent with a turn in progress.
 type live struct {
-	cancel  context.CancelCauseFunc
-	done    chan struct{}
-	pending map[string]chan answer
+	cancel    context.CancelCauseFunc
+	done      chan struct{}
+	stopping  bool
+	cancelled <-chan struct{}
+	root      string
+	pending   map[string]pendingInput
 }
 
 // Manager runs agents.
@@ -58,7 +61,7 @@ type Manager struct {
 
 	mu       sync.Mutex
 	turns    map[string]*live
-	creating int
+	creating map[string]Agent
 	closed   bool
 	wg       sync.WaitGroup
 
@@ -87,7 +90,7 @@ func Open(ctx context.Context, cfg Config) (*Manager, error) {
 	if cfg.ToolsListen == "" {
 		cfg.ToolsListen = "127.0.0.1:0"
 	}
-	m := &Manager{cfg: cfg, turns: map[string]*live{}, notify: map[string]chan struct{}{}}
+	m := &Manager{cfg: cfg, turns: map[string]*live{}, creating: map[string]Agent{}, notify: map[string]chan struct{}{}}
 	if err := m.recover(ctx); err != nil {
 		return nil, err
 	}
@@ -100,6 +103,9 @@ func Open(ctx context.Context, cfg Config) (*Manager, error) {
 	mux.Handle("/mcp", &m.tools)
 	m.server = &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 	go func() { _ = m.server.Serve(ln) }()
+	m.mu.Lock()
+	m.resumeParents(ctx)
+	m.mu.Unlock()
 	return m, nil
 }
 
@@ -109,14 +115,19 @@ func (m *Manager) recover(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if err := m.recoverLinks(ctx, agents); err != nil {
+		return err
+	}
 	for _, a := range agents {
 		if !a.State.Busy() {
 			continue
 		}
-		m.close(ctx, a, transcript.StatusError, interrupted)
-		a.State, a.Error, a.UpdatedAt = StateIdle, interrupted, now()
-		if err := m.cfg.Store.Put(ctx, a); err != nil {
+		a, err := m.finish(ctx, a, outcome{state: StateIdle, status: transcript.StatusError, message: interrupted})
+		if err != nil {
 			return err
+		}
+		if parent, err := m.cfg.Store.Get(ctx, a.Parent); err == nil {
+			m.childFinished(ctx, parent, a)
 		}
 	}
 	return nil
@@ -146,82 +157,6 @@ func newID(n int) string {
 	return hex.EncodeToString(raw)
 }
 
-// Create prepares the workspace and stores a new agent.
-func (m *Manager) Create(ctx context.Context, spec Spec) (Agent, error) {
-	a, err := m.check(ctx, spec)
-	if err != nil {
-		return Agent{}, err
-	}
-	if err := m.reserve(ctx); err != nil {
-		return Agent{}, err
-	}
-	defer m.unreserve()
-	w, err := m.cfg.Workspaces.Prepare(ctx, a.ID, spec.Workspace)
-	if err != nil {
-		return Agent{}, err
-	}
-	a.Workspace = w
-	if err := m.cfg.Store.Put(ctx, a); err != nil {
-		_ = m.cfg.Workspaces.Release(context.WithoutCancel(ctx), w, true)
-		return Agent{}, err
-	}
-	return a, nil
-}
-
-func (m *Manager) check(ctx context.Context, spec Spec) (Agent, error) {
-	client, ok := m.cfg.Clients[spec.Client]
-	if !ok {
-		return Agent{}, fmt.Errorf("%w: unknown client %q", ErrInvalid, spec.Client)
-	}
-	if spec.Policy.Mode == "" {
-		spec.Policy.Mode = adapter.ModeReadOnly
-	}
-	if err := client.Adapter.Check(spec.Model, spec.Effort, spec.Policy); err != nil {
-		return Agent{}, fmt.Errorf("%w: %w", ErrInvalid, err)
-	}
-	limits, err := m.cfg.Bounds.resolve(spec.Limits)
-	if err != nil {
-		return Agent{}, err
-	}
-	if spec.Parent != "" {
-		if _, err := m.cfg.Store.Get(ctx, spec.Parent); errors.Is(err, ErrNotFound) {
-			return Agent{}, fmt.Errorf("%w: parent agent %q not found", ErrInvalid, spec.Parent)
-		} else if err != nil {
-			return Agent{}, err
-		}
-	}
-	t := now()
-	return Agent{
-		ID: newID(16), Client: spec.Client, Model: spec.Model, Effort: spec.Effort,
-		Policy: spec.Policy, Limits: limits, Parent: spec.Parent, State: StateCreated,
-		CreatedAt: t, UpdatedAt: t,
-	}, nil
-}
-
-// reserve holds a place for a new agent while its workspace is prepared.
-func (m *Manager) reserve(ctx context.Context) error {
-	agents, err := m.cfg.Store.List(ctx, Filter{})
-	if err != nil {
-		return err
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.closed {
-		return fmt.Errorf("%w: shutting down", ErrState)
-	}
-	if len(agents)+m.creating >= m.cfg.Bounds.MaxAgents {
-		return fmt.Errorf("%w: at most %d agents", ErrLimit, m.cfg.Bounds.MaxAgents)
-	}
-	m.creating++
-	return nil
-}
-
-func (m *Manager) unreserve() {
-	m.mu.Lock()
-	m.creating--
-	m.mu.Unlock()
-}
-
 // Get returns an agent.
 func (m *Manager) Get(ctx context.Context, id string) (Agent, error) {
 	return m.cfg.Store.Get(ctx, id)
@@ -246,63 +181,10 @@ func (m *Manager) update(ctx context.Context, id string, change func(*Agent) err
 		return Agent{}, err
 	}
 	m.signal(id)
+	if a.Parent != "" {
+		m.signal(a.Parent)
+	}
 	return a, nil
-}
-
-// Cancel ends the running turn and waits until the agent is idle.
-func (m *Manager) Cancel(ctx context.Context, id string) (Agent, error) {
-	return m.interrupt(ctx, id, errCancelled, false)
-}
-
-// Stop ends any running turn and stops the agent for good.
-func (m *Manager) Stop(ctx context.Context, id string) (Agent, error) {
-	return m.interrupt(ctx, id, errStopped, true)
-}
-
-func (m *Manager) interrupt(ctx context.Context, id string, cause error, stop bool) (Agent, error) {
-	m.mu.Lock()
-	l := m.turns[id]
-	if l == nil {
-		defer m.mu.Unlock()
-		return m.update(ctx, id, func(a *Agent) error {
-			switch {
-			case stop && !a.State.Terminal():
-				a.State = StateStopped
-			case !stop:
-				return fmt.Errorf("%w: no turn is running", ErrState)
-			}
-			return nil
-		})
-	}
-	l.cancel(cause)
-	m.mu.Unlock()
-	select {
-	case <-l.done:
-	case <-ctx.Done():
-		return Agent{}, ctx.Err()
-	}
-	return m.cfg.Store.Get(ctx, id)
-}
-
-// Delete stops an agent, releases its workspace and removes it. A
-// checkout workspace is removed only when removeCheckout is set; if that
-// fails the agent is kept, stopped.
-func (m *Manager) Delete(ctx context.Context, id string, removeCheckout bool) error {
-	a, err := m.Stop(ctx, id)
-	if err != nil {
-		return err
-	}
-	if err := m.cfg.Workspaces.Release(ctx, a.Workspace, removeCheckout); err != nil {
-		return fmt.Errorf("release workspace: %w", err)
-	}
-	if err := m.cfg.Store.Delete(ctx, id); err != nil {
-		return err
-	}
-	m.signal(id)
-	m.nmu.Lock()
-	delete(m.notify, id)
-	m.nmu.Unlock()
-	return nil
 }
 
 // signal wakes watchers of an agent.
@@ -350,5 +232,5 @@ func (m *Manager) close(ctx context.Context, a Agent, status, message string) {
 	if message != "" {
 		_ = m.append(ctx, a, transcript.Event{Kind: transcript.KindError, Text: message}, true)
 	}
-	_ = m.append(ctx, a, transcript.Event{Kind: transcript.KindResult, Status: status}, true)
+	_ = m.append(ctx, a, transcript.Event{Kind: transcript.KindResult, Status: status, Text: message}, true)
 }

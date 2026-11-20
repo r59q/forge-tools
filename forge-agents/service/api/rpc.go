@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/r59q/forge-tools/forge-agents/library/agent"
 	pb "github.com/r59q/forge-tools/forge-agents/service/agentspb"
@@ -37,11 +38,20 @@ func (s *Server) GetAgent(ctx context.Context, req *pb.GetAgentRequest) (*pb.Get
 // ListAgents lists agents oldest first.
 func (s *Server) ListAgents(ctx context.Context, req *pb.ListAgentsRequest) (*pb.ListAgentsResponse, error) {
 	return call(ctx, s, func(ctx context.Context, m *agent.Manager) (*pb.ListAgentsResponse, error) {
-		agents, err := m.List(ctx, agent.Filter{
+		filter := agent.Filter{
 			State:      agent.State(req.GetState()),
 			Parent:     req.GetParent(),
+			Root:       req.GetRoot(),
 			Repository: repositoryOf(req.GetRepository()),
-		})
+		}
+		if req != nil && req.Depth != nil {
+			depth := int(req.GetDepth())
+			if depth < 0 {
+				return nil, fmt.Errorf("%w: depth must be nonnegative", errBadRequest)
+			}
+			filter.Depth = &depth
+		}
+		agents, err := m.List(ctx, filter)
 		if err != nil {
 			return nil, err
 		}

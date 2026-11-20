@@ -68,6 +68,11 @@ ANTHROPIC_API_KEY=... /tmp/forge-agents-service --token-file service-token --cli
 | `--max-running`                 | `FORGE_AGENTS_MAX_RUNNING`                 | `4`                                                  |
 | `--max-events`                  | `FORGE_AGENTS_MAX_EVENTS`                  | `10000`                                              |
 | `--turn-timeout`                | `FORGE_AGENTS_TURN_TIMEOUT`                | `1h`                                                 |
+| `--max-depth`                   | `FORGE_AGENTS_MAX_DEPTH`                   | `2`                                                  |
+| `--max-children`                | `FORGE_AGENTS_MAX_CHILDREN`                | `4`                                                  |
+| `--max-tree-agents`             | `FORGE_AGENTS_MAX_TREE_AGENTS`             | `16`                                                 |
+| `--tree-timeout`                | `FORGE_AGENTS_TREE_TIMEOUT`                | `24h`                                                |
+| `--max-tree-tokens`             | `FORGE_AGENTS_MAX_TREE_TOKENS`             | `2000000`                                            |
 | `--stream-timeout`              | `FORGE_AGENTS_STREAM_TIMEOUT`              | `10m`                                                |
 | `--tools-listen`                | `FORGE_AGENTS_TOOLS_LISTEN`                | `127.0.0.1:0`                                        |
 | `--checkouts-addr`              | `FORGE_AGENTS_CHECKOUTS_ADDR`              | none: checkout workspaces are refused                |
@@ -81,7 +86,9 @@ Every client in `--clients` must be found at startup. `--path-roots` is a
 comma-separated list of absolute directories. `--request-timeout` bounds
 every call but `StreamEvents`, which `--stream-timeout` bounds; a turn runs
 on after the call that started it, until `--turn-timeout`. `--tools-listen`
-is the loopback MCP server through which clients ask questions. The
+is the loopback MCP server for input and child sessions. The tree timeout
+is shared wall-clock time from the first turn, including idle time. The
+tree token budget counts reported input and output tokens. The
 connector flags that every service accepts are ignored.
 
 The service token, and the forge-checkouts token when `--checkouts-addr` is
@@ -102,7 +109,8 @@ The data directory is created with mode 0700, and the service refuses one
 the group or others can access. It holds `agents.db`, mode 0600, the
 scratch workspaces in `scratch/`, and per-turn client configuration in
 `run/`. When the service starts, turns a previous run left in progress end
-with an `error` result and their agents return to `idle`.
+with an `error` result and their agents return to `idle`. Parents in
+`waiting_children` resume with their children's latest results.
 
 ### Checkouts
 
@@ -126,7 +134,7 @@ names.
 | --------------- | -------------------------------------------------- |
 | `CreateAgent`   | `POST /v1/agents`                                  |
 | `GetAgent`      | `GET /v1/agents/{id}`                              |
-| `ListAgents`    | `GET /v1/agents?state=&parent=&repository.source=` |
+| `ListAgents`    | `GET /v1/agents?state=&parent=&root=&depth=&repository.source=` |
 | `SendMessage`   | `POST /v1/agents/{id}/messages`                    |
 | `AnswerInput`   | `POST /v1/agents/{id}/inputs/{request_id}`         |
 | `CancelTurn`    | `POST /v1/agents/{id}/cancel` with `{}`            |

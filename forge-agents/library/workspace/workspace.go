@@ -29,6 +29,8 @@ const (
 	KindPath Kind = "path"
 	// KindCheckout is a new forge-checkouts worktree.
 	KindCheckout Kind = "checkout"
+	// KindShared borrows the parent agent's directory.
+	KindShared Kind = "shared"
 )
 
 // Repository identifies a forge-checkouts repository: a local path, or a
@@ -150,7 +152,7 @@ func (l Local) Release(ctx context.Context, w Workspace, remove bool) error {
 			return fmt.Errorf("%w: checkout", ErrUnavailable)
 		}
 		return l.Checkouts.Remove(ctx, w.Checkout)
-	case KindPath:
+	case KindPath, KindShared:
 	}
 	return nil
 }

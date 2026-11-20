@@ -23,11 +23,13 @@ import (
 )
 
 type fakeCheckouts struct {
-	dir     string
-	removed []string
+	dir      string
+	removed  []string
+	requests []workspace.Spec
 }
 
-func (f *fakeCheckouts) Create(context.Context, workspace.Repository, string) (workspace.Checkout, error) {
+func (f *fakeCheckouts) Create(_ context.Context, repository workspace.Repository, ref string) (workspace.Checkout, error) {
+	f.requests = append(f.requests, workspace.Spec{Repository: repository, Reference: ref})
 	return workspace.Checkout{ID: "0123456789abcdef0123456789abcdef", Path: f.dir, Reference: "main"}, nil
 }
 
@@ -51,11 +53,19 @@ func start(t *testing.T, bounds agent.Bounds, env ...string) *harness {
 
 func startWith(t *testing.T, store *agent.MemoryStore, bounds agent.Bounds, env ...string) *harness {
 	t.Helper()
+	return startWithScripts(t, store, bounds, nil, env...)
+}
+
+func startWithScripts(t *testing.T, store *agent.MemoryStore, bounds agent.Bounds, scripts map[string]string, env ...string) *harness {
+	t.Helper()
 	exe, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
 	}
 	h := &harness{store: store, scripts: t.TempDir(), scratch: t.TempDir(), checkouts: &fakeCheckouts{dir: t.TempDir()}}
+	for name, script := range scripts {
+		h.named(t, name, script)
+	}
 	m, err := agent.Open(t.Context(), agent.Config{
 		Store: store,
 		Clients: map[string]agent.Client{
@@ -65,7 +75,7 @@ func startWith(t *testing.T, store *agent.MemoryStore, bounds agent.Bounds, env 
 		},
 		Executor:   executor.Local{},
 		Workspaces: workspace.Local{ScratchDir: h.scratch, Checkouts: h.checkouts},
-		Env:        append([]string{fakeEnv + "=1", scriptsEnv + "=" + h.scripts}, env...),
+		Env:        append([]string{fakeEnv + "=1", scriptsEnv + "=" + h.scripts, "GORACE=atexit_sleep_ms=0"}, env...),
 		RunDir:     t.TempDir(),
 		Bounds:     bounds,
 	})

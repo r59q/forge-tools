@@ -57,7 +57,7 @@ func (Adapter) Command(turn adapter.Turn) (adapter.Invocation, error) {
 	}
 	args = append(args,
 		"--mcp-config", filepath.Join(turn.RunDir, mcpFile),
-		"--allowedTools", tool(adapter.ToolAsk),
+		"--allowedTools", allowedTools(),
 		// Questions go through ask_user, which waits for the answer.
 		"--disallowedTools", "AskUserQuestion",
 		"--permission-mode", mode(turn.Policy.Mode))
@@ -71,6 +71,14 @@ func (Adapter) Command(turn adapter.Turn) (adapter.Invocation, error) {
 		Env:   []string{"MCP_TOOL_TIMEOUT=" + strconv.FormatInt(turn.Tools.Timeout.Milliseconds(), 10)},
 		Files: map[string][]byte{mcpFile: config},
 	}, nil
+}
+
+func allowedTools() string {
+	names := []string{adapter.ToolAsk, adapter.ToolSpawn, adapter.ToolList, adapter.ToolSend, adapter.ToolWait, adapter.ToolStop}
+	for i := range names {
+		names[i] = tool(names[i])
+	}
+	return strings.Join(names, ",")
 }
 
 func tool(name string) string {

@@ -28,6 +28,10 @@ const (
 	KindError Kind = "error"
 	// KindResult ends a turn.
 	KindResult Kind = "result"
+	// KindChildSpawned records a new child session.
+	KindChildSpawned Kind = "child_spawned"
+	// KindChildFinished records the result of a child's turn.
+	KindChildFinished Kind = "child_finished"
 )
 
 // Message roles.
@@ -82,6 +86,9 @@ type Event struct {
 	Allow bool `json:"allow,omitzero"`
 	// Status is set on results.
 	Status string `json:"status,omitzero"`
+	// ChildID and ChildState are set on child lifecycle events.
+	ChildID    string `json:"childId,omitzero"`
+	ChildState string `json:"childState,omitzero"`
 	// Usage is set on usage events.
 	Usage *Usage `json:"usage,omitzero"`
 	// Truncated reports that Text or Input was cut to the event size limit.

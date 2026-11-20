@@ -12,42 +12,54 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/r59q/forge-tools/forge-agents/library/adapter"
 	"github.com/r59q/forge-tools/forge-agents/library/executor"
+	"github.com/r59q/forge-tools/forge-agents/library/mcp"
 	"github.com/r59q/forge-tools/forge-agents/library/redact"
 	"github.com/r59q/forge-tools/forge-agents/library/transcript"
 )
 
 // Send records a user message and starts a turn answering it.
 func (m *Manager) Send(ctx context.Context, id, text string) (Agent, error) {
-	if strings.TrimSpace(text) == "" || len(text) > m.cfg.Bounds.MaxEventBytes {
-		return Agent{}, fmt.Errorf("%w: a message needs 1 to %d bytes", ErrInvalid, m.cfg.Bounds.MaxEventBytes)
-	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	a, err := m.cfg.Store.Get(ctx, id)
 	if err != nil {
 		return Agent{}, err
 	}
-	switch {
-	case m.closed:
-		return Agent{}, fmt.Errorf("%w: shutting down", ErrState)
-	case a.State != StateCreated && a.State != StateIdle:
+	if a.State != StateCreated && a.State != StateIdle {
 		return Agent{}, fmt.Errorf("%w: agent is %s", ErrState, a.State)
-	case len(m.turns) >= m.cfg.Bounds.MaxRunning:
-		return Agent{}, fmt.Errorf("%w: at most %d turns run at once", ErrLimit, m.cfg.Bounds.MaxRunning)
+	}
+	started, err := m.startTurn(ctx, a, text)
+	if err != nil && started.State == StateFailed {
+		m.afterTurn(ctx, started)
+	}
+	return started, err
+}
+
+// startTurn starts an admitted agent while m.mu is held.
+func (m *Manager) startTurn(ctx context.Context, a Agent, text string) (Agent, error) {
+	if strings.TrimSpace(text) == "" || len(text) > m.cfg.Bounds.MaxEventBytes {
+		return Agent{}, fmt.Errorf("%w: a message needs 1 to %d bytes", ErrInvalid, m.cfg.Bounds.MaxEventBytes)
+	}
+	if err := m.turnSlot(); err != nil {
+		return Agent{}, err
+	}
+	root, err := m.treeBudget(ctx, a)
+	if err != nil {
+		return Agent{}, err
 	}
 	a.Turns++
 	err = m.append(ctx, a, transcript.Event{Kind: transcript.KindMessage, Role: transcript.RoleUser, Text: text}, false)
 	if errors.Is(err, ErrTranscriptFull) {
-		m.close(ctx, a, transcript.StatusLimit, errFull.Error())
-		_, _ = m.update(ctx, id, func(a *Agent) error { a.State, a.Error = StateFailed, errFull.Error(); return nil })
-		return Agent{}, fmt.Errorf("%w: %w", ErrLimit, errFull)
+		failed := m.failTurn(ctx, a, errFull.Error())
+		return failed, fmt.Errorf("%w: %w", ErrLimit, errFull)
 	} else if err != nil {
 		return Agent{}, err
 	}
-	a, err = m.update(ctx, id, func(s *Agent) error {
+	a, err = m.update(ctx, a.ID, func(s *Agent) error {
 		s.State, s.Turns, s.Error = StateRunning, a.Turns, ""
 		return nil
 	})
@@ -56,11 +68,25 @@ func (m *Manager) Send(ctx context.Context, id, text string) (Agent, error) {
 	}
 	// The turn outlives the request that started it.
 	turnCtx, cancel := context.WithCancelCause(context.WithoutCancel(ctx))
-	l := &live{cancel: cancel, done: make(chan struct{}), pending: map[string]chan answer{}}
-	m.turns[id] = l
+	l := &live{
+		root: a.Root, cancel: cancel, cancelled: turnCtx.Done(),
+		done: make(chan struct{}), pending: map[string]pendingInput{},
+	}
+	m.turns[a.ID] = l
 	m.wg.Add(1)
-	go m.run(turnCtx, a, text, l)
+	go m.run(turnCtx, a, text, l, root.TreeDeadline)
 	return a, nil
+}
+
+func (m *Manager) turnSlot() error {
+	switch {
+	case m.closed:
+		return fmt.Errorf("%w: shutting down", ErrState)
+	case len(m.turns) >= m.cfg.Bounds.MaxRunning:
+		return fmt.Errorf("%w: at most %d turns run at once", ErrLimit, m.cfg.Bounds.MaxRunning)
+	default:
+		return nil
+	}
 }
 
 // outcome is how a turn ended.
@@ -69,24 +95,50 @@ type outcome struct {
 	message string
 	session string
 	state   State
+	result  *transcript.Event
 }
 
-func (m *Manager) run(ctx context.Context, a Agent, prompt string, l *live) {
+func (m *Manager) run(ctx context.Context, a Agent, prompt string, l *live, deadline time.Time) {
 	defer m.wg.Done()
 	defer close(l.done)
-	timeout, cancel := context.WithTimeout(ctx, a.Limits.TurnTimeout)
+	defer l.cancel(nil)
+	timeout, cancel := context.WithDeadlineCause(ctx, deadline, errTreeTime)
 	defer cancel()
+	timeout, cancelTurn := context.WithTimeout(timeout, a.Limits.TurnTimeout)
+	defer cancelTurn()
 	// Bookkeeping after the turn must survive its cancellation.
 	store := context.WithoutCancel(ctx)
 	o := m.execute(timeout, store, a, prompt, l)
-	if o.status != transcript.StatusSuccess || o.message != "" {
-		m.close(store, a, o.status, o.message)
-	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if l.stopping {
+		o.state, o.status, o.message = StateStopped, transcript.StatusStopped, ""
+	} else if o.state == StateIdle && ctx.Err() == nil && !m.closed && m.hasWorkingChildren(store, a.ID) {
+		o.state = StateWaitingChildren
+	}
+	finished, err := m.finish(store, a, o)
 	delete(m.turns, a.ID)
-	_, _ = m.update(store, a.ID, func(s *Agent) error {
-		s.State, s.Error = o.state, ""
+	if err == nil {
+		m.afterTurn(store, finished)
+	}
+}
+
+func (m *Manager) failTurn(ctx context.Context, a Agent, message string) Agent {
+	a, _ = m.finish(ctx, a, outcome{state: StateFailed, status: transcript.StatusLimit, message: message})
+	return a
+}
+
+func (m *Manager) finish(ctx context.Context, a Agent, o outcome) (Agent, error) {
+	result := o.message
+	if o.result == nil || o.result.Status != o.status {
+		m.close(ctx, a, o.status, o.message)
+	} else {
+		result = o.result.Text
+		_ = m.append(ctx, a, *o.result, true)
+	}
+	return m.update(ctx, a.ID, func(s *Agent) error {
+		s.State, s.Error, s.Turns = o.state, "", a.Turns
+		s.Result, s.ResultStatus = shortResult(result), o.status
 		if o.status != transcript.StatusSuccess {
 			s.Error = o.message
 			if s.Error == "" {
@@ -106,7 +158,9 @@ func (m *Manager) execute(ctx, store context.Context, a Agent, prompt string, l 
 	client := m.cfg.Clients[a.Client]
 	runDir := filepath.Join(m.cfg.RunDir, a.ID+"-"+strconv.Itoa(a.Turns))
 	defer func() { _ = os.RemoveAll(runDir) }()
-	token, unregister := m.tools.Register(m.binding(ctx, a, l))
+	token, unregister := m.tools.RegisterFor(func(token string) mcp.Binding {
+		return m.binding(ctx, a, l, redact.FromEnv(m.cfg.Env, token))
+	})
 	defer unregister()
 	inv, err := client.Adapter.Command(adapter.Turn{
 		Session: a.Session, Model: a.Model, Effort: a.Effort, Policy: a.Policy, RunDir: runDir,
@@ -132,8 +186,14 @@ func (m *Manager) execute(ctx, store context.Context, a Agent, prompt string, l 
 	stderr := r.redactor.Bytes(exit.Stderr)
 	output := Output{Stdout: r.raw.Bytes(), Stderr: stderr, Truncated: r.raw.truncated}
 	_ = m.cfg.Store.PutOutput(store, a.ID, a.Turns, output, m.cfg.Bounds.KeepOutputs)
-	o := outcome{session: r.stream.Session(), state: StateIdle}
+	o := outcome{session: r.stream.Session(), state: StateIdle, result: r.result}
 	o.status, o.message = m.ending(ctx, err, exit, stderr, r.stream.HasResult())
+	if o.status == transcript.StatusSuccess && r.result != nil {
+		o.status = r.result.Status
+		if o.status != transcript.StatusSuccess {
+			o.message = r.result.Text
+		}
+	}
 	switch o.status {
 	case transcript.StatusStopped:
 		o.state = StateStopped
@@ -151,10 +211,12 @@ func (m *Manager) ending(ctx context.Context, err error, exit executor.Exit, std
 		return transcript.StatusCancelled, ""
 	case errors.Is(cause, errStopped):
 		return transcript.StatusStopped, ""
-	case errors.Is(cause, errFull):
-		return transcript.StatusLimit, errFull.Error()
+	case errors.Is(cause, errFull), errors.Is(cause, errTreeTokens):
+		return transcript.StatusLimit, cause.Error()
 	case errors.Is(cause, errShutdown):
 		return transcript.StatusError, errShutdown.Error()
+	case errors.Is(cause, errTreeTime):
+		return transcript.StatusTimeout, cause.Error()
 	case errors.Is(cause, context.DeadlineExceeded):
 		return transcript.StatusTimeout, "turn timed out"
 	case err != nil:
@@ -199,6 +261,7 @@ type reader struct {
 	redactor redact.Redactor
 	raw      bounded
 	full     bool
+	result   *transcript.Event
 }
 
 // read consumes the output and reports whether the transcript filled up.
@@ -238,6 +301,14 @@ func (r *reader) flush() {
 
 func (r *reader) emit(extra ...transcript.Event) {
 	for _, e := range append(r.stream.Take(), extra...) {
+		if e.Usage != nil {
+			r.m.chargeUsage(r.ctx, r.agent.Root, *e.Usage)
+		}
+		if e.Kind == transcript.KindResult {
+			e = e.Truncate(r.m.cfg.Bounds.MaxEventBytes)
+			r.result = &e
+			continue
+		}
 		if r.full {
 			return
 		}

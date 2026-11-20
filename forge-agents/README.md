@@ -23,6 +23,11 @@ workspace, with a durable transcript the same for every client.
 - **Turns, not processes.** Each message starts one client process, which
   resumes the client's own session and exits at the end of the turn.
   Nothing runs between turns.
+- **Child sessions.** An agent can delegate through its scoped MCP handle
+  and can wait for results or end its turn. If a child is still working,
+  forge-agents resumes the parent once all its children finish. The parent
+  transcript records `child_spawned` and `child_finished`. REST and gRPC
+  expose the direct parent, root and depth.
 - **People answer questions.** A client asks through the `ask_user` tool,
   and Claude Code also asks for permissions; the agent waits in
   `waiting_input` until the question is answered through the API. Codex and
@@ -43,3 +48,32 @@ workspace, with a durable transcript the same for every client.
 forge-agents combines one other tool: it may use forge-checkouts, and no
 other tool. The library depends only on a workspace interface; the service
 wires in the forge-checkouts client.
+
+## Delegating work
+
+| MCP tool | Arguments and result |
+| --- | --- |
+| `spawn_agent` | `prompt` and `workspace`. Optional `client`, `model` and `effort` inherit from the parent. Returns the child `id`. |
+| `list_agents` | Lists direct children with their state, latest result and pending input requests. |
+| `send_message` | `id` and `text`. Starts a turn on the child. |
+| `wait_agents` | `ids` and optional `timeout_ms` (default 30,000). Returns child states and results with a `timed_out` flag. |
+| `stop_agent` | `id`. Stops the child and its descendants. |
+
+Choose `none` for a fresh scratch directory, `checkout` for a new
+forge-checkouts worktree of the associated repository's default branch,
+or `shared` to use the parent's directory. A checkout needs an ancestor
+with a repository checkout or a configured path to a local repository.
+Concurrent writes in a shared workspace can overwrite or conflict with
+each other. Use `checkout` for children that write.
+
+Children inherit the parent's client/model allowlist and permissions.
+`spawn_agent` can narrow these with `allowed_models` (client/model pairs),
+`mode` or `ask`. The root's own client/model pair is its default
+allowlist. Child input requests are answered through the regular API,
+using the child and request IDs.
+
+Each child result uses up to 4 KiB of text from its last completed turn.
+An agent with unfinished children enters `waiting_children` without
+occupying a turn slot. The continuation receives each child's ID, state
+and result. Stopping or deleting the parent stops the subtree. Deletion
+keeps descendant records for inspection.

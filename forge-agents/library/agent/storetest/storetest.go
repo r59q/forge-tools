@@ -4,6 +4,7 @@ package storetest
 
 import (
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -40,7 +41,10 @@ func testAgents(t *testing.T, s agent.Store) {
 	ctx := t.Context()
 	base := time.Date(2026, 11, 17, 10, 0, 0, 0, time.UTC)
 	b, a := sample("b", base), sample("a", base.Add(time.Second))
-	a.Parent, a.Workspace = "b", workspace.Workspace{Kind: workspace.KindScratch, Path: "/tmp/a"}
+	a.Parent, a.Root, a.Depth = "b", "b", 1
+	a.Workspace = workspace.Workspace{Kind: workspace.KindScratch, Path: "/tmp/a"}
+	b.Root, b.TreeTokens, b.TreeDeadline = b.ID, 42, base.Add(time.Hour)
+	b.AllowedModels = []agent.Model{{Client: b.Client, Name: b.Model}}
 	for _, x := range []agent.Agent{a, b} {
 		if err := s.Put(ctx, x); err != nil {
 			t.Fatal(err)
@@ -50,6 +54,10 @@ func testAgents(t *testing.T, s agent.Store) {
 	if err != nil || got.Policy != b.Policy || got.Limits != b.Limits || got.Workspace != b.Workspace || !got.CreatedAt.Equal(b.CreatedAt) {
 		t.Fatalf("get = %+v, %v", got, err)
 	}
+	if got.Root != b.ID || got.TreeTokens != b.TreeTokens || !got.TreeDeadline.Equal(b.TreeDeadline) ||
+		!slices.Equal(got.AllowedModels, b.AllowedModels) {
+		t.Errorf("tree data = %+v", got)
+	}
 	if _, err := s.Get(ctx, "c"); !errors.Is(err, agent.ErrNotFound) {
 		t.Errorf("get missing: %v", err)
 	}
@@ -57,6 +65,7 @@ func testAgents(t *testing.T, s agent.Store) {
 	if err := s.Put(ctx, b); err != nil {
 		t.Fatal(err)
 	}
+	rootDepth := 0
 	for name, c := range map[string]struct {
 		f    agent.Filter
 		want string
@@ -64,6 +73,8 @@ func testAgents(t *testing.T, s agent.Store) {
 		"all":        {agent.Filter{}, "ba"},
 		"state":      {agent.Filter{State: agent.StateRunning}, "b"},
 		"parent":     {agent.Filter{Parent: "b"}, "a"},
+		"root":       {agent.Filter{Root: "b"}, "ba"},
+		"depth":      {agent.Filter{Depth: &rootDepth}, "b"},
 		"repository": {agent.Filter{Repository: repository()}, "b"},
 		"none":       {agent.Filter{State: agent.StateFailed}, ""},
 	} {

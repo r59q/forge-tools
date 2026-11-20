@@ -29,6 +29,9 @@ func specOf(req *pb.CreateAgentRequest) (agent.Spec, error) {
 		Limits: agent.Limits{MaxEvents: req.GetLimits().GetMaxEvents()},
 		Parent: req.GetParent(),
 	}
+	for _, model := range req.GetPolicy().GetAllowedModels() {
+		spec.AllowedModels = append(spec.AllowedModels, agent.Model{Client: model.GetClient(), Name: model.GetModel()})
+	}
 	if timeout := req.GetLimits().GetTurnTimeout(); timeout != nil {
 		if timeout.CheckValid() != nil || timeout.AsDuration() <= 0 {
 			return agent.Spec{}, fmt.Errorf("%w: turn timeout", errBadRequest)
@@ -50,6 +53,10 @@ func repositoryPB(r workspace.Repository) *pb.Repository {
 }
 
 func agentPB(a agent.Agent) *pb.Agent {
+	policy := &pb.Policy{Mode: a.Policy.Mode, Ask: a.Policy.Ask}
+	for _, model := range a.AllowedModels {
+		policy.AllowedModels = append(policy.AllowedModels, &pb.ClientModel{Client: model.Client, Model: model.Name})
+	}
 	return &pb.Agent{
 		Id:     a.ID,
 		Client: a.Client,
@@ -62,9 +69,11 @@ func agentPB(a agent.Agent) *pb.Agent {
 			Repository: repositoryPB(a.Workspace.Repository),
 			Reference:  a.Workspace.Reference,
 		},
-		Policy:    &pb.Policy{Mode: a.Policy.Mode, Ask: a.Policy.Ask},
+		Policy:    policy,
 		Limits:    &pb.Limits{TurnTimeout: durationpb.New(a.Limits.TurnTimeout), MaxEvents: a.Limits.MaxEvents},
 		Parent:    a.Parent,
+		Root:      a.Root,
+		Depth:     int32Of(a.Depth),
 		State:     string(a.State),
 		Session:   a.Session,
 		Turns:     int32Of(a.Turns),
@@ -90,6 +99,8 @@ func eventPB(e transcript.Event) *pb.Event {
 		RequestKind: e.RequestKind,
 		Allow:       e.Allow,
 		Status:      e.Status,
+		ChildId:     e.ChildID,
+		ChildState:  e.ChildState,
 		Truncated:   e.Truncated,
 	}
 	if u := e.Usage; u != nil {

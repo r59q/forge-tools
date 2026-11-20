@@ -52,13 +52,14 @@ type AgentsServiceClient interface {
 	SendMessage(ctx context.Context, in *SendMessageRequest, opts ...grpc.CallOption) (*SendMessageResponse, error)
 	// AnswerInput answers a pending input request, which resumes the turn.
 	AnswerInput(ctx context.Context, in *AnswerInputRequest, opts ...grpc.CallOption) (*AnswerInputResponse, error)
-	// CancelTurn kills the running client and returns the agent to idle. An
-	// agent without a turn is returned unchanged.
+	// CancelTurn kills the running client or cancels a pending continuation
+	// and returns the agent to idle.
 	CancelTurn(ctx context.Context, in *CancelTurnRequest, opts ...grpc.CallOption) (*CancelTurnResponse, error)
-	// StopAgent kills any running client and stops the agent for good. Its
-	// transcript and workspace are kept.
+	// StopAgent kills running clients in the agent's subtree and stops them
+	// for good. Their transcripts and workspaces are kept.
 	StopAgent(ctx context.Context, in *StopAgentRequest, opts ...grpc.CallOption) (*StopAgentResponse, error)
-	// DeleteAgent stops an agent and removes it with its transcript. Scratch
+	// DeleteAgent stops an agent and its descendants, then removes the named
+	// agent and its transcript. Descendant records are kept. Scratch
 	// workspaces are removed; a checkout only when remove_checkout is set, and
 	// forge-checkouts refuses one with uncommitted changes.
 	DeleteAgent(ctx context.Context, in *DeleteAgentRequest, opts ...grpc.CallOption) (*DeleteAgentResponse, error)
@@ -224,13 +225,14 @@ type AgentsServiceServer interface {
 	SendMessage(context.Context, *SendMessageRequest) (*SendMessageResponse, error)
 	// AnswerInput answers a pending input request, which resumes the turn.
 	AnswerInput(context.Context, *AnswerInputRequest) (*AnswerInputResponse, error)
-	// CancelTurn kills the running client and returns the agent to idle. An
-	// agent without a turn is returned unchanged.
+	// CancelTurn kills the running client or cancels a pending continuation
+	// and returns the agent to idle.
 	CancelTurn(context.Context, *CancelTurnRequest) (*CancelTurnResponse, error)
-	// StopAgent kills any running client and stops the agent for good. Its
-	// transcript and workspace are kept.
+	// StopAgent kills running clients in the agent's subtree and stops them
+	// for good. Their transcripts and workspaces are kept.
 	StopAgent(context.Context, *StopAgentRequest) (*StopAgentResponse, error)
-	// DeleteAgent stops an agent and removes it with its transcript. Scratch
+	// DeleteAgent stops an agent and its descendants, then removes the named
+	// agent and its transcript. Descendant records are kept. Scratch
 	// workspaces are removed; a checkout only when remove_checkout is set, and
 	// forge-checkouts refuses one with uncommitted changes.
 	DeleteAgent(context.Context, *DeleteAgentRequest) (*DeleteAgentResponse, error)

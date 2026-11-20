@@ -77,6 +77,7 @@ type settings struct {
 
 // flags holds the raw values of the settings that need parsing.
 type flags struct {
+	tree                                                treeFlags
 	clients, roots                                      string
 	paths                                               map[string]*string
 	maxAgents, maxRunning, maxEvents, turnTimeout       string
@@ -102,7 +103,8 @@ func parse(args []string, getenv func(string) string, help io.Writer) (settings,
 		fs.StringVar(&f.streamTimeout, "stream-timeout", env("STREAM_TIMEOUT", "10m"),
 			"longest event stream; callers resume from the last event")
 		fs.StringVar(&s.toolsListen, "tools-listen", env("TOOLS_LISTEN", "127.0.0.1:0"),
-			"listen address of the MCP tool server clients ask questions through")
+			"listen address of the scoped MCP tool server for input and child sessions")
+		f.tree.register(fs, env)
 		checkoutFlags(fs, env, &s.checkouts, &f)
 	}
 
@@ -194,7 +196,8 @@ func boundsOf(f flags) (agent.Bounds, error) {
 	if b.TurnTimeout, err = time.ParseDuration(f.turnTimeout); err != nil || b.TurnTimeout <= 0 {
 		return b, errors.New("invalid turn-timeout")
 	}
-	return b, nil
+	err = f.tree.apply(&b)
+	return b, err
 }
 
 // resolve finds the binary of every client.

@@ -5,12 +5,12 @@ as a Go library. It has no dependencies beyond the standard library.
 
 | Package      | What it holds                                                                      |
 | ------------ | ---------------------------------------------------------------------------------- |
-| `agent`      | The manager: agents, their states and turns, input requests, bounds and the store. |
+| `agent`      | The manager: agents, their trees and turns, input requests, bounds and the store. |
 | `adapter`    | The client interface, policies, and `claude`, `codex` and `gemini` adapters.       |
 | `transcript` | The events every adapter produces.                                                 |
 | `workspace`  | Scratch, path and checkout workspaces, behind a provider interface.                |
 | `executor`   | The executor interface and `Local`, which runs processes on this host.             |
-| `mcp`        | The MCP tool server clients ask questions and permissions through.                 |
+| `mcp`        | The scoped MCP tool server for input requests and child sessions.                   |
 | `redact`     | Masks credential values in events, raw output and errors.                          |
 
 ## Build and test
@@ -25,7 +25,8 @@ go test -race ./...
 No test calls a model. Adapter tests replay hand-built client output from
 `adapter/testdata/<client>/*.jsonl` and compare the events with the
 `.golden.json` files next to them; run `go test ./adapter -update` to
-rewrite those. Manager tests use a fake executor.
+rewrite those. Manager tests run fake CLI scripts, including scripts that
+make MCP calls.
 
 ## Use
 
@@ -59,7 +60,9 @@ agent to `idle`; `Stop` kills it and stops the agent for good. An agent
 whose transcript is full ends `failed`.
 
 When the manager opens, it ends turns a previous run left in progress with
-an `error` result and returns their agents to `idle`.
+an `error` result and returns their agents to `idle`. A parent already
+in `waiting_children` can continue with those results. See the
+[delegation tools](../README.md#delegating-work).
 
 ## Clients
 
@@ -104,6 +107,16 @@ The MCP server listens on loopback, and each turn has its own token.
 | `MaxOutputBytes` | 4 MiB   | Raw output is cut, marked `truncated`.             |
 | `KeepOutputs`    | 10      | Older turns lose their raw output.                 |
 | `TurnTimeout`    | 1h      | The turn ends with a `timeout` result.             |
+| `MaxDepth`       | 2       | A deeper child fails to start.                     |
+| `MaxChildren`    | 4       | The parent cannot add another direct child.        |
+| `MaxTreeAgents`  | 16      | The tree cannot add another agent.                  |
+| `TreeTimeout`    | 24h     | The shared deadline expires.                       |
+| `MaxTreeTokens`  | 2000000 | Reported input and output exhaust the tree budget. |
+
+Tree size counts existing records, including stopped agents. The tree's
+clock starts at its first turn and continues between turns. The deadline
+and reported tokens are stored with the root. Token use is enforced when
+the client reports it, which may be at the end of a turn.
 
 ## Credentials
 

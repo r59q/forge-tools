@@ -27,15 +27,16 @@ var (
 // State is where an agent is in its life.
 type State string
 
-// Agent states. created → running → idle | waiting_input → … → stopped |
-// failed.
+// Agent states. WaitingChildren means a turn ended and its children are
+// still working or a slot is needed for the continuation.
 const (
-	StateCreated      State = "created"
-	StateRunning      State = "running"
-	StateIdle         State = "idle"
-	StateWaitingInput State = "waiting_input"
-	StateStopped      State = "stopped"
-	StateFailed       State = "failed"
+	StateCreated         State = "created"
+	StateRunning         State = "running"
+	StateIdle            State = "idle"
+	StateWaitingInput    State = "waiting_input"
+	StateWaitingChildren State = "waiting_children"
+	StateStopped         State = "stopped"
+	StateFailed          State = "failed"
 )
 
 // Terminal reports a state no turn can leave.
@@ -65,15 +66,26 @@ type Agent struct {
 	Limits    Limits              `json:"limits"`
 	// Parent is the agent that started this one, if any.
 	Parent string `json:"parent,omitzero"`
-	State  State  `json:"state"`
+	// Root is the topmost agent's ID. Depth is zero at the root.
+	Root  string `json:"root"`
+	Depth int    `json:"depth,omitzero"`
+	// AllowedModels limits the client/model pairs descendants can select.
+	AllowedModels []Model `json:"allowedModels,omitzero"`
+	State         State   `json:"state"`
 	// Session is the client's session ID, resumed by the next turn.
 	Session string `json:"session,omitzero"`
 	// Turns counts the turns started.
 	Turns int `json:"turns,omitzero"`
 	// Error is why the latest turn failed, if it did.
-	Error     string    `json:"error,omitzero"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	Error string `json:"error,omitzero"`
+	// Result and ResultStatus come from the final result of the latest turn.
+	Result       string `json:"result,omitzero"`
+	ResultStatus string `json:"resultStatus,omitzero"`
+	// TreeDeadline and TreeTokens track the budget on the root agent.
+	TreeDeadline time.Time `json:"treeDeadline,omitzero"`
+	TreeTokens   int64     `json:"treeTokens,omitzero"`
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
 }
 
 // Spec asks for an agent.
@@ -86,6 +98,17 @@ type Spec struct {
 	Policy adapter.Policy
 	Limits Limits
 	Parent string
+	// AllowedModels governs client/model selection for descendants. A root
+	// defaults to its own selection; a child inherits the parent's list.
+	AllowedModels []Model
+	modelSet      bool
+	effortSet     bool
+}
+
+// Model identifies a client/model pair. Name can be empty for the client's default.
+type Model struct {
+	Client string `json:"client"`
+	Name   string `json:"model"`
 }
 
 // Bounds limit the manager. Zero values take defaults.
@@ -106,6 +129,16 @@ type Bounds struct {
 	KeepOutputs int
 	// TurnTimeout is the longest a turn may run.
 	TurnTimeout time.Duration
+	// MaxDepth is the deepest child, counting a root at depth zero.
+	MaxDepth int
+	// MaxChildren is how many direct children an agent may have.
+	MaxChildren int
+	// MaxTreeAgents is how many agents a tree may contain, including its root.
+	MaxTreeAgents int
+	// TreeTimeout is the lifetime of the tree from the root's first activity.
+	TreeTimeout time.Duration
+	// MaxTreeTokens limits reported input and output tokens across a tree.
+	MaxTreeTokens int64
 }
 
 // Default bounds.
@@ -118,6 +151,11 @@ const (
 	DefaultMaxOutputBytes = 4 << 20
 	DefaultKeepOutputs    = 10
 	DefaultTurnTimeout    = time.Hour
+	DefaultMaxDepth       = 2
+	DefaultMaxChildren    = 4
+	DefaultMaxTreeAgents  = 16
+	DefaultTreeTimeout    = 24 * time.Hour
+	DefaultMaxTreeTokens  = 2_000_000
 	// minEvents leaves room for a message, the closing events and some
 	// work.
 	minEvents = 16
@@ -135,6 +173,11 @@ func (b Bounds) WithDefaults() Bounds {
 	b.MaxOutputBytes = orDefault(b.MaxOutputBytes, DefaultMaxOutputBytes)
 	b.KeepOutputs = orDefault(b.KeepOutputs, DefaultKeepOutputs)
 	b.TurnTimeout = orDefault(b.TurnTimeout, DefaultTurnTimeout)
+	b.MaxDepth = orDefault(b.MaxDepth, DefaultMaxDepth)
+	b.MaxChildren = orDefault(b.MaxChildren, DefaultMaxChildren)
+	b.MaxTreeAgents = orDefault(b.MaxTreeAgents, DefaultMaxTreeAgents)
+	b.TreeTimeout = orDefault(b.TreeTimeout, DefaultTreeTimeout)
+	b.MaxTreeTokens = orDefault(b.MaxTreeTokens, DefaultMaxTreeTokens)
 	return b
 }
 

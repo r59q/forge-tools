@@ -8,6 +8,7 @@ import (
 
 	"github.com/r59q/forge-tools/forge-agents/library/adapter"
 	"github.com/r59q/forge-tools/forge-agents/library/mcp"
+	"github.com/r59q/forge-tools/forge-agents/library/redact"
 	"github.com/r59q/forge-tools/forge-agents/library/transcript"
 )
 
@@ -21,11 +22,12 @@ type answer struct {
 var errUnanswered = errors.New("the turn ended before the question was answered")
 
 // binding connects a turn's tool calls to input requests.
-func (m *Manager) binding(ctx context.Context, a Agent, l *live) mcp.Binding {
+func (m *Manager) binding(ctx context.Context, a Agent, l *live, mask redact.Redactor) mcp.Binding {
 	b := mcp.Binding{
+		Children: m.childTools(ctx, a, l, mask),
 		Ask: func(call context.Context, question string) (string, error) {
 			reply, err := m.request(ctx, call, a, l, transcript.Event{
-				Kind: transcript.KindInputRequest, RequestKind: transcript.RequestQuestion, Text: question,
+				Kind: transcript.KindInputRequest, RequestKind: transcript.RequestQuestion, Text: mask.String(question),
 			})
 			return reply.text, err
 		},
@@ -35,7 +37,7 @@ func (m *Manager) binding(ctx context.Context, a Agent, l *live) mcp.Binding {
 		b.Approve = func(call context.Context, tool string, input json.RawMessage) (mcp.Decision, error) {
 			reply, err := m.request(ctx, call, a, l, transcript.Event{
 				Kind: transcript.KindInputRequest, RequestKind: transcript.RequestPermission,
-				ToolName: tool, Input: adapter.JSON(input),
+				ToolName: tool, Input: mask.String(adapter.JSON(input)),
 			})
 			return mcp.Decision{Allow: reply.allow, Message: reply.text}, err
 		}
@@ -49,26 +51,10 @@ func (m *Manager) request(turn, call context.Context, a Agent, l *live, e transc
 	store := context.WithoutCancel(turn)
 	e.RequestID = newID(8)
 	ch := make(chan answer, 1)
-	m.mu.Lock()
-	l.pending[e.RequestID] = ch
-	m.mu.Unlock()
-	defer m.settle(store, a.ID, l, e.RequestID)
-	if err := m.append(store, a, e, false); err != nil {
-		if errors.Is(err, ErrTranscriptFull) {
-			l.cancel(errFull)
-		}
+	if err := m.registerInput(store, a, l, e, ch); err != nil {
 		return answer{}, err
 	}
-	m.mu.Lock()
-	if _, ok := l.pending[e.RequestID]; ok {
-		_, _ = m.update(store, a.ID, func(s *Agent) error {
-			if s.State == StateRunning {
-				s.State = StateWaitingInput
-			}
-			return nil
-		})
-	}
-	m.mu.Unlock()
+	defer m.settle(store, a.ID, l, e.RequestID)
 	select {
 	case reply := <-ch:
 		return reply, nil
@@ -79,6 +65,34 @@ func (m *Manager) request(turn, call context.Context, a Agent, l *live, e transc
 			Text: "the client stopped waiting for input request " + e.RequestID}, false)
 		return answer{}, call.Err()
 	}
+}
+
+type pendingInput struct {
+	event transcript.Event
+	reply chan answer
+}
+
+func (m *Manager) registerInput(ctx context.Context, a Agent, l *live, e transcript.Event, ch chan answer) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := m.checkCaller(ctx, a.ID, l); err != nil {
+		return err
+	}
+	if err := m.append(ctx, a, e, false); err != nil {
+		if errors.Is(err, ErrTranscriptFull) {
+			l.cancel(errFull)
+		}
+		return err
+	}
+	l.pending[e.RequestID] = pendingInput{event: e, reply: ch}
+	_, err := m.update(ctx, a.ID, func(s *Agent) error {
+		s.State = StateWaitingInput
+		return nil
+	})
+	if err != nil {
+		delete(l.pending, e.RequestID)
+	}
+	return err
 }
 
 // settle forgets a request and returns the agent to running when nothing
@@ -116,22 +130,22 @@ func (m *Manager) Answer(ctx context.Context, id, requestID, text string, allow 
 		return Agent{}, err
 	}
 	l := m.turns[id]
-	var ch chan answer
+	var pending pendingInput
 	if l != nil {
-		ch = l.pending[requestID]
+		pending = l.pending[requestID]
 	}
-	if ch == nil {
+	if pending.reply == nil {
 		m.mu.Unlock()
 		return Agent{}, fmt.Errorf("%w: no pending input request %q", ErrNotFound, requestID)
 	}
 	delete(l.pending, requestID)
 	err = m.append(ctx, a, transcript.Event{Kind: transcript.KindInputAnswer, RequestID: requestID, Text: text, Allow: allow}, false)
 	if err != nil {
-		l.pending[requestID] = ch
+		l.pending[requestID] = pending
 		m.mu.Unlock()
 		return Agent{}, err
 	}
-	ch <- answer{text: text, allow: allow}
+	pending.reply <- answer{text: text, allow: allow}
 	m.resume(ctx, id, l)
 	m.mu.Unlock()
 	return m.cfg.Store.Get(ctx, id)

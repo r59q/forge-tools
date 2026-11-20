@@ -10,10 +10,12 @@ import (
 	"github.com/r59q/forge-tools/forge-agents/library/workspace"
 )
 
-// Filter selects agents. Zero fields match any agent.
+// Filter selects agents. Unset fields match any agent.
 type Filter struct {
 	State      State
 	Parent     string
+	Root       string
+	Depth      *int
 	Repository workspace.Repository
 }
 
@@ -21,6 +23,8 @@ type Filter struct {
 func (f Filter) Match(a Agent) bool {
 	return (f.State == "" || a.State == f.State) &&
 		(f.Parent == "" || a.Parent == f.Parent) &&
+		(f.Root == "" || a.Root == f.Root) &&
+		(f.Depth == nil || a.Depth == *f.Depth) &&
 		(f.Repository.IsZero() || a.Workspace.Repository == f.Repository)
 }
 
@@ -70,7 +74,7 @@ func NewMemoryStore() *MemoryStore {
 func (s *MemoryStore) Put(_ context.Context, a Agent) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.agents[a.ID] = a
+	s.agents[a.ID] = cloneAgent(a)
 	return nil
 }
 
@@ -82,7 +86,7 @@ func (s *MemoryStore) Get(_ context.Context, id string) (Agent, error) {
 	if !ok {
 		return Agent{}, ErrNotFound
 	}
-	return a, nil
+	return cloneAgent(a), nil
 }
 
 // List returns matching agents.
@@ -92,7 +96,7 @@ func (s *MemoryStore) List(_ context.Context, f Filter) ([]Agent, error) {
 	var list []Agent
 	for _, a := range s.agents {
 		if f.Match(a) {
-			list = append(list, a)
+			list = append(list, cloneAgent(a))
 		}
 	}
 	sort.Slice(list, func(i, j int) bool {
@@ -102,6 +106,11 @@ func (s *MemoryStore) List(_ context.Context, f Filter) ([]Agent, error) {
 		return list[i].CreatedAt.Before(list[j].CreatedAt)
 	})
 	return list, nil
+}
+
+func cloneAgent(a Agent) Agent {
+	a.AllowedModels = slices.Clone(a.AllowedModels)
+	return a
 }
 
 // Delete removes an agent.

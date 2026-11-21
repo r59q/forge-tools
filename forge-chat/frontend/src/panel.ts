@@ -6,7 +6,7 @@ import { followChat } from "./live.js";
 import { Sidebar } from "./sidebar.js";
 import { Transcript } from "./transcript.js";
 import { TranscriptView } from "./transcript-view.js";
-import type { Agent, ChatProvider, MetadataPatch } from "./types.js";
+import type { Agent, ChatOptions, ChatProvider, MetadataPatch } from "./types.js";
 
 interface ActiveChat {
   view: ChatView;
@@ -27,12 +27,12 @@ export class ChatPanel {
   private refreshing = false;
   private catalogKey = "";
 
-  constructor(private readonly provider: ChatProvider) {
+  constructor(private readonly provider: ChatProvider, options: ChatOptions) {
     const create = createForm(spec => this.perform(async signal => {
       const agent = await provider.create(spec, signal);
       this.accept(agent);
       this.select(agent.id);
-    }));
+    }), options.repositories);
     this.sidebar = new Sidebar(create, id => this.select(id), () => {
       this.catalog.showArchived = !this.catalog.showArchived;
       this.renderCatalog();

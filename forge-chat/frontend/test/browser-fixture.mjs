@@ -10,23 +10,41 @@ export async function fixture() {
   const answers = [];
   const cursors = [];
   const creates = [];
-  const events = [line(1, "message", { role: "user", text: "Child result: the build passes" })];
-  let stream;
+  const messages = [];
+  const transcripts = new Map([[parent.id, [line(1, "message", { role: "user", text: "Child result: the build passes" })]]]);
+  const streams = new Map();
 
-  function write(seq, kind, data) {
+  function write(id, seq, kind, data) {
     const entry = line(seq, kind, data);
-    events.push(entry);
-    stream?.write(entry);
+    transcripts.get(id).push(entry);
+    streams.get(id)?.write(entry);
   }
 
   function startStream(res, id, after) {
     res.writeHead(200, { "Content-Type": "application/x-ndjson" });
     res.flushHeaders();
-    if (id !== "parent") return res.end();
-    cursors.push(after);
+    const events = transcripts.get(id);
+    if (!events) return res.end();
+    if (id === parent.id) cursors.push(after);
     events.slice(Number(after)).forEach(entry => res.write(entry));
-    stream = res;
-    res.on("close", () => { if (stream === res) stream = undefined; });
+    streams.set(id, res);
+    res.on("close", () => { if (streams.get(id) === res) streams.delete(id); });
+  }
+
+  async function turn(req, current) {
+    const { id } = current;
+    const { text } = await body(req);
+    messages.push({ id, text });
+    current.state = "running";
+    if (id === parent.id) {
+      write(id, 2, "message", { role: "user", text });
+      write(id, 3, "tool_call", { toolId: "read", toolName: "Read", input: "README.md" });
+    } else {
+      const seq = transcripts.get(id).length + 1;
+      write(id, seq, "message", { role: "user", text });
+      write(id, seq + 1, "message", { role: "assistant", text: `Reply from ${id}` });
+      current.state = "idle";
+    }
   }
 
   async function handle(req, res) {
@@ -47,31 +65,28 @@ export async function fixture() {
       const created = { ...agent(`new-${creates.length + 1}`, spec.client, "", new Date().toISOString()), ...spec, state: "created" };
       creates.push(spec);
       agents.push(created);
+      transcripts.set(created.id, []);
       return send(res, created);
     }
     const current = agents.find(entry => entry.id === id);
     if (!current) return send(res, {}, 404);
     if (action === "stream") return startStream(res, id, url.searchParams.get("after"));
-    if (action === "messages") {
-      current.state = "running";
-      write(2, "message", { role: "user", text: (await body(req)).text });
-      write(3, "tool_call", { toolId: "read", toolName: "Read", input: "README.md" });
-    }
+    if (action === "messages") await turn(req, current);
     if (action === "inputs") {
       const answer = await body(req);
       answers.push({ input, ...answer });
-      write(input === "question" ? 6 : 8, "input_answer", { requestId: input, ...answer });
+      write(id, input === "question" ? 6 : 8, "input_answer", { requestId: input, ...answer });
       if (input === "question") {
-        write(7, "input_request", { requestId: "permission", requestKind: "permission", toolName: "Read", input: "build.log" });
+        write(id, 7, "input_request", { requestId: "permission", requestKind: "permission", toolName: "Read", input: "build.log" });
       } else {
-        write(9, "message", { role: "assistant", text: "See [the diff](https://example.test/diff) <img src=/bad>" });
-        write(10, "result", { status: "success" });
+        write(id, 9, "message", { role: "assistant", text: "See [the diff](https://example.test/diff) <img src=/bad>" });
+        write(id, 10, "result", { status: "success" });
         current.state = "idle";
       }
     }
     if (action === "stop") {
       current.state = "stopped";
-      if (id === "parent") stream?.end();
+      streams.get(id)?.end();
     }
     return send(res, current);
   }
@@ -83,12 +98,14 @@ export async function fixture() {
   await once(server, "listening");
   return {
     url: `http://127.0.0.1:${server.address().port}`,
-    answers, cursors, creates, agents,
+    answers, cursors, creates, agents, messages,
     close() { server.closeAllConnections(); server.close(); },
     interrupt() {
+      const stream = streams.get(parent.id);
+      streams.delete(parent.id);
       stream.end('{"event":');
-      events.push(line(4, "tool_result", { toolId: "read", text: "Build steps" }));
-      events.push(line(5, "input_request", { requestId: "question", requestKind: "question", text: "Which target?" }));
+      write(parent.id, 4, "tool_result", { toolId: "read", text: "Build steps" });
+      write(parent.id, 5, "input_request", { requestId: "question", requestKind: "question", text: "Which target?" });
     },
   };
 }
@@ -113,6 +130,11 @@ async function body(req) {
 }
 
 async function serveFile(url, res) {
+  if (url.pathname === "/selected-repositories") {
+    const contents = await readFile(new URL("selected-repositories.html", import.meta.url));
+    res.writeHead(200, { "Content-Type": "text/html" });
+    return res.end(contents);
+  }
   const path = url.pathname === "/" ? "/index.html" : url.pathname;
   const type = path.endsWith(".js") ? "text/javascript" : path.endsWith(".css") ? "text/css" : "text/html";
   if (!/^\/(?:index\.html|(?:app|src)\/[a-z.-]+)$/.test(path)) return send(res, {}, 404);

@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SinterGuild chat fixture</title>
+  <link rel="stylesheet" href="/src/styles.css">
+</head>
+<body>
+  <div id="chat"></div>
+  <script type="module">
+    import { httpChat, mountChat } from "/src/index.js";
+
+    const path = "example-organization/shared-repository-with-a-long-name";
+    const repositories = [{ sourceId: "forgejo", path }, { sourceId: "github", path }];
+    const provider = httpChat({ token: () => "browser-test" });
+    mountChat(document.querySelector("#chat"), provider, { repositories });
+  </script>
+</body>
+</html>

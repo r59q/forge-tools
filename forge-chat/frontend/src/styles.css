@@ -73,6 +73,7 @@
 .forge-chat summary { cursor: pointer; padding: .6rem .8rem; font-weight: 650; }
 .forge-chat .create-form, .forge-chat .workspace-paths { display: grid; gap: .65rem; min-width: 0; }
 .forge-chat .create-form { padding: 0 .7rem .7rem; }
+.forge-chat .agent-options > :not(summary) { margin-bottom: .65rem; }
 .forge-chat .field, .forge-chat-app .field { display: grid; gap: .25rem; font-weight: 550; }
 .forge-chat .field > *, .forge-chat-app .field > * { min-width: 0; }
 .forge-chat .check { display: flex; align-items: center; gap: .3rem; }
@@ -143,6 +144,7 @@
 .forge-chat .composer textarea { resize: vertical; max-height: 30vh; }
 
 @media (max-width: 680px) {
-  .forge-chat { grid-template-columns: 1fr; grid-template-rows: minmax(7rem, 31%) minmax(0, 1fr); }
+  .forge-chat { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(7rem, 31%) minmax(0, 1fr); }
   .forge-chat .sidebar { border-inline-end: 0; border-bottom: 1px solid var(--line); padding: .7rem 1rem; }
+  .forge-chat :is(.create-chat summary, .create-form select, .create-form button, .composer button) { min-height: 44px; }
 }

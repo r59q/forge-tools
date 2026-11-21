@@ -28,3 +28,15 @@ import "@r59q/chat/styles.css";
 const unmount = mountChat(container, httpChat({ token: () => chatServiceToken }));
 // Call unmount when the container is removed.
 ```
+
+To start a chat from a host's repository selection, pass the selected
+`{ sourceId, path }` pairs in the mount options:
+
+```ts
+const unmount = mountChat(container, provider, { repositories });
+```
+
+The operator chooses a connection and path together. New chats use a forge
+checkout for that pair. Provide a nonempty selection to enable creation.
+The host supplies `provider` with chat access. The REST provider uses the
+[chat service token](../service/), which grants deployment-wide chat access.

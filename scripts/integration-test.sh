@@ -52,9 +52,18 @@ FORGE_SYMBOLS_TEST_TOKEN=$(sed -n 's/^FORGE_SYMBOLS_TOKEN=//p' "$(dirname "$0")/
 env_file="$(dirname "$0")/../examples/fullstack/.env"
 FORGE_AGENTS_TEST_TOKEN=$(sed -n 's/^FORGE_AGENTS_TOKEN=//p' "$env_file") \
   sh "$(dirname "$0")/agents-integration-test.sh"
-FORGE_CHAT_TEST_TOKEN=$(sed -n 's/^FORGE_CHAT_TOKEN=//p' "$env_file") \
+chat_token=$(sed -n 's/^FORGE_CHAT_TOKEN=//p' "$env_file")
+FORGE_CHAT_TEST_TOKEN=$chat_token \
   FORGE_CHAT_TEST_AGENTS_TOKEN=$(sed -n 's/^FORGE_AGENTS_TOKEN=//p' "$env_file") \
   sh "$(dirname "$0")/chat-integration-test.sh"
+
+# SinterGuild serves both APIs on one origin with the respective bearer token.
+sinterguild_url=http://127.0.0.1:8098
+curl -fsS "$sinterguild_url/" | grep -q '<title>SinterGuild</title>' || fail "SinterGuild shell"
+chat_metadata="$sinterguild_url/api/chat/v1/chat-metadata"
+curl -fsS -H "Authorization: Bearer $chat_token" "$chat_metadata" >/dev/null || fail "SinterGuild chat access"
+[ "$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $token" "$chat_metadata")" = 401 ] ||
+  fail "SinterGuild accepted a management token for chat"
 
 # The reactor uses its configured webhook source and RabbitMQ, independent of forge state.
 FORGE_REACTOR_TEST_TOKEN=$(sed -n 's/^FORGE_REACTOR_TOKEN=//p' "$env_file") \
@@ -98,6 +107,10 @@ api "$url/v1/repositories" |
   jq -e --arg id "$id" --arg r "$repo" 'any(.repositories[]?; .sourceId == $id and .path == $r)' >/dev/null ||
   fail "$repo not in repositories"
 echo "ok: list repositories"
+api "$sinterguild_url/api/management/v1/repositories" |
+  jq -e --arg id "$id" --arg r "$repo" 'any(.repositories[]?; .sourceId == $id and .path == $r)' >/dev/null ||
+  fail "$repo not visible through SinterGuild"
+echo "ok: SinterGuild shell and separate service access"
 
 api "$url/v1/issues?state=all&source=$id&repository=$repo" |
   jq -e --arg r "$repo" '.configured and all(.issues[]?; .repository == $r)' >/dev/null ||

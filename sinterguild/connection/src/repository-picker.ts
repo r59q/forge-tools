@@ -1,6 +1,6 @@
 import { listRepositories } from "./repositories.js";
 import type { RepositoryIdentity } from "./repositories.js";
-import { RepositorySelection } from "./repository-selection.js";
+import { readRepositorySelection, repositorySelectionKey, RepositorySelection } from "./repository-selection.js";
 
 export type { RepositoryIdentity } from "./repositories.js";
 
@@ -100,11 +100,16 @@ export async function mountRepositoryPicker(container: HTMLElement, options: Rep
     return;
   }
 
-  const storageKey = `sinterguild.repository-selection:${options.deploymentId}`;
+  const storageKey = repositorySelectionKey(options.deploymentId);
   const storage = () => document.defaultView!.localStorage;
   const selection = new RepositorySelection(listing.repositories, () => storage().getItem(storageKey));
   const form = section.querySelector("form")!;
   bindConfirmation(form, alert, selection, value => storage().setItem(storageKey, value), options.onComplete);
   renderChoices(form, section.querySelector("template")!, selection);
   status.hidden = true;
+}
+
+/** Read the completed repository preference in the host's browser profile. */
+export function loadRepositorySelection(deploymentId: string): readonly RepositoryIdentity[] {
+  return readRepositorySelection(() => localStorage.getItem(repositorySelectionKey(deploymentId)));
 }

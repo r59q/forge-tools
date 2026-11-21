@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { listRepositories } from "../dist/repositories.js";
-import { RepositorySelection } from "../dist/repository-selection.js";
+import { readRepositorySelection, RepositorySelection } from "../dist/repository-selection.js";
 
 const personal = { sourceId: "Personal-1", path: "Owner/Repo" };
 const work = { sourceId: "work-2", path: personal.path };
@@ -51,5 +51,13 @@ test("restores only visible exact identities and toggles equal paths independent
 test("starts with no selection when saved data is unreadable", () => {
   for (const read of [() => "invalid JSON", () => { throw new Error("storage unavailable"); }]) {
     assert.deepEqual(new RepositorySelection([personal, work], read).selected(), []);
+  }
+});
+
+test("loads a saved preference without requiring a live listing", () => {
+  const saved = JSON.stringify([work, { ...personal, credential: "fixture-token" }, work, { path: "invalid" }]);
+  assert.deepEqual(readRepositorySelection(() => saved), [work, personal]);
+  for (const value of [null, "invalid JSON", JSON.stringify(personal)]) {
+    assert.deepEqual(readRepositorySelection(() => value), []);
   }
 });

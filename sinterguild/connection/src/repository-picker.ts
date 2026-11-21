@@ -12,11 +12,14 @@ export interface RepositoryPickerOptions {
   deploymentId: string;
   /** Receive the confirmed visible identities and advance the host's flow. */
   onComplete: (repositories: readonly RepositoryIdentity[]) => void;
+  /** Open the host's connection form from the picker. */
+  onAddConnection?: () => void;
 }
 
 const markup = `
   <h1>Select repositories</h1>
   <p role="status">Loading repositories…</p>
+  <button class="sinterguild-reload sinterguild-secondary" type="button" hidden>Reload repositories</button>
   <p role="alert" class="sinterguild-repository-error" hidden></p>
   <form hidden>
     <fieldset aria-label="Visible repositories">
@@ -24,6 +27,7 @@ const markup = `
       <button type="submit" disabled>Confirm selection</button>
     </fieldset>
   </form>
+  <button class="sinterguild-add-connection sinterguild-secondary" type="button" hidden>Add a forge connection</button>
   <template>
     <label class="sinterguild-repository">
       <input type="checkbox">
@@ -92,16 +96,32 @@ export async function mountRepositoryPicker(container: HTMLElement, options: Rep
   section.innerHTML = markup;
   container.replaceChildren(section);
 
+  const addConnection = section.querySelector<HTMLButtonElement>(".sinterguild-add-connection")!;
+  if (options.onAddConnection) {
+    addConnection.hidden = false;
+    addConnection.addEventListener("click", options.onAddConnection);
+  }
+
+  const reload = section.querySelector<HTMLButtonElement>(".sinterguild-reload")!;
+  const load = () => loadChoices(section, reload, options);
+  reload.addEventListener("click", () => { void load(); });
+  await load();
+}
+
+async function loadChoices(section: HTMLElement, reload: HTMLButtonElement, options: RepositoryPickerOptions): Promise<void> {
   const status = section.querySelector<HTMLElement>('[role="status"]')!;
-  const alert = section.querySelector<HTMLElement>('[role="alert"]')!;
+  reload.hidden = true;
+  status.textContent = "Loading repositories…";
   const listing = await listRepositories(options.managementFetch);
   if (listing.state !== "ready") {
     status.textContent = listingMessages[listing.state];
+    reload.hidden = false;
     return;
   }
 
+  const alert = section.querySelector<HTMLElement>('[role="alert"]')!;
   const storageKey = repositorySelectionKey(options.deploymentId);
-  const storage = () => document.defaultView!.localStorage;
+  const storage = () => section.ownerDocument.defaultView!.localStorage;
   const selection = new RepositorySelection(listing.repositories, () => storage().getItem(storageKey));
   const form = section.querySelector("form")!;
   bindConfirmation(form, alert, selection, value => storage().setItem(storageKey, value), options.onComplete);

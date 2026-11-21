@@ -25,7 +25,9 @@ test("touch onboarding reaches a repository chat and restores the selection afte
   const page = await openEntry(context, url);
   await signIn(page, "Management operator token", "Begin setup", operatorToken);
   await setUpRepositories(page);
-  assert.deepEqual(management.attempts.map(({ credential }) => credential), ["rejected-forge-token", forgeToken]);
+  assert.deepEqual(management.attempts.map(({ name, credential }) => [name, credential]), [
+    ["Work", "rejected-forge-token"], ["Work", forgeToken], ["Personal", forgeToken],
+  ]);
   assert.ok(management.requests.every(({ headers }) => headers.authorization === `Bearer ${operatorToken}`));
 
   const chatLabel = "Chat service token";
@@ -58,6 +60,32 @@ test("touch onboarding reaches a repository chat and restores the selection afte
   assert.equal(reopened.url(), `${url}/`);
 });
 
+test("a saved connection survives an interrupted setup and repository listing can be retried", { timeout: 25_000 }, async t => {
+  const { url, management } = await startFixture(t);
+  const browser = await chromium.launch({ executablePath: phone.executablePath });
+  t.after(() => browser.close());
+  const page = await openEntry(await browser.newContext(phone), url);
+  await signIn(page, "Management operator token", "Begin setup", operatorToken);
+  await page.getByLabel("Access token").fill(forgeToken);
+  await page.getByRole("button", { name: "Connect forge" }).tap();
+  await repositoryRow(page, target).waitFor();
+  assert.equal(await page.evaluate(() => localStorage.length), 0);
+
+  await page.route("**/api/management/v1/repositories", route => route.fulfill({ status: 503 }), { times: 1 });
+  await page.reload();
+  await signIn(page, "Management operator token", "Begin setup", operatorToken);
+  await page.getByRole("status").getByText("Could not load repositories.", { exact: true }).waitFor();
+  assert.equal(await page.getByLabel("Access token").count(), 0);
+
+  const retry = page.getByRole("button", { name: "Reload repositories" });
+  await assertPhoneLayout(page, retry);
+  await retry.tap();
+  await repositoryRow(page, target).tap();
+  await page.getByRole("button", { name: "Confirm selection" }).tap();
+  await page.getByLabel("Chat service token").waitFor();
+  assert.equal(management.attempts.length, 1);
+});
+
 async function openEntry(context, url) {
   const page = context.pages()[0] ?? await context.newPage();
   page.setDefaultTimeout(5_000);
@@ -88,9 +116,10 @@ async function setUpRepositories(page) {
   await token.fill(forgeToken);
   await connect.tap();
 
+  await addAnotherConnection(page);
   const confirm = page.getByRole("button", { name: "Confirm selection", exact: true });
-  for (const { path, sourceId } of [personal, target]) {
-    const row = page.locator("label").filter({ hasText: `Source ${sourceId}` }).filter({ hasText: path });
+  for (const repository of [personal, target]) {
+    const row = repositoryRow(page, repository);
     await row.waitFor();
     await assertPhoneLayout(page, row);
     await row.tap();
@@ -98,6 +127,25 @@ async function setUpRepositories(page) {
   }
   await assertPhoneLayout(page, confirm);
   await confirm.tap();
+}
+
+async function addAnotherConnection(page) {
+  const add = page.getByRole("button", { name: "Add a forge connection" });
+  await add.waitFor();
+  await assertPhoneLayout(page, add);
+  await add.tap();
+  const back = page.getByRole("button", { name: "Back to repositories" });
+  await assertPhoneLayout(page, back);
+  await back.tap();
+  await repositoryRow(page, target).waitFor();
+  await add.tap();
+  await page.getByLabel("Connection name (optional)").fill("Personal");
+  await page.getByLabel("Access token").fill(forgeToken);
+  await page.getByRole("button", { name: "Connect forge" }).tap();
+}
+
+function repositoryRow(page, { path, sourceId }) {
+  return page.locator("label").filter({ hasText: `Source ${sourceId}` }).filter({ hasText: path });
 }
 
 async function assertConversationChoices(page) {

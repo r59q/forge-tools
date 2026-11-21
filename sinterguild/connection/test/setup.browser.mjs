@@ -22,7 +22,7 @@ const hostPage = `<!doctype html>
 
 async function assertTouchTargets(page) {
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
-  for (const control of await page.locator("input, select, button").all()) {
+  for (const control of await page.locator(":is(input, select, button):visible").all()) {
     const box = await control.boundingBox();
     assert.ok(box && box.height >= 44 && box.x >= 0 && box.x + box.width <= 320);
     await control.tap({ trial: true });

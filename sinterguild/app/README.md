@@ -11,6 +11,10 @@ add a forge connection, and confirm the repositories. Enter the chat service
 token to open chat. Choose **New chat**, select a repository, and send a
 message. The chosen agent client needs its API key configured in the stack.
 
+If you leave setup after adding a connection, sign in again to pick from
+the saved connections. You can add another connection from the picker or
+reload the repository list if it is unavailable or empty.
+
 The app saves the repository identities in local storage for this origin.
 Later visits go straight to chat sign-in. Chat authorization covers the
 whole deployment. The selection only supplies choices for new chats.

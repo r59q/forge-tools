@@ -59,6 +59,15 @@
   cursor: default;
 }
 
+:is(.sinterguild-connection, .sinterguild-repository-picker) .sinterguild-secondary {
+  background: #fff;
+  color: #164b91;
+}
+
+.sinterguild-repository-picker .sinterguild-add-connection {
+  margin-top: 1rem;
+}
+
 :is(.sinterguild-connection, .sinterguild-repository-picker) :focus-visible {
   outline: 3px solid #164b91;
   outline-offset: 2px;

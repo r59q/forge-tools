@@ -9,6 +9,8 @@ export interface ConnectionSetupOptions {
   managementFetch: typeof fetch;
   /** Receive the accepted public ID and advance the host's flow. */
   onConnected: (connection: AcceptedConnection) => void;
+  /** Return to the host's repository picker. */
+  onBack?: () => void;
 }
 
 const formMarkup = `
@@ -34,6 +36,7 @@ const formMarkup = `
         <input name="credential" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" required>
       </label>
       <button type="submit">Connect forge</button>
+      <button class="sinterguild-secondary" type="button" hidden>Back to repositories</button>
     </fieldset>
   </form>
 `;
@@ -48,6 +51,11 @@ export function mountConnectionSetup(container: HTMLElement, options: Connection
   const token = form.querySelector<HTMLInputElement>('input[name="credential"]')!;
   const alert = section.querySelector<HTMLElement>('[role="alert"]')!;
   const button = form.querySelector("button")!;
+  const back = form.querySelector<HTMLButtonElement>(".sinterguild-secondary")!;
+  if (options.onBack) {
+    back.hidden = false;
+    back.addEventListener("click", options.onBack);
+  }
 
   form.addEventListener("submit", async event => {
     event.preventDefault();

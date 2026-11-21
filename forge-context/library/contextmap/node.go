@@ -41,7 +41,7 @@ type NodeID struct {
 	Path string
 	// Lines is required for a line range and zero for all other kinds.
 	Lines LineRange
-	// Concept is a caller-supplied key used only by concept nodes.
+	// Concept is a location-independent key used only by concept nodes.
 	Concept string
 }
 

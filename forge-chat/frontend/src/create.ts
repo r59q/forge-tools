@@ -60,15 +60,21 @@ export function createForm(
 }
 
 function repositoryField(repositories: readonly SelectedRepository[]) {
-  const choices = repositories.map(({ sourceId, path }) => ({ source: sourceId, path }));
-  const control = element("select", "", option("", "Choose a repository"),
-    ...choices.map(({ source, path }, index) => option(String(index), `Connection ${source} · ${path}`)));
-  control.required = true;
+  const choices = repositories.map(({ sourceId, path }) => {
+    const radio = element("input", "");
+    radio.type = "radio";
+    radio.name = "repository";
+    radio.required = true;
+    const identity = element("span", "", element("strong", "", path), element("small", "", `Connection ${sourceId}`));
+    const label = element("label", "repository-choice", radio, identity);
+    return { radio, label, repository: { source: sourceId, path } };
+  });
+  const labels = choices.map(({ label }) => label);
   return {
-    element: field("Repository", control),
+    element: element("fieldset", "repository-choices", element("legend", "", "Repository"), ...labels),
     workspace(): NewAgent["workspace"] {
-      const choice = choices[control.selectedIndex - 1];
-      if (choice) return { kind: "checkout", repository: choice };
+      const choice = choices.find(({ radio }) => radio.checked);
+      if (choice) return { kind: "checkout", repository: choice.repository };
     },
   };
 }

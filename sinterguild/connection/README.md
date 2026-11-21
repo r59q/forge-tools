@@ -40,11 +40,14 @@ await mountRepositoryPicker(container, {
 
 The picker loads `GET /v1/repositories` across all connected sources.
 Confirmation saves the selected `{ sourceId, path }` pairs and passes them
-to the host, which opens the agent interface. Use a stable, public deployment
-ID to scope selection within the host origin. Reopening the same deployment
-in the same browser profile checks the saved repositories that are still
-visible. Confirmation replaces the saved set, and requires writable local
-storage.
+to the host, which opens the agent interface. An unsuccessful or empty listing
+can be reloaded. Hosts can supply `onAddConnection` to open connection setup
+and `onBack` in the setup form to return to the picker.
+
+Use a stable, public deployment ID to scope selection within the host origin.
+Reopening the same deployment in the same browser profile checks the saved
+repositories that are still visible. Confirmation replaces the saved set and
+requires writable local storage.
 
 Use `loadRepositorySelection(deploymentId)` to restore a completed preference
 before mounting the picker. An empty result means setup is needed.

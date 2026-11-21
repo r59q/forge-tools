@@ -17,16 +17,31 @@ function openSetup(): void {
     async open(token) {
       const managementFetch = managementTransport(token);
       const reply = await managementFetch("/v1/connections", { signal: AbortSignal.timeout(10_000) });
-      await reply.body?.cancel();
-      if (accessDenied(reply.status)) return false;
-      if (!reply.ok) throw new Error("Management unavailable");
+      if (!reply.ok) {
+        await reply.body?.cancel();
+        if (accessDenied(reply.status)) return false;
+        throw new Error("Management unavailable");
+      }
 
-      mountConnectionSetup(root, {
-        managementFetch,
-        onConnected: () => { void mountRepositoryPicker(root, { managementFetch, deploymentId, onComplete: openChat }); },
-      });
+      const listing = await reply.json();
+      if (!Array.isArray(listing?.connections)) throw new Error("Invalid connection listing");
+      if (listing.connections.length) openRepositories(managementFetch);
+      else connectForge(managementFetch);
       return true;
     },
+  });
+}
+
+function connectForge(managementFetch: typeof fetch, onBack?: () => void): void {
+  mountConnectionSetup(root, { managementFetch, onConnected: () => openRepositories(managementFetch), onBack });
+}
+
+function openRepositories(managementFetch: typeof fetch): void {
+  void mountRepositoryPicker(root, {
+    managementFetch,
+    deploymentId,
+    onComplete: openChat,
+    onAddConnection: () => connectForge(managementFetch, () => openRepositories(managementFetch)),
   });
 }
 

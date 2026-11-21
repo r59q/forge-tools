@@ -73,6 +73,23 @@
 .forge-chat summary { cursor: pointer; padding: .6rem .8rem; font-weight: 650; }
 .forge-chat .create-form, .forge-chat .workspace-paths { display: grid; gap: .65rem; min-width: 0; }
 .forge-chat .create-form { padding: 0 .7rem .7rem; }
+.forge-chat .repository-choices { display: grid; gap: .4rem; min-inline-size: 0; margin: 0; padding: 0; border: 0; }
+.forge-chat .repository-choices legend { margin-bottom: .25rem; padding: 0; font-weight: 550; }
+.forge-chat .repository-choice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: .55rem;
+  min-height: 44px;
+  padding: .45rem .55rem;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.forge-chat .repository-choice:has(:checked) { border-color: var(--focus); background: var(--user); }
+.forge-chat .repository-choice input { margin: 0; accent-color: var(--accent); }
+.forge-chat .repository-choice small { display: block; color: var(--muted); }
 .forge-chat .agent-options > :not(summary) { margin-bottom: .65rem; }
 .forge-chat .field, .forge-chat-app .field { display: grid; gap: .25rem; font-weight: 550; }
 .forge-chat .field > *, .forge-chat-app .field > * { min-width: 0; }

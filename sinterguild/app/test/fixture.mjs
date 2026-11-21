@@ -6,10 +6,10 @@ export const operatorToken = "fixture-management-operator";
 export const chatToken = "fixture-chat-access";
 export const forgeToken = "fixture-forge-accepted";
 export const target = {
-  sourceId: "work-forge",
+  sourceId: "a-fixture-connection-with-a-long-shared-prefix-work",
   path: "example-organization/shared-repository-with-a-long-name",
 };
-export const personal = { sourceId: "personal-forge", path: target.path };
+export const personal = { sourceId: "a-fixture-connection-with-a-long-shared-prefix-personal", path: target.path };
 export const ignored = { sourceId: target.sourceId, path: "example-organization/other-repo" };
 export const agentId = "fixture-agent";
 export const reply = "The repository uses npm test.";
@@ -45,19 +45,23 @@ function fixtureServer(token, handler) {
 
 function managementFixture() {
   const attempts = [];
+  const connections = [];
   const service = fixtureServer(operatorToken, async (req, res) => {
-    if (req.url === "/v1/connections" && req.method === "GET") return send(res, 200, { connections: [] });
+    if (req.url === "/v1/connections" && req.method === "GET") return send(res, 200, { configured: true, connections });
     if (req.url === "/v1/connections" && req.method === "POST") {
       const { origin, host, "sec-fetch-site": site } = req.headers;
       if (site === "cross-site" || (origin && new URL(origin).host !== host)) return send(res, 403, {});
       const details = await readJSON(req);
       attempts.push(details);
-      return details.credential === forgeToken
-        ? send(res, 200, { id: target.sourceId })
-        : send(res, 400, { message: `Rejected ${details.credential}` });
+      if (details.credential !== forgeToken) return send(res, 400, { message: `Rejected ${details.credential}` });
+      const id = details.name === "Personal" ? personal.sourceId : target.sourceId;
+      const connection = { id, name: details.name, status: "ok" };
+      connections.push(connection);
+      return send(res, 200, connection);
     }
     if (req.url === "/v1/repositories" && req.method === "GET") {
-      return send(res, 200, { configured: true, repositories: [personal, target, ignored] });
+      const repositories = [personal, target, ignored].filter(repo => connections.some(({ id }) => id === repo.sourceId));
+      return send(res, 200, { configured: true, repositories });
     }
     return send(res, 404, {});
   });

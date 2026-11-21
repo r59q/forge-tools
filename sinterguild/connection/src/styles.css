@@ -1,0 +1,72 @@
+.sinterguild-connection {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 30rem;
+  margin-inline: auto;
+  padding: clamp(1rem, 5vw, 2rem);
+  font-family: system-ui, sans-serif;
+  line-height: 1.5;
+  color: #17283a;
+  background: #fff;
+  overflow-wrap: anywhere;
+}
+
+.sinterguild-connection h1,
+.sinterguild-connection p {
+  margin: 0 0 1rem;
+}
+
+.sinterguild-connection fieldset {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.sinterguild-connection label {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: .25rem;
+  font-weight: 600;
+}
+
+.sinterguild-connection :is(input, select, button) {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: .5rem .75rem;
+  border: 1px solid #6b7a8b;
+  border-radius: .375rem;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  font-size: max(1rem, 16px);
+}
+
+.sinterguild-connection button {
+  border-color: #164b91;
+  background: #164b91;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sinterguild-connection button:disabled {
+  opacity: .65;
+  cursor: default;
+}
+
+.sinterguild-connection :focus-visible {
+  outline: 3px solid #164b91;
+  outline-offset: 2px;
+}
+
+.sinterguild-connection-error {
+  padding: .75rem;
+  border: 1px solid #a33224;
+  border-radius: .375rem;
+  color: #84281d;
+}

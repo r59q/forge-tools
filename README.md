@@ -18,6 +18,7 @@ useful on its own.
 | [forge-search](forge-search/)                     | Search documents, checkout files, issues and symbol definitions.    |
 | [forge-agents](forge-agents/)                     | Headless Claude Code, Codex and Gemini CLI agents with one transcript. |
 | [forge-chat](forge-chat/)                         | Live chat and session trees for forge-agents. |
+| [forge-context](forge-context/library/)           | Repository locations, discovered concepts and activity in a chat session. |
 | [forge-evidence](forge-evidence/)                 | Test results, screenshots and logs that back claims, kept in the repo. |
 | [forge-review](forge-review/)                     | Fixed review snapshots, assignments and native or standalone feedback. |
 | [forge-changes](forge-changes/)                   | Proposed code changes, discussion and merging across forges.           |

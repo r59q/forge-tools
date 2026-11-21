@@ -14,6 +14,10 @@ const (
 	LinkContains LinkKind = "contains"
 	// LinkChanges points from a node representing a change to an affected node.
 	LinkChanges LinkKind = "changes"
+	// LinkSupportedBy points from a concept to a node providing evidence for it.
+	LinkSupportedBy LinkKind = "supported-by"
+	// LinkGroups points from a broader concept to an immediate narrower concept.
+	LinkGroups LinkKind = "groups"
 )
 
 // Link is a typed, directed relationship between two nodes in the graph.

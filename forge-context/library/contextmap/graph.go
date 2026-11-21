@@ -28,9 +28,10 @@ type Link struct {
 
 // Graph is a read-only collection of nodes and direct links. Its zero value is empty.
 type Graph struct {
-	nodes []Node
-	links []Link
-	index map[NodeID]int
+	nodes    []Node
+	links    []Link
+	index    map[NodeID]int
+	incident map[NodeID][]int
 }
 
 // NewGraph copies nodes and links in input order. It rejects invalid or duplicate
@@ -46,12 +47,17 @@ func NewGraph(nodes []Node, links []Link) (*Graph, error) {
 		}
 		index[node.ID] = i
 	}
+	incident := make(map[NodeID][]int)
 	for i, link := range links {
 		if err := validateLink(link, index); err != nil {
 			return nil, fmt.Errorf("link %d: %w", i, err)
 		}
+		incident[link.From] = append(incident[link.From], i)
+		if link.To != link.From {
+			incident[link.To] = append(incident[link.To], i)
+		}
 	}
-	return &Graph{nodes: slices.Clone(nodes), links: slices.Clone(links), index: index}, nil
+	return &Graph{nodes: slices.Clone(nodes), links: slices.Clone(links), index: index, incident: incident}, nil
 }
 
 func validateLink(link Link, index map[NodeID]int) error {

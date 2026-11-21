@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import { createServer } from "node:http";
 import { test } from "node:test";
 import { chromium } from "playwright";
+import { serveFixture } from "./fixture.mjs";
 
 const hostPage = `<!doctype html>
 <meta charset="utf-8">
@@ -21,30 +20,6 @@ const hostPage = `<!doctype html>
   });
 </script>`;
 
-async function fixture(t) {
-  const assets = {
-    "/dist/setup.js": "text/javascript",
-    "/dist/management.js": "text/javascript",
-    "/src/styles.css": "text/css",
-  };
-  const server = createServer(async (request, response) => {
-    if (request.url === "/") {
-      response.writeHead(200, { "Content-Type": "text/html" }).end(hostPage);
-      return;
-    }
-    const type = Object.hasOwn(assets, request.url) && assets[request.url];
-    if (!type) {
-      response.writeHead(404).end();
-      return;
-    }
-    const content = await readFile(new URL(`..${request.url}`, import.meta.url));
-    response.writeHead(200, { "Content-Type": type }).end(content);
-  });
-  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
-  t.after(() => new Promise(resolve => server.close(resolve)));
-  return `http://127.0.0.1:${server.address().port}`;
-}
-
 async function assertTouchTargets(page) {
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   for (const control of await page.locator("input, select, button").all()) {
@@ -55,7 +30,7 @@ async function assertTouchTargets(page) {
 }
 
 test("phone setup rejects a token and hands off the accepted ID after retry", { timeout: 15_000 }, async t => {
-  const url = await fixture(t);
+  const url = await serveFixture(t, hostPage, ["setup", "management"]);
   const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_EXECUTABLE });
   t.after(() => browser.close());
   const page = await browser.newPage({

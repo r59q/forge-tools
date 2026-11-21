@@ -46,6 +46,9 @@ in the same browser profile checks the saved repositories that are still
 visible. Confirmation replaces the saved set, and requires writable local
 storage.
 
+Use `loadRepositorySelection(deploymentId)` to restore a completed preference
+before mounting the picker. An empty result means setup is needed.
+
 Pass `repositories` directly to [forge-chat](../../forge-chat/frontend/)
 with `mountChat(container, chatProvider, { repositories })`. Load the chat
 stylesheet in the host and supply a provider with chat service access.

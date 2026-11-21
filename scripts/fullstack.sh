@@ -90,6 +90,7 @@ case "${1:-}" in
 start)
   docker compose up --build -d
   connect_forges
+  echo "SinterGuild: http://127.0.0.1:8098/"
   echo "Management: http://127.0.0.1:8083/ (operator / FORGE_MANAGEMENT_TOKEN in examples/fullstack/.env)"
   ;;
 stop)

@@ -5,22 +5,28 @@ function key({ sourceId, path }: RepositoryIdentity): string {
   return JSON.stringify([sourceId, path]);
 }
 
-function savedKeys(read: () => string | null): Set<string> {
-  const keys = new Set<string>();
+/** Return the storage key for a deployment's repository preference. */
+export function repositorySelectionKey(deploymentId: string): string {
+  return `sinterguild.repository-selection:${deploymentId}`;
+}
+
+/** Decode distinct public identities from a saved selection. */
+export function readRepositorySelection(read: () => string | null): RepositoryIdentity[] {
+  const repositories = new Map<string, RepositoryIdentity>();
   try {
     const saved: unknown = JSON.parse(read() ?? "null");
     if (Array.isArray(saved)) {
       for (const entry of saved) {
         const repository = readRepositoryIdentity(entry);
         if (repository) {
-          keys.add(key(repository));
+          repositories.set(key(repository), repository);
         }
       }
     }
   } catch {
-    // An unreadable saved selection starts with no checked repositories.
+    // Unavailable storage or invalid JSON has no completed selection.
   }
-  return keys;
+  return [...repositories.values()];
 }
 
 /** Track checked repositories from the current listing and restore visible saved entries. */
@@ -31,7 +37,7 @@ export class RepositorySelection {
 
   constructor(visible: readonly RepositoryIdentity[], read: () => string | null) {
     const byKey = new Map(visible.map(repository => [key(repository), repository]));
-    const saved = savedKeys(read);
+    const saved = new Set(readRepositorySelection(read).map(key));
     this.repositories = [...byKey.values()];
     this.#checked = new Set([...byKey.keys()].filter(id => saved.has(id)));
   }

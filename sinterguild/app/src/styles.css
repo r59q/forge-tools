@@ -1,0 +1,11 @@
+.forge-chat-app .sign-in {
+  padding: clamp(1rem, 5vw, 2rem);
+}
+
+.forge-chat-app :is(.sign-in input, .sign-in button, .app-actions button) {
+  min-height: 44px;
+}
+
+.forge-chat-app .sign-in input {
+  font-size: max(1rem, 16px);
+}

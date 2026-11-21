@@ -38,6 +38,24 @@ validates IDs, checks that every link endpoint exists, and checks that each
 containment link follows the location hierarchy. `Nodes` and `Links` return
 copies in input order. Use `Node` to resolve either endpoint by ID.
 
+## Focused views
+
+Pass any node's `NodeID` to `DirectView` to get the focus, its immediate
+neighbors, and the links incident to the focus. `ExpandedView` follows
+links repeatedly to return every reachable node and recorded link. Both
+return only the focus for an isolated node and report `false` for an absent
+focus.
+
+Both views follow incoming and outgoing links and preserve each link's
+original direction and kind. From a line, the direct view follows the
+file-to-line containment link back to the file. The expanded view also
+follows the folder-to-file link back to the folder.
+
+In the expanded result, a link with `link.From == view.Focus` or
+`link.To == view.Focus` identifies an immediate neighbor at the other
+endpoint. A node reached only through other nodes has no link to the
+focus. Each node appears once, identified by its `NodeID`.
+
 ## Build and test
 
 Run from this directory with Go 1.27 and golangci-lint v2.15.0.

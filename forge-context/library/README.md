@@ -89,6 +89,28 @@ In the expanded result, a link with `link.From == view.Focus` or
 endpoint. A node reached only through other nodes has no link to the
 focus. Each node appears once, identified by its `NodeID`.
 
+## Chat session snapshots
+
+Create a `NewSession(graph)` for each chat, using an existing graph with
+labels suitable for display. Pass the file or concept `NodeID` and observed
+activity to `Record` as transcript events arrive. A file can be considered,
+read, and touched (changed) in the same session. Replaying an observation
+preserves the existing record. Mark a concept as included explicitly.
+
+If the agent omits a file or concept, use evidence you already have, such as
+a recorded edit or a concept attached by the caller, to supply its graph ID
+and activity. Leave out entries for which you have no evidence.
+
+`Snapshot` returns observed nodes and their activities, links between them,
+and the direct links and endpoints of included concepts. Endpoints brought in
+by a link have activity only if you also observed them. The
+[two-turn example](contextmap/session_example_test.go) encodes each snapshot
+as JSON and runs without a forge or UI.
+
+```sh
+go test -run '^ExampleSession$' -v ./contextmap
+```
+
 ## Build and test
 
 Run from this directory with Go 1.27 and golangci-lint v2.15.0.

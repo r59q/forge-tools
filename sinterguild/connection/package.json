@@ -12,14 +12,18 @@
       "types": "./dist/setup.d.ts",
       "import": "./dist/setup.js"
     },
+    "./repository-picker": {
+      "types": "./dist/repository-picker.d.ts",
+      "import": "./dist/repository-picker.js"
+    },
     "./styles.css": "./src/styles.css"
   },
   "files": ["dist", "src/styles.css", "README.md"],
   "scripts": {
     "build": "tsc",
     "lint": "eslint .",
-    "test": "npm run build && node --test test/management.test.mjs",
-    "test:browser": "node --test test/setup.browser.mjs"
+    "test": "npm run build && node --test test/*.test.mjs",
+    "test:browser": "node --test test/*.browser.mjs"
   },
   "devDependencies": {
     "@typescript-eslint/parser": "8.72.1",

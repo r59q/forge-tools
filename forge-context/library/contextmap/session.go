@@ -97,9 +97,9 @@ type SessionNode struct {
 }
 
 // SessionSnapshot is a renderable graph with session activity on its nodes.
-// Its nodes and links follow graph input order, and every link has both endpoints.
+// Every link has both endpoints in the snapshot.
 type SessionSnapshot struct {
-	// Nodes holds observed nodes and the endpoints needed to explain included concepts.
+	// Nodes holds the selected graph nodes with their session activities.
 	Nodes []SessionNode
 	// Links holds the original graph relationships selected for the session.
 	Links []Link
@@ -107,6 +107,7 @@ type SessionSnapshot struct {
 
 // Snapshot returns an independent copy of the current session graph. It keeps
 // links between observed nodes and direct links incident to included concepts.
+// Nodes and links follow graph input order.
 func (s *Session) Snapshot() SessionSnapshot {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -125,12 +126,16 @@ func (s *Session) Snapshot() SessionSnapshot {
 		}
 	}
 	for _, node := range s.graph.nodes {
-		activities, observed := s.activities[node.ID]
-		if observed || endpoints[node.ID] {
-			snapshot.Nodes = append(snapshot.Nodes, SessionNode{Node: node, Activities: slices.Clone(activities)})
+		if len(s.activities[node.ID]) != 0 || endpoints[node.ID] {
+			snapshot.Nodes = append(snapshot.Nodes, s.sessionNode(node))
 		}
 	}
 	return snapshot
+}
+
+// sessionNode copies activity while the caller holds the session lock.
+func (s *Session) sessionNode(node Node) SessionNode {
+	return SessionNode{Node: node, Activities: slices.Clone(s.activities[node.ID])}
 }
 
 func (s *Session) includesLink(link Link) bool {

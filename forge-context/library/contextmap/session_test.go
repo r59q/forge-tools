@@ -2,6 +2,7 @@ package contextmap_test
 
 import (
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/r59q/forge-tools/forge-context/library/contextmap"
@@ -113,6 +114,10 @@ func TestSessionConcurrentRecordsAndSnapshots(t *testing.T) {
 				snapshot := session.Snapshot()
 				if len(snapshot.Nodes) != 1 {
 					t.Errorf("nodes = %+v, want the observed file", snapshot.Nodes)
+				}
+				view, found := session.DirectView(file.ID)
+				if !found || !slices.Contains(view.Nodes[0].Activities, activity) {
+					t.Errorf("focused view missing activity %q: %+v", activity, view)
 				}
 			})
 		}

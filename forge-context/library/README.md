@@ -111,6 +111,15 @@ as JSON and runs without a forge or UI.
 go test -run '^ExampleSession$' -v ./contextmap
 ```
 
+To explore from a selected node, pass its ID to `Session.DirectView` for its
+immediate neighbors or `Session.ExpandedView` for its connected component.
+Both return the focus first and preserve link directions. They can reach
+unobserved nodes. Only observations recorded in this chat appear as activities.
+
+The [focused chat example](contextmap/session_view_example_test.go) follows
+a file the agent read through the discovered Refunds concept to a guide in a
+second repository.
+
 ## Build and test
 
 Run from this directory with Go 1.27 and golangci-lint v2.15.0.

@@ -46,6 +46,10 @@ in the same browser profile checks the saved repositories that are still
 visible. Confirmation replaces the saved set, and requires writable local
 storage.
 
+Pass `repositories` directly to [forge-chat](../../forge-chat/frontend/)
+with `mountChat(container, chatProvider, { repositories })`. Load the chat
+stylesheet in the host and supply a provider with chat service access.
+
 ## Build and test
 
 From this folder with Node.js 24 or newer:

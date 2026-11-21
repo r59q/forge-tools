@@ -1,6 +1,18 @@
 /** A forge repository is identified by its connection source and repository path. */
 export type Repository = { source: string; path: string } | { localPath: string };
 
+/** A selected forge repository supplied by the chat host. */
+export interface SelectedRepository {
+  sourceId: string;
+  path: string;
+}
+
+/** Configure how new chats choose their workspace. */
+export interface ChatOptions {
+  /** Limit new workspaces to these forge repositories. Omit for manual workspace entry. */
+  repositories?: readonly SelectedRepository[];
+}
+
 /** The conversation information returned by forge-agents. */
 export interface Agent {
   id: string;

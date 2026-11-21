@@ -89,3 +89,37 @@ test("create scratch and default branch worktree chats", { timeout: 15_000 }, as
     workspace: { kind: "checkout", repository: { source: "test-source", path: "owner/repo" } },
   });
 });
+
+test("touch host starts and streams chats for selected repositories with the same path", { timeout: 15_000 }, async t => {
+  const server = await fixture();
+  t.after(() => server.close());
+  const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_EXECUTABLE });
+  t.after(() => browser.close());
+  const page = await browser.newPage({ viewport: { width: 320, height: 568 }, isMobile: true, hasTouch: true });
+  page.setDefaultTimeout(4_000);
+  await page.goto(`${server.url}/selected-repositories`);
+
+  const path = "example-organization/shared-repository-with-a-long-name";
+  const repository = page.getByLabel("Repository", { exact: true });
+  const transcript = page.locator(".transcript");
+  for (const [index, source] of ["github", "forgejo"].entries()) {
+    await page.getByText("New chat", { exact: true }).tap();
+    await repository.tap();
+    assert.equal(await page.getByLabel("Source", { exact: true }).count(), 0);
+    await repository.selectOption({ label: `Connection ${source} · ${path}` });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 320);
+    await page.getByRole("button", { name: "Create chat", exact: true }).tap();
+    const id = `new-${index + 1}`;
+    await page.getByRole("heading", { name: `Claude Code · ${id}` }).waitFor();
+    assert.deepEqual(server.creates[index].workspace, { kind: "checkout", repository: { source, path } });
+
+    const text = `Review ${source}`;
+    const composer = page.getByRole("textbox", { name: "Message", exact: true });
+    await composer.tap();
+    await composer.fill(text);
+    await page.getByRole("button", { name: "Send", exact: true }).tap();
+    await transcript.getByText(`Reply from ${id}`, { exact: true }).waitFor();
+    assert.deepEqual(server.messages[index], { id, text });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 320);
+  }
+});

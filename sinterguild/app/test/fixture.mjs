@@ -6,10 +6,10 @@ export const operatorToken = "fixture-management-operator";
 export const chatToken = "fixture-chat-access";
 export const forgeToken = "fixture-forge-accepted";
 export const target = {
-  sourceId: "work-forge",
+  sourceId: "a-fixture-connection-with-a-long-shared-prefix-work",
   path: "example-organization/shared-repository-with-a-long-name",
 };
-export const personal = { sourceId: "personal-forge", path: target.path };
+export const personal = { sourceId: "a-fixture-connection-with-a-long-shared-prefix-personal", path: target.path };
 export const ignored = { sourceId: target.sourceId, path: "example-organization/other-repo" };
 export const agentId = "fixture-agent";
 export const reply = "The repository uses npm test.";

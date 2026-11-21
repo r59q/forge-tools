@@ -149,14 +149,16 @@ function repositoryRow(page, { path, sourceId }) {
 }
 
 async function assertConversationChoices(page) {
-  const repository = page.getByLabel("Repository", { exact: true });
-  await repository.waitFor();
-  assert.deepEqual(await repository.locator("option").allTextContents(), [
-    "Choose a repository",
-    ...[personal, target].map(({ sourceId, path }) => `Connection ${sourceId} · ${path}`),
-  ]);
+  const repositories = page.getByRole("group", { name: "Repository", exact: true });
+  await repositories.waitFor();
+  assert.equal(await repositories.getByRole("radio").count(), 2);
+  for (const { sourceId, path } of [personal, target]) {
+    const radio = page.getByRole("radio", { name: `${path} Connection ${sourceId}`, exact: true });
+    await assertPhoneLayout(page, repositories.locator("label").filter({ has: radio }));
+  }
+  assert.ok(await page.locator(".sidebar").evaluate(sidebar => sidebar.scrollWidth === sidebar.clientWidth));
   assert.equal(await page.getByLabel("Source", { exact: true }).count(), 0);
-  return repository;
+  return repositories;
 }
 
 async function startConversation(page) {
@@ -164,11 +166,11 @@ async function startConversation(page) {
   await newChat.waitFor();
   await assertPhoneLayout(page, newChat);
   await newChat.tap();
-  const repository = await assertConversationChoices(page);
+  const repositories = await assertConversationChoices(page);
   const create = page.getByRole("button", { name: "Create chat", exact: true });
-  await assertPhoneLayout(page, repository, create);
-  await repository.tap();
-  await repository.selectOption({ label: `Connection ${target.sourceId} · ${target.path}` });
+  await assertPhoneLayout(page, create);
+  await repositories.getByText(`Connection ${target.sourceId}`, { exact: true }).tap();
+  assert.ok(await repositories.getByRole("radio", { name: `${target.path} Connection ${target.sourceId}` }).isChecked());
   await create.tap();
 
   const message = page.getByRole("textbox", { name: "Message", exact: true });

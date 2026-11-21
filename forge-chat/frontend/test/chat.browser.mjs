@@ -100,13 +100,13 @@ test("touch host starts and streams chats for selected repositories with the sam
   await page.goto(`${server.url}/selected-repositories`);
 
   const path = "example-organization/shared-repository-with-a-long-name";
-  const repository = page.getByLabel("Repository", { exact: true });
+  const repositories = page.getByRole("group", { name: "Repository", exact: true });
   const transcript = page.locator(".transcript");
   for (const [index, source] of ["github", "forgejo"].entries()) {
     await page.getByText("New chat", { exact: true }).tap();
-    await repository.tap();
     assert.equal(await page.getByLabel("Source", { exact: true }).count(), 0);
-    await repository.selectOption({ label: `Connection ${source} · ${path}` });
+    await repositories.getByText(`Connection ${source}`, { exact: true }).tap();
+    assert.ok(await repositories.getByRole("radio", { name: `${path} Connection ${source}` }).isChecked());
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 320);
     await page.getByRole("button", { name: "Create chat", exact: true }).tap();
     const id = `new-${index + 1}`;

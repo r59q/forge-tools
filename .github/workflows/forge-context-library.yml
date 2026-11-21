@@ -1,0 +1,26 @@
+name: forge-context-library
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - forge-context/library/**
+      - .github/workflows/forge-context-library.yml
+      - .github/workflows/reusable-go.yml
+      - .golangci.yml
+  pull_request:
+    paths:
+      - forge-context/library/**
+      - .github/workflows/forge-context-library.yml
+      - .github/workflows/reusable-go.yml
+      - .golangci.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: ./.github/workflows/reusable-go.yml
+    with:
+      dir: forge-context/library

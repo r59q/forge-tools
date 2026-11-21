@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SinterGuild</title>
+  <link rel="stylesheet" href="/sinterguild/connection/src/styles.css">
+  <link rel="stylesheet" href="/forge-chat/frontend/src/styles.css">
+  <link rel="stylesheet" href="/sinterguild/app/src/styles.css">
+  <script type="module" src="/sinterguild/app/src/main.js"></script>
+</head>
+<body class="forge-chat-app">
+  <div id="app"></div>
+  <template id="sign-in">
+    <form class="sign-in" autocomplete="off">
+      <h1>SinterGuild</h1>
+      <label class="field">
+        <span></span>
+        <input type="password" required autocomplete="off" autocapitalize="none" spellcheck="false">
+      </label>
+      <button class="primary" type="submit"></button>
+      <p class="chat-error" role="alert"></p>
+    </form>
+  </template>
+  <template id="chat-layout">
+    <div class="app-actions"><button type="button">Sign out</button></div>
+    <div class="chat-host"></div>
+  </template>
+</body>
+</html>

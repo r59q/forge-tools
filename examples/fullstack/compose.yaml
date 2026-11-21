@@ -188,6 +188,17 @@ services:
       - "127.0.0.1:8097:8080"
       - "127.0.0.1:9107:9090"
 
+  sinterguild:
+    build:
+      context: ../..
+      dockerfile: sinterguild/app/Dockerfile
+    restart: unless-stopped
+    environment:
+      SINTERGUILD_MANAGEMENT_URL: http://management:8080
+      SINTERGUILD_CHAT_URL: http://chat:8080
+    ports:
+      - "127.0.0.1:8098:8080"
+
   # Queues reactor deliveries. Subscribers consume and acknowledge here. The
   # fixed hostname keeps the node name, and so its data, across recreation.
   rabbitmq:

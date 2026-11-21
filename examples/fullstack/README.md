@@ -12,8 +12,9 @@ Runs the whole stack with Docker Compose: the
 [search service](../../forge-search/service/), the
 [agents service](../../forge-agents/service/), the [chat service](../../forge-chat/service/), the
 [reactor service](../../forge-reactor/service/) with RabbitMQ and the
-[management interface](../../forge-tools-management/). You connect forges in
-the browser.
+[management interface](../../forge-tools-management/). The
+[SinterGuild app](../../sinterguild/app/) connects forge onboarding and chat
+in the browser.
 
 It needs Docker Compose and `openssl`. Run all commands from this folder.
 
@@ -23,6 +24,17 @@ It needs Docker Compose and `openssl`. Run all commands from this folder.
 ./init-env.sh
 docker compose up --build -d
 ```
+
+Open SinterGuild at `http://127.0.0.1:8098/`. Enter the
+`FORGE_MANAGEMENT_TOKEN` from `.env`, connect a forge using an access token
+with repository access, and confirm the repositories you want to use. Then
+enter the separate `FORGE_CHAT_TOKEN` and choose a repository in **New chat**.
+Set the API key for your chosen [agent client](#agents) in `.env` before
+starting the stack to send messages and receive replies.
+
+SinterGuild saves the selected repositories in the browser profile. On later
+visits, enter the chat token to go straight to chat. Keep the same URL and
+browser profile to reuse the selection.
 
 For development, [scripts/fullstack.sh](../../scripts/fullstack.sh) does the
 same from anywhere: `start`, `stop`, or `clear` to also delete all data.
@@ -53,6 +65,7 @@ updating this example. It never changes existing values.
 | `FORGE_SYMBOLS_TOKEN`                | Authenticates symbols REST/gRPC callers.                         |
 | `FORGE_SEARCH_TOKEN`                 | Authenticates search REST/gRPC callers.                          |
 | `FORGE_AGENTS_TOKEN`                 | Authenticates agents REST/gRPC callers.                          |
+| `FORGE_CHAT_TOKEN`                   | Grants access to all chats in the deployment.                   |
 | `FORGE_REACTOR_TOKEN`                | Authenticates reactor REST/gRPC callers and management.          |
 | `FORGE_REACTOR_CONNECTOR_TOKEN`      | Lets the reactor poll branches and register webhooks.            |
 | `FORGE_REACTOR_RABBITMQ_PASSWORD`    | RabbitMQ password of user `reactor`, for the reactor and you.    |

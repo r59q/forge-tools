@@ -75,10 +75,48 @@ func post(h http.Handler, path string, form url.Values, header http.Header) *htt
 func rest(h http.Handler, method, path, body string) *httptest.ResponseRecorder {
 	r := httptest.NewRequest(method, path, strings.NewReader(body))
 	r.Header.Set("Authorization", "Bearer "+operatorToken)
+	r.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
 
 	return w
+}
+
+func TestAddConnectionRESTAuthorizationAndRetry(t *testing.T) {
+	m, host, _ := connector(t)
+	_, h, _ := setupConfig(t, management.Config{Connector: m}, 5*time.Second)
+	const path = "/v1/connections"
+	body := func(token string) string {
+		return `{"forge":"gitlab","host":"` + host + `","name":"work","credential":"` + token + `"}`
+	}
+
+	r := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body(forgeToken)))
+	r.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusUnauthorized || strings.Contains(w.Body.String(), forgeToken) {
+		t.Fatalf("unauthenticated add: %d %s", w.Code, w.Body)
+	}
+
+	w = rest(h, http.MethodPost, path, body("wrong-"+forgeToken))
+	if w.Code != http.StatusBadRequest || strings.Contains(w.Body.String(), forgeToken) {
+		t.Fatalf("rejected add: %d %s", w.Code, w.Body)
+	}
+	if conns, err := m.ListConnections(t.Context()); err != nil || len(conns) != 0 {
+		t.Fatalf("connections after failures = %v, %v", conns, err)
+	}
+
+	w = rest(h, http.MethodPost, path, body(forgeToken))
+	if w.Code != http.StatusOK || strings.Contains(w.Body.String(), forgeToken) {
+		t.Fatalf("retry add: %d %s", w.Code, w.Body)
+	}
+	var added pb.Connection
+	if err := protojson.Unmarshal(w.Body.Bytes(), &added); err != nil || added.GetId() == "" {
+		t.Fatalf("retry result = %v, %v", &added, err)
+	}
+	if conns, err := m.ListConnections(t.Context()); err != nil || len(conns) != 1 || string(conns[0].ID) != added.GetId() {
+		t.Fatalf("connections after retry = %v, %v", conns, err)
+	}
 }
 
 func TestConnectionsAPI(t *testing.T) {

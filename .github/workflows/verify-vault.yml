@@ -1,0 +1,61 @@
+name: verify-vault
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/verify-vault.yml
+      - deploy/vault/verify.mjs
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    if: github.repository == 'r59q/forge-tools' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Connect to WireGuard
+        env:
+          WG_CONFIG: ${{ secrets.WG_CONFIG }}
+        run: |
+          if [[ -z "$WG_CONFIG" ]]; then
+            echo "::error::WireGuard configuration is missing."
+            exit 1
+          fi
+          if ! sudo apt-get update -q > /dev/null 2>&1 ||
+             ! sudo apt-get install -y -q wireguard-tools > /dev/null 2>&1; then
+            echo "::error::WireGuard installation failed."
+            exit 1
+          fi
+          # Match the test deployment's tunnel setup.
+          if ! printf '%s\n' "$WG_CONFIG" | sed '/^[[:space:]]*DNS[[:space:]]*=/d' |
+            sudo sh -c 'umask 077 && cat > /etc/wireguard/wg0.conf'; then
+            echo "::error::WireGuard configuration failed."
+            exit 1
+          fi
+          if ! sudo wg-quick up wg0 > /dev/null 2>&1; then
+            echo "::error::WireGuard connection failed."
+            exit 1
+          fi
+      - name: Verify Vault
+        env:
+          VAULT_ADDR: ${{ secrets.VAULT_ADDR }}
+          VAULT_USERNAME: ${{ secrets.VAULT_USERNAME }}
+          VAULT_PASSWORD: ${{ secrets.VAULT_PASSWORD }}
+        run: node deploy/vault/verify.mjs
+      - name: Disconnect WireGuard
+        if: always()
+        run: sudo wg-quick down wg0 > /dev/null 2>&1 || true
+      - name: Record result
+        if: always()
+        env:
+          RESULT: ${{ job.status }}
+        run: |
+          printf 'Vault verification result: **%s**\n\n[Workflow run](%s/%s/actions/runs/%s)\n' \
+            "$RESULT" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" >> "$GITHUB_STEP_SUMMARY"

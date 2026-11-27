@@ -66,11 +66,12 @@ export async function verifyVault({ address, username, password }, request = fet
     method: "GET",
     headers: { "X-Vault-Token": token },
   })
-  const prod = result?.data?.data?.prod
+  const data = result?.data?.data
   for (const field of ["ssh_username", "ssh_private_key", "hostname"]) {
-    const value = prod?.[field]
+    const key = `prod.${field}`
+    const value = data && Object.hasOwn(data, key) ? data[key] : data?.prod?.[field]
     if (typeof value !== "string" || !value.trim()) {
-      throw new VerificationError(`Vault field prod.${field} is missing or empty.`)
+      throw new VerificationError(`Vault field ${key} is missing or empty.`)
     }
   }
 }

@@ -14,6 +14,11 @@ const prod = {
   ssh_private_key: "synthetic-key",
   hostname: "synthetic-host",
 }
+const dotted = {
+  "prod.ssh_username": "synthetic-user",
+  "prod.ssh_private_key": "synthetic-key",
+  "prod.hostname": "synthetic-host",
+}
 
 function vaultResponses(...responses) {
   return async () => responses.shift()
@@ -21,7 +26,7 @@ function vaultResponses(...responses) {
 
 test("logs in and reads only the configuration path", async () => {
   const calls = []
-  const respond = vaultResponses(Response.json(login), Response.json({ data: { data: { prod } } }))
+  const respond = vaultResponses(Response.json(login), Response.json({ data: { data: dotted } }))
   await verifyVault(config, async (url, options) => {
     calls.push({ url, ...options })
     return respond()
@@ -32,6 +37,11 @@ test("logs in and reads only the configuration path", async () => {
   ])
   assert.deepEqual(JSON.parse(calls[0].body), { password: "synthetic-password" })
   assert.deepEqual(calls[1].headers, { "X-Vault-Token": "synthetic-token" })
+})
+
+test("accepts nested production fields", async () => {
+  const request = vaultResponses(Response.json(login), Response.json({ data: { data: { prod } } }))
+  await verifyVault(config, request)
 })
 
 test("sanitizes connection failures", async () => {
@@ -60,11 +70,21 @@ test("sanitizes denied reads and invalid JSON", async () => {
 test("requires every SSH field to be a nonblank string", async () => {
   for (const field of Object.keys(prod)) {
     for (const value of [undefined, "", "  ", 1]) {
-      const data = { prod: { ...prod, [field]: value } }
-      const request = vaultResponses(Response.json(login), Response.json({ data: { data } }))
-      await assert.rejects(verifyVault(config, request), {
-        message: `Vault field prod.${field} is missing or empty.`,
-      })
+      const key = `prod.${field}`
+      for (const data of [{ prod: { ...prod, [field]: value } }, { ...dotted, [key]: value }]) {
+        const request = vaultResponses(Response.json(login), Response.json({ data: { data } }))
+        await assert.rejects(verifyVault(config, request), {
+          message: `Vault field ${key} is missing or empty.`,
+        })
+      }
     }
   }
+})
+
+test("validates an explicit dotted field before its nested equivalent", async () => {
+  const data = { ...dotted, prod, "prod.ssh_username": "" }
+  const request = vaultResponses(Response.json(login), Response.json({ data: { data } }))
+  await assert.rejects(verifyVault(config, request), {
+    message: "Vault field prod.ssh_username is missing or empty.",
+  })
 })
